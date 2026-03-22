@@ -1,6 +1,6 @@
 # bearhacks-web
 
-Bun workspaces: **participant** (`apps/me`, port **3000**) and **admin** (`apps/admin`, port **3001**) Next.js apps, plus `packages/config` and `packages/api-client`. The FastAPI API is the sibling repo **`bearhacks-backend`**.
+Bun workspaces: **participant** (`apps/me`, port **3000**) and **admin** (`apps/admin`, port **3001`) Next.js apps, plus shared packages (`packages/config`, `packages/api-client`, `packages/logger`). The FastAPI API is the sibling repo **`bearhacks-backend`**.
 
 ## Prerequisites
 
@@ -36,5 +36,6 @@ bun run typecheck
 | `apps/admin` | Admin portal |
 | `packages/config` | `NEXT_PUBLIC_*` Zod env + design tokens |
 | `packages/api-client` | `createApiClient` + Bearer JWT for FastAPI |
+| `packages/logger` | Scoped `createLogger(scope)` → console; `NEXT_PUBLIC_LOG_LEVEL` |
 
 Handoff: [`docs/PORTAL_HANDOFF.md`](./docs/PORTAL_HANDOFF.md).

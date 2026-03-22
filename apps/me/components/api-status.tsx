@@ -2,10 +2,13 @@
 
 import { createApiClient } from "@bearhacks/api-client";
 import { tryPublicEnv } from "@bearhacks/config";
+import { createLogger } from "@bearhacks/logger";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useSupabase } from "@/app/providers";
 import { toast } from "sonner";
+
+const log = createLogger("me/api-status");
 
 type HealthJson = { status?: string };
 
@@ -31,6 +34,12 @@ export function ApiStatus() {
     queryFn: () => client!.fetchJson<HealthJson>("/"),
     enabled: ready && client !== null,
   });
+
+  useEffect(() => {
+    if (q.isError && q.error) {
+      log.warn("GET / health check failed", q.error);
+    }
+  }, [q.isError, q.error]);
 
   if (!envResult.ok) {
     return (
