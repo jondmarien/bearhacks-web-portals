@@ -20,7 +20,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${hanken.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-[var(--bearhacks-bg)] text-[var(--bearhacks-fg)] font-sans">
+      <body className="min-h-full flex flex-col bg-(--bearhacks-bg) text-(--bearhacks-fg) font-sans">
         <Providers>{children}</Providers>
       </body>
     </html>

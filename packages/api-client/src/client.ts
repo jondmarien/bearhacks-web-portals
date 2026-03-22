@@ -1,5 +1,6 @@
 import { ApiError, type FastApiDetail } from "./errors";
 
+/** Returns a Supabase (or other) bearer token, or null if unauthenticated. */
 export type GetAccessToken = () =>
   | string
   | null
@@ -7,7 +8,9 @@ export type GetAccessToken = () =>
   | Promise<string | null | undefined>;
 
 export type CreateApiClientOptions = {
+  /** Absolute API origin, e.g. `https://api.bearhacks.com` or `http://127.0.0.1:8000` (no trailing slash required). */
   baseUrl: string;
+  /** When set, every request adds `Authorization: Bearer <token>` when the value is non-empty. */
   getAccessToken?: GetAccessToken;
 };
 
@@ -17,6 +20,9 @@ function joinUrl(base: string, path: string): string {
   return `${b}${p}`;
 }
 
+/**
+ * Thin fetch wrapper for BearHacks FastAPI: joins `baseUrl` + path, attaches Bearer JWT, throws {@link ApiError} on non-OK JSON error bodies.
+ */
 export function createApiClient(options: CreateApiClientOptions) {
   const { baseUrl, getAccessToken } = options;
 

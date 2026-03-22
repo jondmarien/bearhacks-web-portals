@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BearHacks — Me (`apps/me`)
 
-## Getting Started
+Next.js **participant** portal (port **3000**). Authenticates with **Supabase Auth** in the browser and calls the sibling FastAPI repo **`bearhacks-backend`** using [`@bearhacks/api-client`](../../packages/api-client) with the user’s JWT.
 
-First, run the development server:
+## Prerequisites
+
+- [Bun](https://bun.sh/) at repo root
+- `.env.local` (see [../../.env.example](../../.env.example)): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL`
+
+## Scripts
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# from monorepo root
+bun run dev:me
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+```bash
+# from this app
+bun run dev    # next dev -p 3000
+bun run build
+bun run lint
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Design system (DEV-23)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Shared tokens: [`packages/config/src/tokens.css`](../../packages/config/src/tokens.css), imported from [`app/globals.css`](./app/globals.css).
+- Typography: **Hanken Grotesk** via `next/font` in [`app/layout.tsx`](./app/layout.tsx).
+- Accessibility: base styles include visible **focus-visible** rings and **≥16px** body text; interactive targets should respect `--bearhacks-touch-min` (44px) where applicable.
 
-## Learn More
+## API & Linear
 
-To learn more about Next.js, take a look at the following resources:
+Route mapping and JWT patterns: **[`docs/PORTAL_HANDOFF.md`](../../docs/PORTAL_HANDOFF.md)**.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Typical participant flows (claim, own profile patch, social) use `/claim`, `/profiles/me`, `/social` on the API host — never the Supabase service role key in this app.

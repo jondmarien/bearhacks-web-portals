@@ -1,9 +1,24 @@
 /**
- * BearHacks 2026 base tokens (portal / DEV-23).
+ * BearHacks 2026 design tokens (DEV-23).
+ * Shared by participant (`apps/me`) and staff (`apps/admin`) portals.
+ *
  * Import in app globals: @import "@bearhacks/config/tokens.css";
+ *
+ * Accessibility: body text uses >=16px; link colors chosen for contrast on white;
+ * focus ring uses foreground color (see globals `@layer base`).
  */
 :root {
   --bearhacks-bg: #ffffff;
   --bearhacks-fg: #1a1a1a;
   --bearhacks-muted: #525252;
+  --bearhacks-border: #e5e5e5;
+  --bearhacks-link: #1d4ed8;
+  --bearhacks-link-hover: #1e40af;
+  --bearhacks-focus-ring: #1a1a1a;
+  --bearhacks-radius-sm: 0.375rem;
+  --bearhacks-radius-md: 0.5rem;
+  --bearhacks-text-base: 1rem;
+  --bearhacks-leading-normal: 1.5;
+  /* Minimum touch target (WCAG 2.5.5); use min-height/min-width in components */
+  --bearhacks-touch-min: 44px;
 }

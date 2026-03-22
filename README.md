@@ -32,10 +32,15 @@ bun run typecheck
 
 | Path | Purpose |
 |------|---------|
-| `apps/me` | Participant portal |
-| `apps/admin` | Admin portal |
-| `packages/config` | `NEXT_PUBLIC_*` Zod env + design tokens |
-| `packages/api-client` | `createApiClient` + Bearer JWT for FastAPI |
+| `apps/me` | Participant portal (port **3000**) — see [`apps/me/README.md`](./apps/me/README.md) |
+| `apps/admin` | Staff portal (port **3001**) — see [`apps/admin/README.md`](./apps/admin/README.md) |
+| `packages/config` | `NEXT_PUBLIC_*` Zod env + shared design tokens (`tokens.css`, DEV-23) |
+| `packages/api-client` | Typed `createApiClient` + Bearer JWT for FastAPI |
 | `packages/logger` | Scoped `createLogger(scope)` → console; `NEXT_PUBLIC_LOG_LEVEL` |
 
-Handoff: [`docs/PORTAL_HANDOFF.md`](./docs/PORTAL_HANDOFF.md).
+Handoff (API ↔ Linear ↔ apps): [`docs/PORTAL_HANDOFF.md`](./docs/PORTAL_HANDOFF.md).
+
+### Super-admin profiles (DEV-22)
+
+- Admin UI: [`apps/admin/app/profiles`](./apps/admin/app/profiles) (JWT `app_metadata.role === "super_admin"` for UI gating).
+- API: `GET /admin/profiles` and `PATCH /profiles/{id}` require FastAPI `require_super_admin` (allowlisted email **or** `super_admin` role). See **`bearhacks-backend`** README and `core/auth.py`.

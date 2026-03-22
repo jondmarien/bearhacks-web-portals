@@ -10,7 +10,7 @@
 | DEV-16 | `apps/me` | `/social` |
 | DEV-17, DEV-21 | `apps/admin` | `/qr`, `/admin` |
 | DEV-18–20 | `apps/me` | `/profiles`, `/social`, `/claim` |
-| DEV-22 | `apps/admin` + server rules | `/admin` |
+| DEV-22 | `apps/admin` (profiles UI) + FastAPI | `/admin/profiles`, `PATCH /profiles/{id}` (super-admin) |
 
 ## Example: health check
 
