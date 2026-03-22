@@ -1,0 +1,9 @@
+/**
+ * BearHacks 2026 base tokens (portal / DEV-23).
+ * Import in app globals: @import "@bearhacks/config/tokens.css";
+ */
+:root {
+  --bearhacks-bg: #ffffff;
+  --bearhacks-fg: #1a1a1a;
+  --bearhacks-muted: #525252;
+}

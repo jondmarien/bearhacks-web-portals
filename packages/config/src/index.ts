@@ -1,5 +1,7 @@
-/**
- * Shared env parsing and design tokens (portal plan Task 2).
- * Wire Zod + NEXT_PUBLIC_* here; apps import from "@bearhacks/config".
- */
+export {
+  getPublicEnv,
+  tryPublicEnv,
+  type PublicEnv,
+} from "./env";
+
 export const configPackageVersion = "0.1.0";
