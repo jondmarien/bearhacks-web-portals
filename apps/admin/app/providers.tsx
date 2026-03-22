@@ -26,8 +26,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
       return;
     }
     const env = parsed.data;
-    setSupabase(createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
-    log.debug("Supabase browser client ready");
+    // Defer setState so we don't sync-update during the effect (react-hooks/set-state-in-effect).
+    queueMicrotask(() => {
+      setSupabase(createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
+      log.debug("Supabase browser client ready");
+    });
   }, []);
 
   return (
