@@ -1,0 +1,11 @@
+{
+  "name": "bearhacks-web",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:me": "cd apps/me && bun dev",
+    "dev:admin": "cd apps/admin && bun dev",
+    "lint": "echo \"wire eslint in Task 6\"",
+    "typecheck": "echo \"wire tsc in Task 6\""
+  }
+}
