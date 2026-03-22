@@ -1,0 +1,35 @@
+"use client";
+
+import { tryPublicEnv } from "@bearhacks/config";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createContext, useContext, useEffect, useState } from "react";
+import { Toaster } from "sonner";
+
+const SupabaseContext = createContext<SupabaseClient | null>(null);
+
+/** Null until client mount + valid `NEXT_PUBLIC_*` (avoids Zod throw during SSG/build). */
+export function useSupabase(): SupabaseClient | null {
+  return useContext(SupabaseContext);
+}
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient());
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
+
+  useEffect(() => {
+    const parsed = tryPublicEnv();
+    if (!parsed.ok) return;
+    const env = parsed.data;
+    setSupabase(createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <SupabaseContext.Provider value={supabase}>
+        {children}
+        <Toaster richColors position="top-center" />
+      </SupabaseContext.Provider>
+    </QueryClientProvider>
+  );
+}
