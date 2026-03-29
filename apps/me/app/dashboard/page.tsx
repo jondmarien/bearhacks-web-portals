@@ -13,6 +13,7 @@ const log = createLogger("me/dashboard");
 
 type MyProfile = {
   id: string;
+  qr_id?: string | null;
   display_name?: string | null;
   bio?: string | null;
   linkedin_url?: string | null;
@@ -45,6 +46,30 @@ type ProfileDraft = {
   linkedin_url: string;
   github_url: string;
 };
+
+type GoogleWalletPassType = "generic" | "event";
+
+type GoogleWalletSaveLinkResponse = {
+  save_url: string;
+  class_id: string;
+  object_id: string;
+};
+
+type WalletCapabilities = {
+  google: { configured: boolean };
+  apple: { configured: boolean };
+  fallback: { enabled: boolean };
+};
+
+function buildQrImageUrl(data: string, size = 512) {
+  const params = new URLSearchParams({
+    size: `${size}x${size}`,
+    data,
+    format: "png",
+    margin: "24",
+  });
+  return `https://api.qrserver.com/v1/create-qr-code/?${params.toString()}`;
+}
 
 export default function DashboardPage() {
   const auth = useMeAuth();
@@ -88,6 +113,12 @@ export default function DashboardPage() {
     queryKey: ["me-favourites", userId],
     queryFn: () => client!.fetchJson<FavouriteProfile[]>("/social/favourites"),
     enabled: Boolean(client && userId),
+  });
+
+  const walletCapabilitiesQuery = useQuery({
+    queryKey: ["wallet-capabilities"],
+    queryFn: () => client!.fetchJson<WalletCapabilities>("/wallet/capabilities"),
+    enabled: Boolean(client),
   });
 
   const profileUpdatePayload = useMemo(() => {
@@ -165,6 +196,50 @@ export default function DashboardPage() {
     },
   });
 
+  const googleWalletMutation = useMutation({
+    mutationFn: async (passType: GoogleWalletPassType) => {
+      const params = new URLSearchParams({ type: passType });
+      return client!.fetchJson<GoogleWalletSaveLinkResponse>(`/wallet/google/save-link?${params.toString()}`);
+    },
+    onSuccess: (result, passType) => {
+      toast.success(
+        passType === "generic"
+          ? "Opening Google Wallet (Generic Pass)…"
+          : "Opening Google Wallet (Event Ticket)…",
+      );
+      window.location.assign(result.save_url);
+    },
+    onError: (error, passType) => {
+      log.error("Google Wallet save link generation failed", { passType, error });
+      toast.error(error instanceof ApiError ? error.message : "Unable to create Google Wallet link");
+    },
+  });
+
+  const appleWalletMutation = useMutation({
+    mutationFn: async () => {
+      const res = await client!.request("/wallet/apple/pass", { method: "GET" });
+      if (!res.ok) {
+        throw new ApiError(`HTTP ${res.status}`, res.status, await res.text());
+      }
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = "bearhacks-attendee.pkpass";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    },
+    onSuccess: () => {
+      toast.success("Apple Wallet pass downloaded");
+    },
+    onError: (error) => {
+      log.error("Apple Wallet pass download failed", { error });
+      toast.error(error instanceof ApiError ? error.message : "Unable to download Apple Wallet pass");
+    },
+  });
+
   if (!auth?.isAuthReady) {
     return (
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-8">
@@ -224,6 +299,45 @@ export default function DashboardPage() {
     github_url: profileQuery.data?.github_url ?? "",
   };
   const signedInLabel = user?.email ?? userId;
+  const googleWalletConfigured = walletCapabilitiesQuery.data?.google.configured ?? false;
+  const appleWalletConfigured = walletCapabilitiesQuery.data?.apple.configured ?? false;
+  const showFallbackMode = walletCapabilitiesQuery.data
+    ? walletCapabilitiesQuery.data.fallback.enabled
+    : true;
+  const qrId = profileQuery.data?.qr_id ?? null;
+  const claimUrl =
+    typeof window !== "undefined" && qrId ? `${window.location.origin}/claim/${qrId}` : null;
+  const qrImageUrl = claimUrl ? buildQrImageUrl(claimUrl) : null;
+  const qrCardHref = qrId ? `/qr-card/${qrId}` : null;
+  const fallbackCardHref = qrCardHref ?? "/dashboard";
+
+  const downloadFallbackPng = async () => {
+    if (!qrImageUrl || !qrId) return;
+    try {
+      const res = await fetch(qrImageUrl);
+      if (!res.ok) throw new Error(`QR image request failed (${res.status})`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `bearhacks-qr-${qrId}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+      toast.success("QR PNG downloaded");
+    } catch (error) {
+      log.error("QR PNG download failed", { qrId, error });
+      toast.error("Unable to download QR PNG");
+    }
+  };
+
+  const downloadFallbackPdf = () => {
+    if (!qrCardHref) return;
+    const printUrl = `${window.location.origin}${qrCardHref}?print=1`;
+    window.open(printUrl, "_blank", "noopener,noreferrer");
+    toast.success("Opened printable page. Choose 'Save as PDF' in print dialog.");
+  };
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-8">
@@ -328,6 +442,100 @@ export default function DashboardPage() {
           </form>
         )}
       </section>
+
+      {(googleWalletConfigured || appleWalletConfigured) && (
+        <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
+          <h2 className="text-base font-medium text-(--bearhacks-fg)">Wallet passes</h2>
+          <p className="mt-1 text-sm text-(--bearhacks-muted)">
+            Add your attendee pass to Google Wallet or Apple Wallet after your QR has been claimed.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {googleWalletConfigured && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => googleWalletMutation.mutate("generic")}
+                  disabled={googleWalletMutation.isPending || appleWalletMutation.isPending}
+                  className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {googleWalletMutation.isPending ? "Preparing…" : "Add Generic Pass to Google Wallet"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => googleWalletMutation.mutate("event")}
+                  disabled={googleWalletMutation.isPending || appleWalletMutation.isPending}
+                  className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {googleWalletMutation.isPending ? "Preparing…" : "Add Event Ticket to Google Wallet"}
+                </button>
+              </>
+            )}
+            {appleWalletConfigured && (
+              <button
+                type="button"
+                onClick={() => appleWalletMutation.mutate()}
+                disabled={appleWalletMutation.isPending || googleWalletMutation.isPending}
+                className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {appleWalletMutation.isPending ? "Generating…" : "Add to Apple Wallet"}
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {showFallbackMode && (
+        <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
+        <h2 className="text-base font-medium text-(--bearhacks-fg)">Wallet Export</h2>
+        <p className="mt-1 text-sm text-(--bearhacks-muted)">
+          Save your networking QR in portable formats.
+        </p>
+        {!qrId || !claimUrl || !qrImageUrl ? (
+          <p className="mt-3 text-sm text-(--bearhacks-muted)">
+            Claim your QR first to unlock Wallet Export options.
+          </p>
+        ) : (
+          <div className="mt-3 flex flex-col gap-3">
+            <div className="w-full max-w-[220px] overflow-hidden rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border)">
+              {/* QR image uses a lightweight public encoder endpoint for fallback mode only. */}
+              <img src={qrImageUrl} alt="Your networking QR code" className="h-auto w-full" />
+            </div>
+            <p className="text-xs break-all text-(--bearhacks-muted)">
+              QR target: <span className="font-medium">{claimUrl}</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void downloadFallbackPng();
+                }}
+                className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium"
+              >
+                Download PNG
+              </button>
+              <button
+                type="button"
+                onClick={downloadFallbackPdf}
+                className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium"
+              >
+                Download PDF
+              </button>
+              <Link
+                href={fallbackCardHref}
+                className="inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium no-underline"
+              >
+                Open Add-to-Home-Screen page
+              </Link>
+            </div>
+            <ul className="text-xs text-(--bearhacks-muted)">
+              <li>Includes in-app QR display + PNG/PDF download + Add-to-Home-Screen QR page.</li>
+              <li>Android fallback: upload the downloaded PNG/PDF in your pass app workflow to create a custom pass.</li>
+              <li>Apple Wallet does not support photo/PDF custom pass import without proper PassKit issuance.</li>
+            </ul>
+          </div>
+        )}
+        </section>
+      )}
 
       <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
         <h2 className="text-base font-medium text-(--bearhacks-fg)">Quick scan + favourite actions</h2>
