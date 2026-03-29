@@ -5,7 +5,6 @@ import { tryPublicEnv } from "@bearhacks/config";
 import { createLogger } from "@bearhacks/logger";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
-import { useSupabase } from "@/app/providers";
 import { toast } from "sonner";
 
 const log = createLogger("me/api-status");
@@ -13,21 +12,16 @@ const log = createLogger("me/api-status");
 type HealthJson = { status?: string };
 
 export function ApiStatus() {
-  const supabase = useSupabase();
   const envResult = tryPublicEnv();
   const env = envResult.ok ? envResult.data : null;
-  const ready = envResult.ok && supabase !== null;
+  const ready = envResult.ok;
 
   const client = useMemo(() => {
-    if (!env || !supabase) return null;
+    if (!env) return null;
     return createApiClient({
       baseUrl: env.NEXT_PUBLIC_API_URL,
-      getAccessToken: async () => {
-        const { data } = await supabase.auth.getSession();
-        return data.session?.access_token ?? null;
-      },
     });
-  }, [env, supabase]);
+  }, [env]);
 
   const q = useQuery({
     queryKey: ["api", "health", env?.NEXT_PUBLIC_API_URL ?? ""],
@@ -49,10 +43,6 @@ export function ApiStatus() {
         <code className="rounded bg-(--bearhacks-yellow)/40 px-1">.env.example</code>).
       </p>
     );
-  }
-
-  if (!supabase) {
-    return <p className="text-sm text-(--bearhacks-muted)">Starting…</p>;
   }
 
   if (q.isPending) {

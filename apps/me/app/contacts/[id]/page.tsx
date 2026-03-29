@@ -1,14 +1,15 @@
 "use client";
 
 import { ApiError } from "@bearhacks/api-client";
+import { createLogger } from "@bearhacks/logger";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useSupabase } from "@/app/providers";
+import { useMeAuth } from "@/app/providers";
 import { useApiClient } from "@/lib/use-api-client";
+
+const log = createLogger("me/contact-page");
 
 type PublicProfile = {
   id: string;
@@ -19,28 +20,28 @@ type PublicProfile = {
   github_url?: string | null;
 };
 
+function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export default function ContactPage() {
   const params = useParams();
   const profileId = typeof params.id === "string" ? params.id : "";
-  const supabase = useSupabase();
+  const validProfileId = isUuidLike(profileId);
+  const auth = useMeAuth();
   const client = useApiClient();
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    if (!supabase) return;
-    void supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, [supabase]);
 
   const profileQuery = useQuery({
     queryKey: ["public-profile", profileId],
-    queryFn: () => client!.fetchJson<PublicProfile>(`/profiles/${profileId}`),
-    enabled: Boolean(client && profileId),
+    queryFn: async () => {
+      try {
+        return await client!.fetchJson<PublicProfile>(`/profiles/${profileId}`);
+      } catch (error) {
+        log.error("Failed to load public profile", { profileId, error });
+        throw error;
+      }
+    },
+    enabled: Boolean(client && validProfileId),
   });
 
   const favouriteMutation = useMutation({
@@ -53,9 +54,10 @@ export default function ContactPage() {
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 401) {
-        toast.error("Sign in to favourite this contact.");
+        toast.error("Sign in with Discord to favourite contacts.");
         return;
       }
+      log.error("Failed to update favourite", { profileId, error });
       toast.error(error instanceof ApiError ? error.message : "Failed to update favourite");
     },
   });
@@ -68,12 +70,31 @@ export default function ContactPage() {
     );
   }
 
+  if (!validProfileId) {
+    return (
+      <main className="mx-auto w-full max-w-md flex-1 px-4 py-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">Contact profile</h1>
+        <p className="mt-2 text-sm text-(--bearhacks-muted)">
+          This route needs a real profile UUID. The sample `demo-id` is only a placeholder.
+        </p>
+        <nav className="mt-4 flex items-center gap-4 text-sm">
+          <Link href="/dashboard" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
+            Dashboard
+          </Link>
+          <Link href="/" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
+            Home
+          </Link>
+        </nav>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-8">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">Contact profile</h1>
         <p className="mt-1 text-sm text-(--bearhacks-muted)">
-          Public profile view works without auth. Favouriting requires sign-in.
+          Public profile view works without login. Favouriting uses Discord auth.
         </p>
       </header>
 
@@ -123,8 +144,17 @@ export default function ContactPage() {
             <button
               type="button"
               onClick={() => {
-                if (!user) {
-                  toast.error("Sign in to favourite contacts.");
+                if (!auth?.user) {
+                  void auth
+                    ?.signInWithDiscord()
+                    .catch((error) => {
+                      log.error("Discord sign in failed from contact page", { error });
+                      if (error instanceof Error && error.message.toLowerCase().includes("provider is not enabled")) {
+                        toast.error("Discord auth provider is disabled in Supabase for this project.");
+                      } else {
+                        toast.error("Unable to start Discord login");
+                      }
+                    });
                   return;
                 }
                 favouriteMutation.mutate();
@@ -132,16 +162,9 @@ export default function ContactPage() {
               disabled={favouriteMutation.isPending}
               className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) bg-(--bearhacks-fg) px-4 text-sm font-medium text-(--bearhacks-bg) disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {favouriteMutation.isPending ? "Saving…" : "Favourite"}
+              {favouriteMutation.isPending ? "Saving…" : auth?.user ? "Favourite" : "Sign in with Discord"}
             </button>
           </div>
-        </section>
-      )}
-
-      {!user && (
-        <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-border)/15 p-4 text-sm text-(--bearhacks-muted)">
-          Want to save favourites? Sign in first, then if you have not claimed a QR yet, scan an unclaimed event QR
-          and complete your profile from dashboard.
         </section>
       )}
 

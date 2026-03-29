@@ -1,13 +1,15 @@
 "use client";
 
 import { ApiError } from "@bearhacks/api-client";
+import { createLogger } from "@bearhacks/logger";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useSupabase } from "@/app/providers";
+import { useMeAuth } from "@/app/providers";
 import { useApiClient } from "@/lib/use-api-client";
+
+const log = createLogger("me/dashboard");
 
 type MyProfile = {
   id: string;
@@ -45,41 +47,45 @@ type ProfileDraft = {
 };
 
 export default function DashboardPage() {
-  const supabase = useSupabase();
+  const auth = useMeAuth();
   const client = useApiClient();
-  const [user, setUser] = useState<User | null>(null);
   const [scanId, setScanId] = useState("");
   const [favouriteId, setFavouriteId] = useState("");
-
   const [profileDraft, setProfileDraft] = useState<ProfileDraft | null>(null);
 
-  useEffect(() => {
-    if (!supabase) return;
-    void supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, [supabase]);
-
+  const user = auth?.user ?? null;
   const userId = user?.id ?? null;
 
   const profileQuery = useQuery({
     queryKey: ["me-profile", userId],
-    queryFn: () => client!.fetchJson<MyProfile>(`/profiles/${userId}`),
+    queryFn: async () => {
+      try {
+        return await client!.fetchJson<MyProfile>(`/profiles/${userId}`);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          // First-time Discord users might not have a `profiles` row yet; create one and retry read.
+          await client!.fetchJson<MyProfile>("/profiles/me", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          return await client!.fetchJson<MyProfile>(`/profiles/${userId}`);
+        }
+        log.error("Failed to load profile", { userId, error });
+        throw error;
+      }
+    },
     enabled: Boolean(client && userId),
   });
 
   const scannedQuery = useQuery({
-    queryKey: ["me-scanned"],
+    queryKey: ["me-scanned", userId],
     queryFn: () => client!.fetchJson<ScannedRow[]>("/social/scanned"),
     enabled: Boolean(client && userId),
   });
 
   const favouritesQuery = useQuery({
-    queryKey: ["me-favourites"],
+    queryKey: ["me-favourites", userId],
     queryFn: () => client!.fetchJson<FavouriteProfile[]>("/social/favourites"),
     enabled: Boolean(client && userId),
   });
@@ -115,7 +121,7 @@ export default function DashboardPage() {
         body: JSON.stringify(profileUpdatePayload ?? {}),
       }),
     onSuccess: (data) => {
-      profileQuery.refetch();
+      void profileQuery.refetch();
       toast.success("Profile updated");
       setProfileDraft({
         display_name: data.display_name ?? "",
@@ -125,6 +131,7 @@ export default function DashboardPage() {
       });
     },
     onError: (error) => {
+      log.error("Profile update failed", { userId, error });
       toast.error(error instanceof ApiError ? error.message : "Profile update failed");
     },
   });
@@ -137,6 +144,7 @@ export default function DashboardPage() {
       void scannedQuery.refetch();
     },
     onError: (error) => {
+      log.warn("Scan save failed from dashboard", { scanId, error });
       toast.error(error instanceof ApiError ? error.message : "Scan save failed");
     },
   });
@@ -152,17 +160,56 @@ export default function DashboardPage() {
       void favouritesQuery.refetch();
     },
     onError: (error) => {
+      log.warn("Favourite toggle failed from dashboard", { favouriteId, error });
       toast.error(error instanceof ApiError ? error.message : "Favourite update failed");
     },
   });
+
+  if (!auth?.isAuthReady) {
+    return (
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">Dashboard</h1>
+        <p className="text-sm text-(--bearhacks-muted)">Checking session…</p>
+      </main>
+    );
+  }
+
+  if (!client) {
+    return (
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">Dashboard</h1>
+        <p className="text-sm text-(--bearhacks-muted)">
+          Missing public env config. Set `NEXT_PUBLIC_SUPABASE_*` and `NEXT_PUBLIC_API_URL`.
+        </p>
+      </main>
+    );
+  }
 
   if (!userId) {
     return (
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-8">
         <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">Dashboard</h1>
         <p className="text-sm text-(--bearhacks-muted)">
-          Sign in to load your profile, scanned contacts, and favourites.
+          Sign in with Discord to load your profile, scanned contacts, and favourites.
         </p>
+        <button
+          type="button"
+          onClick={() => {
+            void auth
+              .signInWithDiscord()
+              .catch((error) => {
+                log.error("Discord sign in failed", { error });
+                if (error instanceof Error && error.message.toLowerCase().includes("provider is not enabled")) {
+                  toast.error("Discord auth provider is disabled in Supabase for this project.");
+                } else {
+                  toast.error("Unable to start Discord login");
+                }
+              });
+          }}
+          className="min-h-(--bearhacks-touch-min) w-full cursor-pointer rounded-(--bearhacks-radius-sm) bg-(--bearhacks-fg) px-4 text-sm font-medium text-(--bearhacks-bg) sm:w-auto"
+        >
+          Sign in with Discord
+        </button>
         <Link href="/" className="inline-flex min-h-(--bearhacks-touch-min) items-center text-sm underline">
           Home
         </Link>
@@ -176,22 +223,36 @@ export default function DashboardPage() {
     linkedin_url: profileQuery.data?.linkedin_url ?? "",
     github_url: profileQuery.data?.github_url ?? "",
   };
+  const signedInLabel = user?.email ?? userId;
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-8">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">Dashboard</h1>
         <p className="mt-1 text-sm text-(--bearhacks-muted)">
-          Manage your profile and see persisted scans/favourites.
+          Signed in as <code className="rounded bg-(--bearhacks-border)/30 px-1">{signedInLabel}</code> via
+          Discord.
         </p>
+        <button
+          type="button"
+          onClick={() => {
+            void auth.signOut().catch((error) => {
+              log.error("Sign out failed", { error });
+              toast.error("Unable to sign out");
+            });
+          }}
+          className="mt-3 inline-flex min-h-(--bearhacks-touch-min) items-center underline"
+        >
+          Sign out
+        </button>
       </header>
 
       <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
         <h2 className="text-base font-medium text-(--bearhacks-fg)">My profile</h2>
         {profileQuery.isLoading ? (
-          <p className="mt-2 text-sm text-(--bearhacks-muted)">Loading profile…</p>
+          <p className="mt-3 text-sm text-(--bearhacks-muted)">Loading profile…</p>
         ) : profileQuery.isError ? (
-          <p className="mt-2 text-sm text-red-700">
+          <p className="mt-3 text-sm text-red-700">
             {profileQuery.error instanceof ApiError ? profileQuery.error.message : "Failed to load profile"}
           </p>
         ) : (
@@ -328,7 +389,10 @@ export default function DashboardPage() {
         ) : scannedQuery.data && scannedQuery.data.length > 0 ? (
           <ul className="mt-3 flex flex-col gap-2 text-sm">
             {scannedQuery.data.map((row, index) => (
-              <li key={`${row.profiles?.id ?? "unknown"}-${row.scanned_at ?? index}`} className="rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 py-2">
+              <li
+                key={`${row.profiles?.id ?? "unknown"}-${row.scanned_at ?? index}`}
+                className="rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 py-2"
+              >
                 <div className="font-medium text-(--bearhacks-fg)">{row.profiles?.display_name ?? "Unknown attendee"}</div>
                 <div className="text-(--bearhacks-muted)">
                   {row.scanned_at ? new Date(row.scanned_at).toLocaleString() : "Timestamp unavailable"}
@@ -348,7 +412,10 @@ export default function DashboardPage() {
         ) : favouritesQuery.data && favouritesQuery.data.length > 0 ? (
           <ul className="mt-3 flex flex-col gap-2 text-sm">
             {favouritesQuery.data.map((profile, index) => (
-              <li key={`${profile.id ?? "unknown"}-${index}`} className="rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 py-2">
+              <li
+                key={`${profile.id ?? "unknown"}-${index}`}
+                className="rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 py-2"
+              >
                 <div className="font-medium text-(--bearhacks-fg)">{profile.display_name ?? "Unknown attendee"}</div>
                 <div className="text-(--bearhacks-muted)">{profile.role ?? "No role listed"}</div>
               </li>

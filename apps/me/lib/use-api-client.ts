@@ -7,7 +7,7 @@ import { useSupabase } from "@/app/providers";
 
 /**
  * Memoized FastAPI client for participant pages.
- * Adds Supabase access token when present.
+ * Uses Supabase session token, where login is via Discord OAuth.
  */
 export function useApiClient() {
   const supabase = useSupabase();
