@@ -24,6 +24,25 @@ type GeneratedQr = {
   printer_skipped?: boolean;
 };
 
+type PrinterStatusResponse = {
+  online: boolean;
+  state:
+    | "online"
+    | "offline"
+    | "down"
+    | "printing"
+    | "idle"
+    | "error"
+    | "stale"
+    | "stuck"
+    | string;
+  checked_at: string;
+  activity_at?: string;
+  activity_age_seconds?: number;
+  error?: string;
+  endpoint?: string;
+};
+
 export default function AdminQrPage() {
   const supabase = useSupabase();
   const client = useApiClient();
@@ -60,6 +79,37 @@ export default function AdminQrPage() {
     queryKey: ["admin-qr-search", statusFilter, claimedBySearch],
     queryFn: () => client!.fetchJson<QrRow[]>(listPath),
     enabled: Boolean(client && isStaff),
+  });
+
+  const printerStatusQuery = useQuery({
+    queryKey: ["admin-printer-status"],
+    queryFn: async () => {
+      const checkedAt = new Date().toISOString();
+      try {
+        return await client!.fetchJson<PrinterStatusResponse>("/qr/printer/status");
+      } catch (error) {
+        if (error instanceof ApiError) {
+          return {
+            online: false,
+            state: "down",
+            checked_at: checkedAt,
+            error:
+              error.status === 404
+                ? "Printer status endpoint is unavailable (HTTP 404)"
+                : `Printer status check failed (HTTP ${error.status})`,
+          };
+        }
+        return {
+          online: false,
+          state: "down",
+          checked_at: checkedAt,
+          error: "Printer status check failed",
+        };
+      }
+    },
+    enabled: Boolean(client && isStaff),
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
   });
 
   const generateMutation = useMutation({
@@ -168,6 +218,58 @@ export default function AdminQrPage() {
 
       {isStaff && (
         <>
+          <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
+            <h2 className="text-base font-medium text-(--bearhacks-fg)">Printer server status</h2>
+            {printerStatusQuery.isLoading ? (
+              <p className="mt-2 text-sm text-(--bearhacks-muted)">Checking printer server…</p>
+            ) : printerStatusQuery.isError ? (
+              <p className="mt-2 text-sm text-red-700">
+                {printerStatusQuery.error instanceof ApiError
+                  ? printerStatusQuery.error.message
+                  : "Failed to load printer status"}
+              </p>
+            ) : printerStatusQuery.data ? (
+              <div className="mt-2 flex flex-col gap-1 text-sm">
+                <p className="flex items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className={`inline-block h-2.5 w-2.5 rounded-full ${
+                      !printerStatusQuery.data.online || printerStatusQuery.data.state === "down"
+                        ? "bg-red-500"
+                        : printerStatusQuery.data.state === "printing"
+                          ? "bg-amber-500"
+                          : printerStatusQuery.data.state === "stale"
+                            ? "bg-orange-500"
+                            : printerStatusQuery.data.state === "stuck"
+                              ? "bg-rose-500"
+                          : printerStatusQuery.data.state === "idle"
+                            ? "bg-emerald-500"
+                            : "bg-sky-500"
+                    }`}
+                  />
+                  <span className="font-medium">
+                    {printerStatusQuery.data.online && printerStatusQuery.data.state !== "down"
+                      ? "Online"
+                      : "DOWN"}{" "}
+                    - {printerStatusQuery.data.state}
+                  </span>
+                </p>
+                {printerStatusQuery.data.error ? (
+                  <p className="text-(--bearhacks-muted)">{printerStatusQuery.data.error}</p>
+                ) : null}
+                <p className="text-(--bearhacks-muted)">
+                  Last checked: {new Date(printerStatusQuery.data.checked_at).toLocaleTimeString()}
+                  {printerStatusQuery.data.endpoint ? ` (${printerStatusQuery.data.endpoint})` : ""}
+                </p>
+                {typeof printerStatusQuery.data.activity_age_seconds === "number" ? (
+                  <p className="text-(--bearhacks-muted)">
+                    Last activity: {printerStatusQuery.data.activity_age_seconds}s ago
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+
           <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
             <h2 className="text-base font-medium text-(--bearhacks-fg)">Generate batch</h2>
             <form
