@@ -227,6 +227,24 @@ export default function AdminQrPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (qrId: string) =>
+      client!.fetchJson<{ deleted: boolean; qr_id: string }>(`/qr/${qrId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_result, qrId) => {
+      toast.success(`Deleted ${qrId}`);
+      void qrQuery.refetch();
+    },
+    onError: (error) => {
+      if (error instanceof ApiError) {
+        toast.error(error.status === 403 ? "Admin role required" : error.message);
+      } else {
+        toast.error("Failed to delete QR");
+      }
+    },
+  });
+
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-10">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -562,6 +580,7 @@ export default function AdminQrPage() {
                   <tbody>
                     {qrQuery.data.map((row) => {
                       const qrId = row.id ?? "unknown";
+                      const canMutate = Boolean(row.id);
                       const claimed = Boolean(row.claimed);
                       const generatedBy = row.generated_by?.trim()
                         ? row.generated_by
@@ -583,14 +602,31 @@ export default function AdminQrPage() {
                           </td>
                           <td className="px-3 py-3 text-(--bearhacks-muted)">{row.claimed_by ?? "—"}</td>
                           <td className="px-3 py-3">
-                            <button
-                              type="button"
-                              onClick={() => reprintMutation.mutate(qrId)}
-                              disabled={reprintMutation.isPending}
-                              className="min-h-(--bearhacks-touch-min) min-w-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) px-2 text-sm underline disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              Reprint
-                            </button>
+                            <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => reprintMutation.mutate(qrId)}
+                                disabled={!canMutate || reprintMutation.isPending || deleteMutation.isPending}
+                                className="min-h-(--bearhacks-touch-min) min-w-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) px-2 text-sm underline disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Reprint
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!canMutate) return;
+                                  const confirmed = window.confirm(
+                                    `Delete QR ${qrId}? This permanently removes it from the database.`,
+                                  );
+                                  if (!confirmed) return;
+                                  deleteMutation.mutate(qrId);
+                                }}
+                                disabled={!canMutate || reprintMutation.isPending || deleteMutation.isPending}
+                                className="min-h-(--bearhacks-touch-min) min-w-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) px-2 text-sm text-red-700 underline disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {deleteMutation.isPending ? "Deleting…" : "Delete"}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
