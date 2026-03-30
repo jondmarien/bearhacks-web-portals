@@ -575,7 +575,7 @@ export default function AdminQrPage() {
                       <th scope="col" className="px-3 py-3 font-medium">
                         Claimed by
                       </th>
-                      <th scope="col" className="px-3 py-3 font-medium">
+                      <th scope="col" className="px-3 py-3 text-center font-medium">
                         Actions
                       </th>
                     </tr>
@@ -604,8 +604,8 @@ export default function AdminQrPage() {
                             </span>
                           </td>
                           <td className="px-3 py-3 text-(--bearhacks-muted)">{row.claimed_by ?? "—"}</td>
-                          <td className="px-3 py-3">
-                            <div className="flex items-center gap-3">
+                          <td className="px-3 py-3 text-center">
+                            <div className="flex items-center justify-center gap-3">
                               <button
                                 type="button"
                                 onClick={() => setSelectedQr(row)}
