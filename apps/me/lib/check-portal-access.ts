@@ -55,12 +55,19 @@ export async function checkPortalAccess(
 }
 
 function claimEmailDetailMessage(error: unknown): string {
-  if (!(error instanceof ApiError) || error.status !== 400) return "Could not verify that email.";
+  if (!(error instanceof ApiError)) return "Could not verify that email.";
   const d = error.detail;
-  if (d && typeof d === "object" && "message" in d && typeof (d as { message: unknown }).message === "string") {
-    return (d as { message: string }).message;
+  const msg =
+    d && typeof d === "object" && "message" in d && typeof (d as { message: unknown }).message === "string"
+      ? (d as { message: string }).message
+      : undefined;
+  if (error.status === 409) {
+    return msg ?? "This acceptance email is already linked to another account.";
   }
-  return "That email is not on the accepted hacker list.";
+  if (error.status === 400) {
+    return msg ?? "That email is not on the accepted hacker list.";
+  }
+  return "Could not verify that email.";
 }
 
 /**
