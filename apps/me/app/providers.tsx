@@ -8,6 +8,7 @@ import { createClient, type User, type SupabaseClient } from "@supabase/supabase
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import { readPendingScans, removePendingScansByProfileIds } from "@/lib/pending-scans";
+import { trySyncDiscordGuild } from "@/lib/sync-discord-guild";
 
 const log = createLogger("me/providers");
 const SupabaseContext = createContext<SupabaseClient | null>(null);
@@ -114,12 +115,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
     };
   }, [supabase]);
 
+  useEffect(() => {
+    if (!supabase || !user) return;
+    void trySyncDiscordGuild(supabase);
+  }, [supabase, user]);
+
   const signInWithDiscord = useCallback(async () => {
     if (!supabase) return;
     const redirectTo = `${window.location.origin}/dashboard`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "discord",
-      options: { redirectTo },
+      options: {
+        redirectTo,
+        scopes: "identify email guilds.join",
+      },
     });
     if (error) {
       log.error("Discord login failed to start", { error });
