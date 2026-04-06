@@ -27,40 +27,37 @@ export function useMeAuth() {
   return useContext(MeAuthContext);
 }
 
+function cleanOAuthParamsFromUrl() {
+  const url = new URL(window.location.href);
+  const authQueryKeys = ["code", "token", "type", "error", "error_code", "error_description"];
+  let shouldReplace = false;
+  for (const key of authQueryKeys) {
+    if (url.searchParams.has(key)) {
+      url.searchParams.delete(key);
+      shouldReplace = true;
+    }
+  }
+  const hash = url.hash;
+  if (
+    hash.includes("access_token=") ||
+    hash.includes("refresh_token=") ||
+    hash.includes("error=") ||
+    hash.includes("error_code=")
+  ) {
+    url.hash = "";
+    shouldReplace = true;
+  }
+  if (shouldReplace) {
+    window.history.replaceState({}, document.title, url.toString());
+    log.debug("Cleaned OAuth params from URL");
+  }
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
-
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const authQueryKeys = ["code", "token", "type", "error", "error_code", "error_description"];
-    let shouldReplace = false;
-    for (const key of authQueryKeys) {
-      if (url.searchParams.has(key)) {
-        url.searchParams.delete(key);
-        shouldReplace = true;
-      }
-    }
-
-    // Supabase can return session fragments in URL hash after OAuth redirect.
-    const hash = window.location.hash;
-    const hasAuthHash =
-      hash.includes("access_token=") ||
-      hash.includes("refresh_token=") ||
-      hash.includes("error=") ||
-      hash.includes("error_code=");
-    if (hasAuthHash) {
-      url.hash = "";
-      shouldReplace = true;
-    }
-
-    if (shouldReplace) {
-      window.history.replaceState({}, document.title, url.toString());
-      log.debug("Cleaned OAuth params from URL");
-    }
-  }, []);
 
   useEffect(() => {
     const parsed = tryPublicEnv();
@@ -90,6 +87,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         queueMicrotask(() => {
           setUser(data.session?.user ?? null);
           setIsAuthReady(true);
+          if (data.session) {
+            cleanOAuthParamsFromUrl();
+          }
         });
       })
       .catch((error) => {
@@ -102,6 +102,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       queueMicrotask(() => {
         setUser(session?.user ?? null);
         setIsAuthReady(true);
+        if (session) {
+          cleanOAuthParamsFromUrl();
+        }
       });
     });
 
