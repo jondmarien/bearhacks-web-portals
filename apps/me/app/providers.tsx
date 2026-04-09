@@ -195,8 +195,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     const next = params.get("next");
     const redirectTo =
       next?.startsWith("/") && !next.startsWith("//")
-        ? `${window.location.origin}/dashboard?next=${encodeURIComponent(next)}`
-        : `${window.location.origin}/dashboard`;
+        ? `${window.location.origin}/?next=${encodeURIComponent(next)}`
+        : `${window.location.origin}/`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "discord",
       options: {

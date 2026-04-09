@@ -58,7 +58,7 @@ export default function ContactPage() {
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 401) {
-        router.push(`/dashboard?next=${encodeURIComponent(`/contacts/${profileId}`)}`);
+        router.push(`/?next=${encodeURIComponent(`/contacts/${profileId}`)}`);
         return;
       }
       log.error("Failed to update favourite", { profileId, error });
@@ -101,11 +101,8 @@ export default function ContactPage() {
           This route needs a real profile UUID. The sample `demo-id` is only a placeholder.
         </p>
         <nav className="mt-4 flex items-center gap-4 text-sm">
-          <Link href="/dashboard" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
-            Dashboard
-          </Link>
           <Link href="/" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
-            Home
+            Portal
           </Link>
         </nav>
       </main>
@@ -117,7 +114,7 @@ export default function ContactPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">Contact profile</h1>
         <p className="mt-1 text-sm text-(--bearhacks-muted)">
-          Public profile view works without login. Favouriting sends you to sign in on the dashboard.
+          Public profile view works without login. Favouriting sends you to sign in on the portal.
         </p>
       </header>
 
@@ -168,7 +165,7 @@ export default function ContactPage() {
               type="button"
               onClick={() => {
                 if (!auth?.user) {
-                  router.push(`/dashboard?next=${encodeURIComponent(`/contacts/${profileId}`)}`);
+                  router.push(`/?next=${encodeURIComponent(`/contacts/${profileId}`)}`);
                   return;
                 }
                 favouriteMutation.mutate();
@@ -183,11 +180,8 @@ export default function ContactPage() {
       )}
 
       <nav className="flex items-center gap-4 text-sm">
-        <Link href="/dashboard" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
-          Dashboard
-        </Link>
         <Link href="/" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
-          Home
+          Portal
         </Link>
       </nav>
     </main>

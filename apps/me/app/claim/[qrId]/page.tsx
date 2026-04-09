@@ -266,11 +266,8 @@ export default function ClaimQrPage() {
       ) : null}
 
       <nav className="flex items-center gap-4 text-sm">
-        <Link href="/dashboard" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
-          Dashboard
-        </Link>
         <Link href="/" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
-          Home
+          Portal
         </Link>
       </nav>
     </main>

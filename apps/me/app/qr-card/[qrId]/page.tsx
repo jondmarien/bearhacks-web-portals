@@ -47,8 +47,8 @@ export default function QrCardPage() {
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-8">
         <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">QR card</h1>
         <p className="text-sm text-(--bearhacks-muted)">Invalid QR id.</p>
-        <Link href="/dashboard" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
-          Back to dashboard
+        <Link href="/" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
+          Back to portal
         </Link>
       </main>
     );
@@ -78,11 +78,11 @@ export default function QrCardPage() {
       <section className="text-sm text-(--bearhacks-muted)">
         <p>iOS Safari: Share -&gt; Add to Home Screen.</p>
         <p>Android Chrome: Menu -&gt; Add to Home screen.</p>
-        <p>Android wallet fallback: use dashboard PNG/PDF download, then upload in your custom-pass workflow.</p>
+        <p>Android wallet fallback: use portal PNG/PDF download, then upload in your custom-pass workflow.</p>
       </section>
       <div className="flex gap-3 text-sm">
-        <Link href="/dashboard" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
-          Back to dashboard
+        <Link href="/" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
+          Back to portal
         </Link>
       </div>
     </main>
