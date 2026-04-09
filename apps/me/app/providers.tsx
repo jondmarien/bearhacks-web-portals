@@ -8,18 +8,38 @@ import { createClient, type User, type SupabaseClient } from "@supabase/supabase
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { toast, Toaster } from "sonner";
 import { EmailClaimModal } from "@/components/email-claim-modal";
+import { isDiscordBackedUser } from "@/lib/auth-session";
 import { checkPortalAccess, claimPortalEmail } from "@/lib/check-portal-access";
 import { readPendingScans, removePendingScansByProfileIds } from "@/lib/pending-scans";
 import { trySyncDiscordGuild } from "@/lib/sync-discord-guild";
 
 const log = createLogger("me/providers");
 const SupabaseContext = createContext<SupabaseClient | null>(null);
+
+/** Dashboard / account-linked sign-in (not the Discord guild join funnel). */
+export type DashboardOAuthProvider = "google" | "apple" | "linkedin_oidc" | "facebook";
+
 const MeAuthContext = createContext<{
   user: User | null;
   isAuthReady: boolean;
-  signInWithDiscord: () => Promise<void>;
+  joinBearhacks2026WithDiscord: () => Promise<void>;
+  signInWithDashboardProvider: (provider: DashboardOAuthProvider) => Promise<void>;
   signOut: () => Promise<void>;
 } | null>(null);
+
+function buildMeAppOAuthRedirectTo(): string {
+  if (typeof window === "undefined") return "/";
+  const url = new URL(window.location.href);
+  const nextParam = url.searchParams.get("next");
+  if (nextParam?.startsWith("/") && !nextParam.startsWith("//")) {
+    return `${url.origin}/?next=${encodeURIComponent(nextParam)}`;
+  }
+  const pathWithSearch = `${url.pathname}${url.search}`;
+  if (pathWithSearch && pathWithSearch !== "/") {
+    return `${url.origin}/?next=${encodeURIComponent(pathWithSearch)}`;
+  }
+  return `${url.origin}/`;
+}
 
 /** Null until client mount + valid `NEXT_PUBLIC_*` (avoids Zod throw during SSG/build). */
 export function useSupabase(): SupabaseClient | null {
@@ -73,7 +93,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     // Defer setState so we don't sync-update during the effect (react-hooks/set-state-in-effect).
     queueMicrotask(() => {
       setSupabase(createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
-      log.debug("Supabase browser client ready (Discord OAuth enabled)");
+      log.debug("Supabase browser client ready");
     });
   }, []);
 
@@ -129,13 +149,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
       if (access.reason === "missing_email") {
         await supabase.auth.signOut();
         toast.error(
-          "Discord did not share an email. Allow email access for the BearHacks app and try again.",
+          "We could not read an email from your account. Allow email access for the BearHacks app and try again.",
         );
       }
       return;
     }
     queueMicrotask(() => setEmailClaimOpen(false));
-    await trySyncDiscordGuild(supabase);
+    if (isDiscordBackedUser(user)) {
+      await trySyncDiscordGuild(supabase);
+    }
 
     const env = tryPublicEnv();
     if (!env.ok) return;
@@ -189,14 +211,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   }, [supabase]);
 
-  const signInWithDiscord = useCallback(async () => {
+  const joinBearhacks2026WithDiscord = useCallback(async () => {
     if (!supabase) return;
-    const params = new URLSearchParams(window.location.search);
-    const next = params.get("next");
-    const redirectTo =
-      next?.startsWith("/") && !next.startsWith("//")
-        ? `${window.location.origin}/?next=${encodeURIComponent(next)}`
-        : `${window.location.origin}/`;
+    const redirectTo = buildMeAppOAuthRedirectTo();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "discord",
       options: {
@@ -205,10 +222,26 @@ export function Providers({ children }: { children: React.ReactNode }) {
       },
     });
     if (error) {
-      log.error("Discord login failed to start", { error });
+      log.error("Discord join flow failed to start", { error });
       throw error;
     }
   }, [supabase]);
+
+  const signInWithDashboardProvider = useCallback(
+    async (provider: DashboardOAuthProvider) => {
+      if (!supabase) return;
+      const redirectTo = buildMeAppOAuthRedirectTo();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo },
+      });
+      if (error) {
+        log.error("Dashboard OAuth failed to start", { provider, error });
+        throw error;
+      }
+    },
+    [supabase],
+  );
 
   const signOut = useCallback(async () => {
     if (!supabase) return;
@@ -219,16 +252,24 @@ export function Providers({ children }: { children: React.ReactNode }) {
     }
   }, [supabase]);
 
-  const discordEmailHint = user?.email?.trim() || null;
+  const oauthEmailHint = user?.email?.trim() || null;
 
   return (
     <QueryClientProvider client={queryClient}>
       <SupabaseContext.Provider value={supabase}>
-        <MeAuthContext.Provider value={{ user, isAuthReady, signInWithDiscord, signOut }}>
+        <MeAuthContext.Provider
+          value={{
+            user,
+            isAuthReady,
+            joinBearhacks2026WithDiscord,
+            signInWithDashboardProvider,
+            signOut,
+          }}
+        >
           {children}
           <EmailClaimModal
             open={emailClaimOpen && !!user}
-            discordEmailHint={discordEmailHint}
+            oauthEmailHint={oauthEmailHint}
             onSubmit={handleEmailClaimSubmit}
             onSignOut={handleEmailClaimSignOut}
           />

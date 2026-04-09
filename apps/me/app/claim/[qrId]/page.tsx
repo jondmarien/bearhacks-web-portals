@@ -8,6 +8,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
+import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
 import { useApiClient } from "@/lib/use-api-client";
 
 const log = createLogger("me/claim-page");
@@ -115,7 +116,7 @@ export default function ClaimQrPage() {
     onError: (error) => {
       if (error instanceof ApiError) {
         if (error.status === 401) {
-          toast.error("Sign in with Discord first");
+          toast.error("Sign in to your participant account first");
           return;
         }
         if (error.status === 409) {
@@ -185,19 +186,13 @@ export default function ClaimQrPage() {
             <p className="text-sm text-(--bearhacks-muted)">Checking session…</p>
           ) : !auth.user ? (
             <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-              <p className="text-sm text-(--bearhacks-muted)">Sign in with Discord to claim this QR.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  void auth.signInWithDiscord().catch((error) => {
-                    log.error("Discord sign in failed from claim page", { error, qrId });
-                    toast.error("Unable to start Discord login");
-                  });
-                }}
-                className="mt-3 min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-sm) bg-(--bearhacks-fg) px-4 text-sm font-medium text-(--bearhacks-bg)"
-              >
-                Sign in with Discord
-              </button>
+              <p className="text-sm text-(--bearhacks-muted)">
+                Claiming links this QR to your attendee account. Sign in with Google, Apple, LinkedIn, or Meta (use
+                the JOIN flow on the home page only for Discord server access).
+              </p>
+              <div className="mt-3">
+                <DashboardOAuthButtons />
+              </div>
             </section>
           ) : (
             <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">

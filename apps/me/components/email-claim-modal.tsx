@@ -4,12 +4,12 @@ import { type SyntheticEvent, useState } from "react";
 
 type EmailClaimModalProps = {
   open: boolean;
-  discordEmailHint?: string | null;
+  oauthEmailHint?: string | null;
   onSubmit: (email: string) => Promise<void>;
   onSignOut: () => Promise<void>;
 };
 
-export function EmailClaimModal({ open, discordEmailHint, onSubmit, onSignOut }: EmailClaimModalProps) {
+export function EmailClaimModal({ open, oauthEmailHint, onSubmit, onSignOut }: EmailClaimModalProps) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,13 +47,13 @@ export function EmailClaimModal({ open, discordEmailHint, onSubmit, onSignOut }:
           Confirm your acceptance email
         </h2>
         <p className="mt-2 text-sm text-(--bearhacks-muted)">
-          Your Discord account may use a different email than the one on your BearHacks acceptance form. Enter the
+          Your sign-in provider may use a different email than the one on your BearHacks acceptance form. Enter the
           <strong className="font-medium text-(--bearhacks-fg)"> exact email </strong>
           you used when you were accepted so we can match your account.
         </p>
-        {discordEmailHint ? (
+        {oauthEmailHint ? (
           <p className="mt-2 text-xs text-(--bearhacks-muted)">
-            Discord is currently sharing: <span className="font-mono text-(--bearhacks-fg)">{discordEmailHint}</span>
+            Account email on file: <span className="font-mono text-(--bearhacks-fg)">{oauthEmailHint}</span>
           </p>
         ) : null}
         <form onSubmit={(e) => void handleSubmit(e)} className="mt-4 flex flex-col gap-3">

@@ -9,6 +9,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
+import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
+import { primaryAuthProviderLabel } from "@/lib/auth-session";
 import { useApiClient } from "@/lib/use-api-client";
 
 const log = createLogger("me/home");
@@ -272,30 +274,62 @@ export default function HomePage() {
   }
 
   if (!userId) {
+    const nextHint =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("next")
+        : null;
+    const hasNext = Boolean(nextHint?.startsWith("/") && !nextHint.startsWith("//"));
+
     return (
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">BearHacks</h1>
-        <p className="text-sm text-(--bearhacks-muted)">
-          Sign in with Discord to load your profile, scanned contacts, and favourites.
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            void auth
-              .signInWithDiscord()
-              .catch((error) => {
-                log.error("Discord sign in failed", { error });
-                if (error instanceof Error && error.message.toLowerCase().includes("provider is not enabled")) {
-                  toast.error("Discord auth provider is disabled in Supabase for this project.");
-                } else {
-                  toast.error("Unable to start Discord login");
-                }
-              });
-          }}
-          className="min-h-(--bearhacks-touch-min) w-full cursor-pointer rounded-(--bearhacks-radius-sm) bg-(--bearhacks-fg) px-4 text-sm font-medium text-(--bearhacks-bg) sm:w-auto"
-        >
-          Sign in with Discord
-        </button>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-8">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">BearHacks</h1>
+          <p className="mt-1 text-sm text-(--bearhacks-muted)">
+            BearHacks 2026 participant portal. Public profiles and claim links work without logging in.
+          </p>
+          {hasNext ? (
+            <p className="mt-2 text-sm text-(--bearhacks-muted)">
+              After you sign in, we&apos;ll send you back to your link.
+            </p>
+          ) : null}
+        </div>
+
+        <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
+          <h2 className="text-base font-medium text-(--bearhacks-fg)">Join BearHacks 2026 (Discord)</h2>
+          <p className="mt-1 text-sm text-(--bearhacks-muted)">
+            Use this only to get verified and added to the official hackathon Discord server—not for day-to-day
+            portal sync.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              void auth
+                .joinBearhacks2026WithDiscord()
+                .catch((error) => {
+                  log.error("Discord join flow failed", { error });
+                  if (error instanceof Error && error.message.toLowerCase().includes("provider is not enabled")) {
+                    toast.error("Discord is not enabled for this project in Supabase Auth.");
+                  } else {
+                    toast.error("Unable to start Discord");
+                  }
+                });
+            }}
+            className="mt-3 min-h-(--bearhacks-touch-min) w-full cursor-pointer rounded-(--bearhacks-radius-sm) bg-(--bearhacks-fg) px-4 text-sm font-medium text-(--bearhacks-bg) sm:w-auto"
+          >
+            JOIN BEARHACKS 2026
+          </button>
+        </section>
+
+        <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
+          <h2 className="text-base font-medium text-(--bearhacks-fg)">Participant account</h2>
+          <p className="mt-1 text-sm text-(--bearhacks-muted)">
+            Sign in to edit your profile, sync scans and favourites, claim your QR, and use wallet features on this
+            site. Use Google, Apple, LinkedIn, or Meta—not Discord.
+          </p>
+          <div className="mt-3">
+            <DashboardOAuthButtons />
+          </div>
+        </section>
       </main>
     );
   }
@@ -307,6 +341,7 @@ export default function HomePage() {
     github_url: profileQuery.data?.github_url ?? "",
   };
   const signedInLabel = user?.email ?? userId;
+  const providerLabel = user ? primaryAuthProviderLabel(user) : "OAuth";
   const googleWalletConfigured = walletCapabilitiesQuery.data?.google.configured ?? false;
   const appleWalletConfigured = walletCapabilitiesQuery.data?.apple.configured ?? false;
   const showFallbackMode = walletCapabilitiesQuery.data
@@ -352,8 +387,8 @@ export default function HomePage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">BearHacks</h1>
         <p className="mt-1 text-sm text-(--bearhacks-muted)">
-          Signed in as <code className="rounded bg-(--bearhacks-border)/30 px-1">{signedInLabel}</code> via
-          Discord.
+          Signed in as <code className="rounded bg-(--bearhacks-border)/30 px-1">{signedInLabel}</code> via{" "}
+          {providerLabel}.
         </p>
         <button
           type="button"
