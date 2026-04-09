@@ -22,7 +22,7 @@ const log = createLogger("me/providers");
 const SupabaseContext = createContext<SupabaseClient | null>(null);
 
 /** Dashboard / account-linked sign-in (not the Discord guild join funnel). */
-export type DashboardOAuthProvider = "google" | "apple" | "linkedin_oidc" | "facebook";
+export type DashboardOAuthProvider = "google" | "linkedin_oidc" | "facebook";
 
 const MeAuthContext = createContext<{
   user: User | null;

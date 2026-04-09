@@ -326,7 +326,7 @@ export default function HomePage() {
           <h2 className="text-base font-medium text-(--bearhacks-fg)">Participant account</h2>
           <p className="mt-1 text-sm text-(--bearhacks-muted)">
             Sign in to edit your profile, sync scans and favourites, claim your QR, and use wallet features on this
-            site. Use Google, Apple, LinkedIn, or Meta—not Discord.
+            site. Use Google, LinkedIn, or Meta—not Discord.
           </p>
           <div className="mt-3">
             <DashboardOAuthButtons />

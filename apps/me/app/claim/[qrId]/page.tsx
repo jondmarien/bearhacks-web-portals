@@ -187,7 +187,7 @@ export default function ClaimQrPage() {
           ) : !auth.user ? (
             <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
               <p className="text-sm text-(--bearhacks-muted)">
-                Claiming links this QR to your attendee account. Sign in with Google, Apple, LinkedIn, or Meta (use
+                Claiming links this QR to your attendee account. Sign in with Google, LinkedIn, or Meta (use
                 the JOIN flow on the home page only for Discord server access).
               </p>
               <div className="mt-3">

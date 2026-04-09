@@ -8,7 +8,6 @@ const log = createLogger("me/dashboard-oauth-buttons");
 
 const PROVIDERS: { id: DashboardOAuthProvider; label: string }[] = [
   { id: "google", label: "Continue with Google" },
-  { id: "apple", label: "Continue with Apple" },
   { id: "linkedin_oidc", label: "Continue with LinkedIn" },
   { id: "facebook", label: "Continue with Meta" },
 ];
