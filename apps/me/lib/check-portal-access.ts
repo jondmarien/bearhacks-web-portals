@@ -54,44 +54,87 @@ export async function checkPortalAccess(
   }
 }
 
-function claimEmailDetailMessage(error: unknown): string {
-  if (!(error instanceof ApiError)) return "Could not verify that email.";
+function apiDetailMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) return "Something went wrong.";
   const d = error.detail;
-  const msg =
-    d && typeof d === "object" && "message" in d && typeof (d as { message: unknown }).message === "string"
-      ? (d as { message: string }).message
-      : undefined;
-  if (error.status === 409) {
-    return msg ?? "This acceptance email is already linked to another account.";
+  if (d && typeof d === "object" && "message" in d && typeof (d as { message: unknown }).message === "string") {
+    return (d as { message: string }).message;
   }
-  if (error.status === 400) {
-    return msg ?? "That email is not on the accepted hacker list.";
-  }
-  return "Could not verify that email.";
+  if (typeof d === "string") return d;
+  return error.message;
 }
 
-/**
- * Stores the application email for this Supabase user; must exist in ``accepted_hacker_emails``.
- */
-export async function claimPortalEmail(supabase: SupabaseClient, email: string): Promise<void> {
+function isOtpRequiredError(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 400) return false;
+  const d = error.detail;
+  return Boolean(d && typeof d === "object" && "code" in d && (d as { code: string }).code === "otp_required");
+}
+
+function createPortalApi(supabase: SupabaseClient) {
   const env = tryPublicEnv();
   if (!env.ok) throw new Error("App configuration is incomplete.");
-
-  const api = createApiClient({
+  return createApiClient({
     baseUrl: env.data.NEXT_PUBLIC_API_URL,
     getAccessToken: async () => {
       const { data } = await supabase.auth.getSession();
       return data.session?.access_token ?? null;
     },
   });
+}
 
+/**
+ * Try to link acceptance email when it matches the OAuth email (no OTP).
+ * Otherwise returns ``otp_required`` for the verification-code flow.
+ */
+export async function submitPortalClaimEmail(
+  supabase: SupabaseClient,
+  email: string,
+): Promise<"verified" | "otp_required"> {
+  const api = createPortalApi(supabase);
   try {
     await api.fetchJson<{ ok: boolean }>("/portal/claim-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: email.trim().toLowerCase() }),
     });
+    return "verified";
   } catch (e) {
-    throw new Error(claimEmailDetailMessage(e));
+    if (isOtpRequiredError(e)) return "otp_required";
+    throw new Error(apiDetailMessage(e));
+  }
+}
+
+/** Send a one-time code to the acceptance email (after ``otp_required``). */
+export async function requestPortalClaimOtp(supabase: SupabaseClient, email: string): Promise<void> {
+  const api = createPortalApi(supabase);
+  try {
+    await api.fetchJson<{ ok: boolean }>("/portal/claim-email/request-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim().toLowerCase() }),
+    });
+  } catch (e) {
+    throw new Error(apiDetailMessage(e));
+  }
+}
+
+/** Verify OTP and complete ``portal_email_claims``. */
+export async function verifyPortalClaimOtp(
+  supabase: SupabaseClient,
+  email: string,
+  code: string,
+): Promise<void> {
+  const api = createPortalApi(supabase);
+  try {
+    await api.fetchJson<{ ok: boolean }>("/portal/claim-email/verify-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        code: code.trim(),
+      }),
+    });
+  } catch (e) {
+    throw new Error(apiDetailMessage(e));
   }
 }

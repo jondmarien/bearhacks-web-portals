@@ -9,7 +9,12 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { toast, Toaster } from "sonner";
 import { EmailClaimModal } from "@/components/email-claim-modal";
 import { isDiscordBackedUser } from "@/lib/auth-session";
-import { checkPortalAccess, claimPortalEmail } from "@/lib/check-portal-access";
+import {
+  checkPortalAccess,
+  requestPortalClaimOtp,
+  submitPortalClaimEmail,
+  verifyPortalClaimOtp,
+} from "@/lib/check-portal-access";
 import { readPendingScans, removePendingScansByProfileIds } from "@/lib/pending-scans";
 import { trySyncDiscordGuild } from "@/lib/sync-discord-guild";
 
@@ -195,15 +200,34 @@ export function Providers({ children }: { children: React.ReactNode }) {
     });
   }, [runPortalFlow]);
 
-  const handleEmailClaimSubmit = useCallback(
+  const handleClaimSubmitEmail = useCallback(
     async (email: string) => {
-      if (!supabase) return;
-      await claimPortalEmail(supabase, email);
-      toast.success("Email verified.");
-      await runPortalFlow();
+      if (!supabase) throw new Error("Not signed in.");
+      return submitPortalClaimEmail(supabase, email);
     },
-    [supabase, runPortalFlow],
+    [supabase],
   );
+
+  const handleClaimRequestOtp = useCallback(
+    async (email: string) => {
+      if (!supabase) throw new Error("Not signed in.");
+      await requestPortalClaimOtp(supabase, email);
+    },
+    [supabase],
+  );
+
+  const handleClaimVerifyOtp = useCallback(
+    async (email: string, code: string) => {
+      if (!supabase) throw new Error("Not signed in.");
+      await verifyPortalClaimOtp(supabase, email, code);
+    },
+    [supabase],
+  );
+
+  const handleEmailClaimVerified = useCallback(async () => {
+    toast.success("Email verified.");
+    await runPortalFlow();
+  }, [runPortalFlow]);
 
   const handleEmailClaimSignOut = useCallback(async () => {
     setEmailClaimOpen(false);
@@ -270,7 +294,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <EmailClaimModal
             open={emailClaimOpen && !!user}
             oauthEmailHint={oauthEmailHint}
-            onSubmit={handleEmailClaimSubmit}
+            submitEmail={handleClaimSubmitEmail}
+            requestOtp={handleClaimRequestOtp}
+            verifyOtp={handleClaimVerifyOtp}
+            onVerified={handleEmailClaimVerified}
             onSignOut={handleEmailClaimSignOut}
           />
           <Toaster richColors position="top-center" />
