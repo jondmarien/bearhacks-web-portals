@@ -4,7 +4,7 @@ import { ApiError } from "@bearhacks/api-client";
 import { createLogger } from "@bearhacks/logger";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
@@ -28,6 +28,7 @@ function isUuidLike(value: string): boolean {
 
 export default function ContactPage() {
   const params = useParams();
+  const router = useRouter();
   const profileId = typeof params.id === "string" ? params.id : "";
   const validProfileId = isUuidLike(profileId);
   const auth = useMeAuth();
@@ -57,7 +58,7 @@ export default function ContactPage() {
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 401) {
-        toast.error("Sign in with Discord to favourite contacts.");
+        router.push(`/dashboard?next=${encodeURIComponent(`/contacts/${profileId}`)}`);
         return;
       }
       log.error("Failed to update favourite", { profileId, error });
@@ -116,7 +117,7 @@ export default function ContactPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">Contact profile</h1>
         <p className="mt-1 text-sm text-(--bearhacks-muted)">
-          Public profile view works without login. Favouriting uses Discord auth.
+          Public profile view works without login. Favouriting sends you to sign in on the dashboard.
         </p>
       </header>
 
@@ -167,16 +168,7 @@ export default function ContactPage() {
               type="button"
               onClick={() => {
                 if (!auth?.user) {
-                  void auth
-                    ?.signInWithDiscord()
-                    .catch((error) => {
-                      log.error("Discord sign in failed from contact page", { error });
-                      if (error instanceof Error && error.message.toLowerCase().includes("provider is not enabled")) {
-                        toast.error("Discord auth provider is disabled in Supabase for this project.");
-                      } else {
-                        toast.error("Unable to start Discord login");
-                      }
-                    });
+                  router.push(`/dashboard?next=${encodeURIComponent(`/contacts/${profileId}`)}`);
                   return;
                 }
                 favouriteMutation.mutate();
@@ -184,7 +176,7 @@ export default function ContactPage() {
               disabled={favouriteMutation.isPending}
               className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) bg-(--bearhacks-fg) px-4 text-sm font-medium text-(--bearhacks-bg) disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {favouriteMutation.isPending ? "Saving…" : auth?.user ? "Favourite" : "Sign in with Discord"}
+              {favouriteMutation.isPending ? "Saving…" : auth?.user ? "Favourite" : "Sign in to favourite"}
             </button>
           </div>
         </section>

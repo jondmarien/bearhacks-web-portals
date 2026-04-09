@@ -5,7 +5,8 @@ import { createLogger } from "@bearhacks/logger";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
 import { useApiClient } from "@/lib/use-api-client";
@@ -74,6 +75,7 @@ function buildQrImageUrl(data: string, size = 512) {
 
 export default function DashboardPage() {
   const auth = useMeAuth();
+  const router = useRouter();
   const client = useApiClient();
   const [scanId, setScanId] = useState("");
   const [favouriteId, setFavouriteId] = useState("");
@@ -81,6 +83,15 @@ export default function DashboardPage() {
 
   const user = auth?.user ?? null;
   const userId = user?.id ?? null;
+
+  useEffect(() => {
+    if (!auth?.isAuthReady || !user) return;
+    if (typeof window === "undefined") return;
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next?.startsWith("/") && !next.startsWith("//")) {
+      router.replace(next);
+    }
+  }, [auth?.isAuthReady, user, router]);
 
   const profileQuery = useQuery({
     queryKey: ["me-profile", userId],

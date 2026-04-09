@@ -191,7 +191,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   const signInWithDiscord = useCallback(async () => {
     if (!supabase) return;
-    const redirectTo = `${window.location.origin}/dashboard`;
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
+    const redirectTo =
+      next?.startsWith("/") && !next.startsWith("//")
+        ? `${window.location.origin}/dashboard?next=${encodeURIComponent(next)}`
+        : `${window.location.origin}/dashboard`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "discord",
       options: {
