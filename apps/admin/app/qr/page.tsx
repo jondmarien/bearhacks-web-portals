@@ -46,15 +46,6 @@ type PrinterStatusResponse = {
   endpoint?: string;
 };
 
-type PrinterLogsResponse = {
-  available: boolean;
-  checked_at: string;
-  endpoint?: string;
-  line_count: number;
-  lines: string[];
-  error?: string;
-};
-
 export default function AdminQrPage() {
   const supabase = useSupabase();
   const client = useApiClient();
@@ -66,7 +57,6 @@ export default function AdminQrPage() {
   const [printIdsInput, setPrintIdsInput] = useState("");
   const [generated, setGenerated] = useState<GeneratedQr[]>([]);
   const [generateMode, setGenerateMode] = useState<"print" | "generate">("print");
-  const [showPrinterLogs, setShowPrinterLogs] = useState(false);
   const [selectedQr, setSelectedQr] = useState<QrRow | null>(null);
 
   useEffect(() => {
@@ -123,14 +113,6 @@ export default function AdminQrPage() {
     },
     enabled: Boolean(client && isStaff),
     refetchInterval: 15000,
-    refetchIntervalInBackground: true,
-  });
-
-  const printerLogsQuery = useQuery({
-    queryKey: ["admin-printer-logs"],
-    queryFn: () => client!.fetchJson<PrinterLogsResponse>("/qr/printer/logs?limit=200"),
-    enabled: Boolean(client && isStaff && showPrinterLogs),
-    refetchInterval: showPrinterLogs ? 30000 : false,
     refetchIntervalInBackground: true,
   });
 
@@ -310,69 +292,17 @@ export default function AdminQrPage() {
                     - {printerStatusQuery.data.state}
                   </span>
                 </p>
-                {printerStatusQuery.data.error ? (
-                  <p className="text-(--bearhacks-muted)">{printerStatusQuery.data.error}</p>
+                {!printerStatusQuery.data.online || printerStatusQuery.data.state === "down" ? (
+                  <p className="text-(--bearhacks-muted)">Printer is unreachable right now.</p>
                 ) : null}
                 <p className="text-(--bearhacks-muted)">
                   Last checked: {new Date(printerStatusQuery.data.checked_at).toLocaleTimeString()}
-                  {printerStatusQuery.data.endpoint ? ` (${printerStatusQuery.data.endpoint})` : ""}
                 </p>
                 {typeof printerStatusQuery.data.activity_age_seconds === "number" ? (
                   <p className="text-(--bearhacks-muted)">
                     Last activity: {printerStatusQuery.data.activity_age_seconds}s ago
                   </p>
                 ) : null}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowPrinterLogs((prev) => !prev);
-                    }}
-                    className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-xs font-medium"
-                  >
-                    {showPrinterLogs ? "Hide printer logs" : "View printer logs"}
-                  </button>
-                  {showPrinterLogs && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void printerLogsQuery.refetch();
-                      }}
-                      className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-xs font-medium"
-                    >
-                      Refresh logs
-                    </button>
-                  )}
-                </div>
-                {showPrinterLogs && (
-                  <div className="mt-2 rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) bg-black/90 p-2 text-xs text-white">
-                    {printerLogsQuery.isLoading ? (
-                      <p>Loading printer logs…</p>
-                    ) : printerLogsQuery.isError ? (
-                      <p>
-                        {printerLogsQuery.error instanceof ApiError
-                          ? printerLogsQuery.error.message
-                          : "Failed to load printer logs"}
-                      </p>
-                    ) : printerLogsQuery.data ? (
-                      <>
-                        <p className="mb-2 text-white/80">
-                          {printerLogsQuery.data.available ? "Live logs" : "Logs unavailable"} -{" "}
-                          {new Date(printerLogsQuery.data.checked_at).toLocaleTimeString()}
-                          {printerLogsQuery.data.endpoint ? ` (${printerLogsQuery.data.endpoint})` : ""}
-                        </p>
-                        {printerLogsQuery.data.error ? (
-                          <p className="mb-2 text-red-300">{printerLogsQuery.data.error}</p>
-                        ) : null}
-                        <pre className="max-h-56 overflow-auto whitespace-pre-wrap wrap-break-word">
-                          {printerLogsQuery.data.lines.length > 0
-                            ? printerLogsQuery.data.lines.join("\n")
-                            : "No log lines returned."}
-                        </pre>
-                      </>
-                    ) : null}
-                  </div>
-                )}
               </div>
             ) : null}
           </section>
