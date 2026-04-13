@@ -31,7 +31,7 @@ export default function QrCardPage() {
       margin: 2,
       errorCorrectionLevel: "M",
     })
-      .then((dataUrl) => {
+      .then((dataUrl: string) => {
         if (active) setQrImageUrl(dataUrl);
       })
       .catch((error: unknown) => {
