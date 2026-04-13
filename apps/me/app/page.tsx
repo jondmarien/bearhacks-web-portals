@@ -245,6 +245,38 @@ export default function HomePage() {
     },
   });
 
+  const qrId = profileQuery.data?.qr_id ?? null;
+  const claimUrl = useMemo(
+    () => (typeof window !== "undefined" && qrId ? `${window.location.origin}/claim/${qrId}` : null),
+    [qrId],
+  );
+  const qrCardHref = qrId ? `/qr-card/${qrId}` : null;
+  const fallbackCardHref = qrCardHref ?? "/";
+
+  useEffect(() => {
+    let active = true;
+    if (!claimUrl) {
+      return () => {
+        active = false;
+      };
+    }
+    QRCode.toDataURL(claimUrl, {
+      width: 512,
+      margin: 2,
+      errorCorrectionLevel: "M",
+    })
+      .then((dataUrl) => {
+        if (active) setQrImageUrl(dataUrl);
+      })
+      .catch((error: unknown) => {
+        log.error("Failed to generate local QR image", { qrId, error });
+        if (active) setQrImageUrl(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [claimUrl, qrId]);
+
   if (!auth?.isAuthReady) {
     return (
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-8">
@@ -341,36 +373,6 @@ export default function HomePage() {
   const showFallbackMode = walletCapabilitiesQuery.data
     ? walletCapabilitiesQuery.data.fallback.enabled
     : true;
-  const qrId = profileQuery.data?.qr_id ?? null;
-  const claimUrl =
-    typeof window !== "undefined" && qrId ? `${window.location.origin}/claim/${qrId}` : null;
-  const qrCardHref = qrId ? `/qr-card/${qrId}` : null;
-  const fallbackCardHref = qrCardHref ?? "/";
-
-  useEffect(() => {
-    let active = true;
-    if (!claimUrl) {
-      setQrImageUrl(null);
-      return () => {
-        active = false;
-      };
-    }
-    QRCode.toDataURL(claimUrl, {
-      width: 512,
-      margin: 2,
-      errorCorrectionLevel: "M",
-    })
-      .then((dataUrl) => {
-        if (active) setQrImageUrl(dataUrl);
-      })
-      .catch((error: unknown) => {
-        log.error("Failed to generate local QR image", { qrId, error });
-        if (active) setQrImageUrl(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [claimUrl, qrId]);
 
   const downloadFallbackPng = async () => {
     if (!qrImageUrl || !qrId) return;

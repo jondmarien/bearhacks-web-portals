@@ -1,7 +1,6 @@
 "use client";
 
 import { ApiError } from "@bearhacks/api-client";
-import { createLogger } from "@bearhacks/logger";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -10,8 +9,6 @@ import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
 import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
 import { useApiClient } from "@/lib/use-api-client";
-
-const log = createLogger("me/claim-page");
 
 type ClaimStatus = {
   id: string;

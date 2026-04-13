@@ -23,12 +23,9 @@ export default function QrCardPage() {
 
   useEffect(() => {
     let active = true;
-    if (!claimUrl) {
-      setQrImageUrl(null);
-      return () => {
-        active = false;
-      };
-    }
+    if (!claimUrl) return () => {
+      active = false;
+    };
     QRCode.toDataURL(claimUrl, {
       width: 768,
       margin: 2,
