@@ -67,9 +67,6 @@ export default function AdminQrPage() {
   const [selectedQr, setSelectedQr] = useState<QrRow | null>(null);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [structuredLogs, setStructuredLogs] = useState<StructuredLogEntry[]>([]);
-  const [customClientId, setCustomClientId] = useState("");
-  const [customClientSecret, setCustomClientSecret] = useState("");
-  const [statusOverride, setStatusOverride] = useState<PrinterStatusResponse | null>(null);
 
   useEffect(() => {
     if (!supabase) return;
@@ -142,53 +139,6 @@ export default function AdminQrPage() {
     },
     refetchIntervalInBackground: false,
   });
-
-  const retryPrinterMutation = useMutation({
-    mutationFn: async () => {
-      if (!client) {
-        throw new Error("API client unavailable");
-      }
-      const id = customClientId.trim();
-      const secret = customClientSecret.trim();
-      if ((id && !secret) || (!id && secret)) {
-        throw new Error("Provide both custom client ID and secret");
-      }
-      const headers: Record<string, string> = {};
-      if (id && secret) {
-        headers["x-cf-access-client-id"] = id;
-        headers["x-cf-access-client-secret"] = secret;
-      }
-      return client.fetchJson<PrinterStatusResponse>("/qr/printer/status?force_refresh=true", {
-        headers,
-      });
-    },
-    onSuccess: (data) => {
-      setStatusOverride(data);
-      log("info", {
-        event: "admin_printer_status_retry",
-        actor,
-        resourceId: "/qr/printer/status",
-        result: "success",
-        usedCustomAuth: Boolean(customClientId.trim() && customClientSecret.trim()),
-        online: data.online,
-        state: data.state,
-      });
-      toast.success("Retried printer connection check.");
-    },
-    onError: (error) => {
-      log("error", {
-        event: "admin_printer_status_retry",
-        actor,
-        resourceId: "/qr/printer/status",
-        result: "error",
-        usedCustomAuth: Boolean(customClientId.trim() && customClientSecret.trim()),
-        error,
-      });
-      toast.error(error instanceof Error ? error.message : "Retry failed");
-    },
-  });
-
-  const printerStatus = statusOverride ?? printerStatusQuery.data;
 
   useEffect(() => {
     if (!isLogsOpen) return;
@@ -414,7 +364,6 @@ export default function AdminQrPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setStatusOverride(null);
                     void printerStatusQuery.refetch();
                     log("info", {
                       event: "admin_printer_status_refresh",
@@ -426,16 +375,6 @@ export default function AdminQrPage() {
                   className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-xs font-medium"
                 >
                   Refresh
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void retryPrinterMutation.mutateAsync();
-                  }}
-                  disabled={retryPrinterMutation.isPending}
-                  className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {retryPrinterMutation.isPending ? "Retrying..." : "Retry"}
                 </button>
                 <button
                   type="button"
@@ -463,75 +402,45 @@ export default function AdminQrPage() {
                   ? printerStatusQuery.error.message
                   : "Failed to load printer status"}
               </p>
-            ) : printerStatus ? (
+            ) : printerStatusQuery.data ? (
               <div className="mt-2 flex flex-col gap-1 text-sm">
                 <p className="flex items-center gap-2">
                   <span
                     aria-hidden="true"
                     className={`inline-block h-2.5 w-2.5 rounded-full ${
-                      !printerStatus.online || printerStatus.state === "down"
+                      !printerStatusQuery.data.online || printerStatusQuery.data.state === "down"
                         ? "bg-red-500"
-                        : printerStatus.state === "printing"
+                        : printerStatusQuery.data.state === "printing"
                           ? "bg-amber-500"
-                          : printerStatus.state === "stale"
+                          : printerStatusQuery.data.state === "stale"
                             ? "bg-orange-500"
-                            : printerStatus.state === "stuck"
+                            : printerStatusQuery.data.state === "stuck"
                               ? "bg-rose-500"
-                          : printerStatus.state === "idle"
-                            ? "bg-emerald-500"
-                            : "bg-sky-500"
+                              : printerStatusQuery.data.state === "idle"
+                                ? "bg-emerald-500"
+                                : "bg-sky-500"
                     }`}
                   />
                   <span className="font-medium">
-                    {printerStatus.online && printerStatus.state !== "down"
+                    {printerStatusQuery.data.online && printerStatusQuery.data.state !== "down"
                       ? "Online"
                       : "DOWN"}{" "}
-                    - {printerStatus.state}
+                    - {printerStatusQuery.data.state}
                   </span>
                 </p>
-                {!printerStatus.online || printerStatus.state === "down" ? (
+                {!printerStatusQuery.data.online || printerStatusQuery.data.state === "down" ? (
                   <p className="text-(--bearhacks-muted)">
-                    {printerStatus.error ?? "Printer is unreachable right now."}
+                    {printerStatusQuery.data.error ?? "Printer is unreachable right now."}
                   </p>
                 ) : null}
                 <p className="text-(--bearhacks-muted)">
-                  Last checked: {new Date(printerStatus.checked_at).toLocaleTimeString()}
+                  Last checked: {new Date(printerStatusQuery.data.checked_at).toLocaleTimeString()}
                 </p>
-                {typeof printerStatus.activity_age_seconds === "number" ? (
+                {typeof printerStatusQuery.data.activity_age_seconds === "number" ? (
                   <p className="text-(--bearhacks-muted)">
-                    Last activity: {printerStatus.activity_age_seconds}s ago
+                    Last activity: {printerStatusQuery.data.activity_age_seconds}s ago
                   </p>
                 ) : null}
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1">
-                    <label htmlFor="custom-client-id" className="text-xs font-medium text-(--bearhacks-fg)">
-                      Custom client ID (optional)
-                    </label>
-                    <input
-                      id="custom-client-id"
-                      value={customClientId}
-                      onChange={(event) => setCustomClientId(event.target.value)}
-                      className="min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-xs"
-                      placeholder="CF Access client id"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label htmlFor="custom-client-secret" className="text-xs font-medium text-(--bearhacks-fg)">
-                      Custom client secret (optional)
-                    </label>
-                    <input
-                      id="custom-client-secret"
-                      type="password"
-                      value={customClientSecret}
-                      onChange={(event) => setCustomClientSecret(event.target.value)}
-                      className="min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-xs"
-                      placeholder="CF Access client secret"
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-(--bearhacks-muted)">
-                  If provided, both custom values are used only for the retry check.
-                </p>
               </div>
             ) : null}
           </section>
@@ -1025,7 +934,10 @@ export default function AdminQrPage() {
                     </thead>
                     <tbody>
                       {structuredLogs.map((entry, index) => (
-                        <tr key={`${entry.event}-${index}`} className="border-b border-(--bearhacks-border) last:border-0">
+                        <tr
+                          key={`${entry.event}-${index}`}
+                          className="border-b border-(--bearhacks-border) last:border-0"
+                        >
                           <td className="px-3 py-2 font-mono">{entry.scope}</td>
                           <td className="px-3 py-2 font-mono">{entry.event}</td>
                           <td className="px-3 py-2 font-mono">{entry.actor}</td>
@@ -1048,6 +960,7 @@ export default function AdminQrPage() {
           </div>
         </div>
       )}
+
     </>
   );
 }
