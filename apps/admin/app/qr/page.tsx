@@ -134,7 +134,7 @@ export default function AdminQrPage() {
     },
     enabled: Boolean(client && isStaff),
     refetchInterval: (query) => {
-      if (document.hidden) return 60000;
+      if (typeof document !== "undefined" && document.hidden) return 60000;
       if (query.state.error) return 30000;
       const state = (query.state.data as PrinterStatusResponse | undefined)?.state;
       if (state === "printing") return 10000;
