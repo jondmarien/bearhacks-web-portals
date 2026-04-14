@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const log = createLogger("me/qr-card");
 
@@ -13,7 +13,7 @@ export default function QrCardPage() {
   const params = useParams<{ qrId?: string }>();
   const searchParams = useSearchParams();
   const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
-  const [isQrImageLoaded, setIsQrImageLoaded] = useState(false);
+  const hasAutoPrintedRef = useRef(false);
   const qrId = typeof params?.qrId === "string" ? params.qrId : "";
   const printMode = searchParams.get("print") === "1";
 
@@ -27,8 +27,6 @@ export default function QrCardPage() {
     if (!claimUrl) return () => {
       active = false;
     };
-    setQrImageUrl(null);
-    setIsQrImageLoaded(false);
     QRCode.toDataURL(claimUrl, {
       width: 768,
       margin: 2,
@@ -47,16 +45,8 @@ export default function QrCardPage() {
   }, [claimUrl, qrId]);
 
   useEffect(() => {
-    if (!printMode || !qrImageUrl || !isQrImageLoaded) return;
-    const timer = window.setTimeout(() => {
-      try {
-        window.print();
-      } catch (error) {
-        log.error("Failed to trigger print dialog", { error });
-      }
-    }, 100);
-    return () => window.clearTimeout(timer);
-  }, [printMode, qrImageUrl, isQrImageLoaded]);
+    hasAutoPrintedRef.current = false;
+  }, [printMode, qrImageUrl]);
 
   if (!qrId || !claimUrl) {
     return (
@@ -94,7 +84,17 @@ export default function QrCardPage() {
             height={280}
             className="h-auto w-full"
             unoptimized
-            onLoad={() => setIsQrImageLoaded(true)}
+            onLoad={() => {
+              if (!printMode || hasAutoPrintedRef.current) return;
+              hasAutoPrintedRef.current = true;
+              window.setTimeout(() => {
+                try {
+                  window.print();
+                } catch (error) {
+                  log.error("Failed to trigger print dialog", { error });
+                }
+              }, 100);
+            }}
           />
         </div>
         <p className="mt-3 text-xs break-all text-(--bearhacks-muted)">
