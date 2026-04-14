@@ -176,9 +176,12 @@ export function EmailClaimModal({
               Enter verification code
             </h2>
             <p className="mt-2 text-sm text-(--bearhacks-muted)">
-              We sent a {6}-digit code to{" "}
+              If this email is on the accepted list, we sent a {6}-digit code to{" "}
               <span className="font-mono text-(--bearhacks-fg)">{pendingEmail}</span>. Enter it below to verify that you
               own this acceptance email.
+            </p>
+            <p className="mt-1 text-xs text-(--bearhacks-muted)">
+              If you do not receive a code, confirm this is the exact email from your acceptance form and check spam.
             </p>
             <form onSubmit={(e) => void handleOtpSubmit(e)} className="mt-4 flex flex-col gap-3">
               <label className="block text-sm font-medium text-(--bearhacks-fg)">
