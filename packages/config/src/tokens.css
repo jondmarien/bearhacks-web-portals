@@ -30,4 +30,15 @@
   --bearhacks-leading-normal: 1.5;
   /* Minimum touch target (WCAG 2.5.5); use min-height/min-width in components */
   --bearhacks-touch-min: 44px;
+  /* Semantic brand surfaces (apps/me production polish) */
+  --bearhacks-surface: #ffffff;
+  --bearhacks-surface-alt: #f2f8ff;
+  --bearhacks-primary: #1d3264;
+  --bearhacks-primary-hover: #3766d4;
+  --bearhacks-accent: #f0a422;
+  --bearhacks-accent-soft: #ffdc56;
+  --bearhacks-on-primary: #ffffff;
+  --bearhacks-shadow-card: 0 1px 2px rgba(29, 50, 100, 0.06),
+    0 8px 24px rgba(29, 50, 100, 0.08);
+  --bearhacks-radius-lg: 0.75rem;
 }

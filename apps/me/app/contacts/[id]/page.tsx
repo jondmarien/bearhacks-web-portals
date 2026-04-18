@@ -3,11 +3,13 @@
 import { ApiError } from "@bearhacks/api-client";
 import { createLogger } from "@bearhacks/logger";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { queuePendingScan } from "@/lib/pending-scans";
 import { useApiClient } from "@/lib/use-api-client";
 
@@ -20,6 +22,7 @@ type PublicProfile = {
   bio?: string | null;
   linkedin_url?: string | null;
   github_url?: string | null;
+  personal_url?: string | null;
 };
 
 function isUuidLike(value: string): boolean {
@@ -34,6 +37,7 @@ export default function ContactPage() {
   const auth = useMeAuth();
   const client = useApiClient();
   const didTrackScanRef = useRef(false);
+  const isOwnProfile = Boolean(auth?.user?.id && auth.user.id === profileId);
 
   const profileQuery = useQuery({
     queryKey: ["public-profile", profileId],
@@ -85,105 +89,121 @@ export default function ContactPage() {
       });
   }, [auth?.user, client, profileId, profileQuery.data, validProfileId]);
 
-  if (!profileId) {
+  if (!profileId || !validProfileId) {
     return (
-      <main className="mx-auto w-full max-w-md flex-1 px-4 py-8">
-        <p className="text-sm text-(--bearhacks-muted)">Missing contact id.</p>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-8">
+        <PageHeader title="Profile not found" showBack backHref="/" />
+        <Card>
+          <CardDescription>
+            This route needs a real attendee profile id.
+          </CardDescription>
+        </Card>
       </main>
     );
   }
 
-  if (!validProfileId) {
-    return (
-      <main className="mx-auto w-full max-w-md flex-1 px-4 py-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">Contact profile</h1>
-        <p className="mt-2 text-sm text-(--bearhacks-muted)">
-          This route needs a real profile UUID. The sample `demo-id` is only a placeholder.
-        </p>
-        <nav className="mt-4 flex items-center gap-4 text-sm">
-          <Link href="/" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
-            Portal
-          </Link>
-        </nav>
-      </main>
-    );
-  }
+  const profile = profileQuery.data;
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">Contact profile</h1>
-        <p className="mt-1 text-sm text-(--bearhacks-muted)">
-          Public profile view works without login. Favouriting sends you to sign in on the portal.
-        </p>
-      </header>
+    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-8">
+      <PageHeader
+        title={isOwnProfile ? "My profile" : "Attendee profile"}
+        subtitle={
+          isOwnProfile
+            ? "This is what other attendees see when they scan your QR."
+            : undefined
+        }
+        showBack
+        backHref={isOwnProfile ? "/" : undefined}
+      />
 
-      {profileQuery.isLoading && <p className="text-sm text-(--bearhacks-muted)">Loading profile…</p>}
+      {profileQuery.isLoading && (
+        <p className="text-sm text-(--bearhacks-muted)">Loading profile…</p>
+      )}
       {profileQuery.isError && (
         <p className="text-sm text-red-700">
-          {profileQuery.error instanceof ApiError ? profileQuery.error.message : "Failed to load profile"}
+          {profileQuery.error instanceof ApiError
+            ? profileQuery.error.message
+            : "Failed to load profile"}
         </p>
       )}
 
-      {profileQuery.data && (
-        <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-          <h2 className="text-lg font-medium text-(--bearhacks-fg)">
-            {profileQuery.data.display_name ?? "Unnamed attendee"}
-          </h2>
-          {profileQuery.data.role && (
-            <p className="mt-1 text-sm text-(--bearhacks-muted)">
-              Role: <span className="text-(--bearhacks-fg)">{profileQuery.data.role}</span>
+      {profile && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{profile.display_name ?? "Unnamed attendee"}</CardTitle>
+            {profile.role ? (
+              <CardDescription>{profile.role}</CardDescription>
+            ) : null}
+          </CardHeader>
+
+          {profile.bio ? (
+            <p className="whitespace-pre-line text-sm text-(--bearhacks-fg)">
+              {profile.bio}
             </p>
+          ) : null}
+
+          {(profile.linkedin_url || profile.github_url || profile.personal_url) && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {profile.linkedin_url ? (
+                <a
+                  href={profile.linkedin_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-3 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-accent-soft)"
+                >
+                  LinkedIn
+                </a>
+              ) : null}
+              {profile.github_url ? (
+                <a
+                  href={profile.github_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-3 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-accent-soft)"
+                >
+                  GitHub
+                </a>
+              ) : null}
+              {profile.personal_url ? (
+                <a
+                  href={profile.personal_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-3 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-accent-soft)"
+                >
+                  Personal site
+                </a>
+              ) : null}
+            </div>
           )}
-          {profileQuery.data.bio && <p className="mt-3 text-sm text-(--bearhacks-fg)">{profileQuery.data.bio}</p>}
 
-          <div className="mt-4 flex flex-wrap gap-3 text-sm">
-            {profileQuery.data.linkedin_url && (
-              <a
-                href={profileQuery.data.linkedin_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex min-h-(--bearhacks-touch-min) items-center underline"
+          <div className="mt-6">
+            {isOwnProfile ? (
+              <Button onClick={() => router.push("/")}>Edit profile</Button>
+            ) : (
+              <Button
+                onClick={() => {
+                  if (!auth?.user) {
+                    router.push(
+                      `/?next=${encodeURIComponent(`/contacts/${profileId}`)}`,
+                    );
+                    return;
+                  }
+                  favouriteMutation.mutate();
+                }}
+                disabled={favouriteMutation.isPending}
               >
-                LinkedIn
-              </a>
-            )}
-            {profileQuery.data.github_url && (
-              <a
-                href={profileQuery.data.github_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex min-h-(--bearhacks-touch-min) items-center underline"
-              >
-                GitHub
-              </a>
+                {favouriteMutation.isPending
+                  ? "Saving…"
+                  : auth?.user
+                    ? "Favourite"
+                    : "Sign in to favourite"}
+              </Button>
             )}
           </div>
-
-          <div className="mt-5">
-            <button
-              type="button"
-              onClick={() => {
-                if (!auth?.user) {
-                  router.push(`/?next=${encodeURIComponent(`/contacts/${profileId}`)}`);
-                  return;
-                }
-                favouriteMutation.mutate();
-              }}
-              disabled={favouriteMutation.isPending}
-              className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) bg-(--bearhacks-fg) px-4 text-sm font-medium text-(--bearhacks-bg) disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {favouriteMutation.isPending ? "Saving…" : auth?.user ? "Favourite" : "Sign in to favourite"}
-            </button>
-          </div>
-        </section>
+        </Card>
       )}
-
-      <nav className="flex items-center gap-4 text-sm">
-        <Link href="/" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
-          Portal
-        </Link>
-      </nav>
     </main>
   );
 }

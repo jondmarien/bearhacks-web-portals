@@ -8,26 +8,21 @@ import { createClient, type User, type SupabaseClient } from "@supabase/supabase
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { toast, Toaster } from "sonner";
 import { EmailClaimModal } from "@/components/email-claim-modal";
-import { isDiscordBackedUser } from "@/lib/auth-session";
 import {
-  checkPortalAccess,
   requestPortalClaimOtp,
   submitPortalClaimEmail,
   verifyPortalClaimOtp,
 } from "@/lib/check-portal-access";
 import { readPendingScans, removePendingScansByProfileIds } from "@/lib/pending-scans";
-import { trySyncDiscordGuild } from "@/lib/sync-discord-guild";
 
 const log = createLogger("me/providers");
 const SupabaseContext = createContext<SupabaseClient | null>(null);
 
-/** Dashboard / account-linked sign-in (not the Discord guild join funnel). */
 export type DashboardOAuthProvider = "google" | "linkedin_oidc";
 
 const MeAuthContext = createContext<{
   user: User | null;
   isAuthReady: boolean;
-  joinBearhacks2026WithDiscord: () => Promise<void>;
   signInWithDashboardProvider: (provider: DashboardOAuthProvider) => Promise<void>;
   signOut: () => Promise<void>;
 } | null>(null);
@@ -145,24 +140,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   const runPortalFlow = useCallback(async () => {
     if (!supabase || !user) return;
-    const access = await checkPortalAccess(supabase);
-    if (!access.allowed) {
-      if (access.reason === "not_accepted") {
-        queueMicrotask(() => setEmailClaimOpen(true));
-        return;
-      }
-      if (access.reason === "missing_email") {
-        await supabase.auth.signOut();
-        toast.error(
-          "We could not read an email from your account. Allow email access for the BearHacks app and try again.",
-        );
-      }
-      return;
-    }
     queueMicrotask(() => setEmailClaimOpen(false));
-    if (isDiscordBackedUser(user)) {
-      await trySyncDiscordGuild(supabase);
-    }
+    // Lanyard check moved to in-person QR claim — anyone signed in can have a
+    // profile, so we no longer call `checkPortalAccess` to gate access here.
 
     const env = tryPublicEnv();
     if (!env.ok) return;
@@ -235,22 +215,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   }, [supabase]);
 
-  const joinBearhacks2026WithDiscord = useCallback(async () => {
-    if (!supabase) return;
-    const redirectTo = buildMeAppOAuthRedirectTo();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "discord",
-      options: {
-        redirectTo,
-        scopes: "identify email guilds.join",
-      },
-    });
-    if (error) {
-      log.error("Discord join flow failed to start", { error });
-      throw error;
-    }
-  }, [supabase]);
-
   const signInWithDashboardProvider = useCallback(
     async (provider: DashboardOAuthProvider) => {
       if (!supabase) return;
@@ -285,7 +249,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
           value={{
             user,
             isAuthReady,
-            joinBearhacks2026WithDiscord,
             signInWithDashboardProvider,
             signOut,
           }}

@@ -6,12 +6,13 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import QRCode from "qrcode";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
 import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
-import { primaryAuthProviderLabel } from "@/lib/auth-session";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InputField, TextareaField } from "@/components/ui/field";
 import { useApiClient } from "@/lib/use-api-client";
 
 const log = createLogger("me/home");
@@ -23,26 +24,8 @@ type MyProfile = {
   bio?: string | null;
   linkedin_url?: string | null;
   github_url?: string | null;
+  personal_url?: string | null;
   role?: string | null;
-};
-
-type ScannedRow = {
-  scanned_at?: string | null;
-  profiles?: {
-    id?: string;
-    display_name?: string | null;
-    role?: string | null;
-    linkedin_url?: string | null;
-  } | null;
-};
-
-type FavouriteProfile = {
-  id?: string;
-  display_name?: string | null;
-  role?: string | null;
-  linkedin_url?: string | null;
-  github_url?: string | null;
-  bio?: string | null;
 };
 
 type ProfileDraft = {
@@ -50,30 +33,26 @@ type ProfileDraft = {
   bio: string;
   linkedin_url: string;
   github_url: string;
+  personal_url: string;
+  role: string;
 };
 
-type GoogleWalletPassType = "generic" | "event";
-
-type GoogleWalletSaveLinkResponse = {
-  save_url: string;
-  class_id: string;
-  object_id: string;
-};
-
-type WalletCapabilities = {
-  google: { configured: boolean };
-  apple: { configured: boolean };
-  fallback: { enabled: boolean };
-};
+function draftFromProfile(profile: MyProfile | undefined | null): ProfileDraft {
+  return {
+    display_name: profile?.display_name ?? "",
+    bio: profile?.bio ?? "",
+    linkedin_url: profile?.linkedin_url ?? "",
+    github_url: profile?.github_url ?? "",
+    personal_url: profile?.personal_url ?? "",
+    role: profile?.role ?? "",
+  };
+}
 
 export default function HomePage() {
   const auth = useMeAuth();
   const router = useRouter();
   const client = useApiClient();
-  const [scanId, setScanId] = useState("");
-  const [favouriteId, setFavouriteId] = useState("");
   const [profileDraft, setProfileDraft] = useState<ProfileDraft | null>(null);
-  const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
 
   const user = auth?.user ?? null;
   const userId = user?.id ?? null;
@@ -108,63 +87,38 @@ export default function HomePage() {
     enabled: Boolean(client && userId),
   });
 
-  const scannedQuery = useQuery({
-    queryKey: ["me-scanned", userId],
-    queryFn: () => client!.fetchJson<ScannedRow[]>("/social/scanned"),
-    enabled: Boolean(client && userId),
-  });
-
-  const favouritesQuery = useQuery({
-    queryKey: ["me-favourites", userId],
-    queryFn: () => client!.fetchJson<FavouriteProfile[]>("/social/favourites"),
-    enabled: Boolean(client && userId),
-  });
-
-  const walletCapabilitiesQuery = useQuery({
-    queryKey: ["wallet-capabilities"],
-    queryFn: () => client!.fetchJson<WalletCapabilities>("/wallet/capabilities"),
-    enabled: Boolean(client && userId),
-  });
-
-  const profileUpdatePayload = useMemo(() => {
-    const current = profileQuery.data;
-    if (!current) return null;
-    const effectiveDraft: ProfileDraft = profileDraft ?? {
-      display_name: current.display_name ?? "",
-      bio: current.bio ?? "",
-      linkedin_url: current.linkedin_url ?? "",
-      github_url: current.github_url ?? "",
-    };
-    const body: Record<string, string> = {};
-    if (effectiveDraft.display_name !== (current.display_name ?? "")) {
-      body.display_name = effectiveDraft.display_name;
-    }
-    if (effectiveDraft.bio !== (current.bio ?? "")) body.bio = effectiveDraft.bio;
-    if (effectiveDraft.linkedin_url !== (current.linkedin_url ?? "")) {
-      body.linkedin_url = effectiveDraft.linkedin_url;
-    }
-    if (effectiveDraft.github_url !== (current.github_url ?? "")) {
-      body.github_url = effectiveDraft.github_url;
-    }
-    return body;
-  }, [profileQuery.data, profileDraft]);
-
   const saveProfileMutation = useMutation({
-    mutationFn: () =>
-      client!.fetchJson<MyProfile>("/profiles/me", {
+    mutationFn: () => {
+      const current = profileQuery.data;
+      const effective = profileDraft ?? draftFromProfile(current);
+      const body: Record<string, string> = {};
+      if (effective.display_name !== (current?.display_name ?? "")) {
+        body.display_name = effective.display_name;
+      }
+      if (effective.bio !== (current?.bio ?? "")) body.bio = effective.bio;
+      if (effective.linkedin_url !== (current?.linkedin_url ?? "")) {
+        body.linkedin_url = effective.linkedin_url;
+      }
+      if (effective.github_url !== (current?.github_url ?? "")) {
+        body.github_url = effective.github_url;
+      }
+      if (effective.personal_url !== (current?.personal_url ?? "")) {
+        body.personal_url = effective.personal_url;
+      }
+      if (effective.role !== (current?.role ?? "")) body.role = effective.role;
+      return client!.fetchJson<MyProfile>("/profiles/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profileUpdatePayload ?? {}),
-      }),
+        body: JSON.stringify(body),
+      });
+    },
     onSuccess: (data) => {
       void profileQuery.refetch();
-      toast.success("Profile updated");
-      setProfileDraft({
-        display_name: data.display_name ?? "",
-        bio: data.bio ?? "",
-        linkedin_url: data.linkedin_url ?? "",
-        github_url: data.github_url ?? "",
-      });
+      toast.success("Profile saved");
+      if (userId) {
+        router.push(`/contacts/${userId}`);
+      }
+      setProfileDraft(draftFromProfile(data));
     },
     onError: (error) => {
       log.error("Profile update failed", { userId, error });
@@ -172,115 +126,9 @@ export default function HomePage() {
     },
   });
 
-  const scanMutation = useMutation({
-    mutationFn: () => client!.fetchJson<{ success: boolean }>(`/social/scan/${scanId}`, { method: "POST" }),
-    onSuccess: () => {
-      toast.success("Contact auto-saved to scanned list");
-      setScanId("");
-      void scannedQuery.refetch();
-    },
-    onError: (error) => {
-      log.warn("Scan save failed from home", { scanId, error });
-      toast.error(error instanceof ApiError ? error.message : "Scan save failed");
-    },
-  });
-
-  const favouriteMutation = useMutation({
-    mutationFn: () =>
-      client!.fetchJson<{ favourited: boolean }>(`/social/favourite/${favouriteId}`, {
-        method: "POST",
-      }),
-    onSuccess: (result) => {
-      toast.success(result.favourited ? "Favourite saved" : "Favourite removed");
-      setFavouriteId("");
-      void favouritesQuery.refetch();
-    },
-    onError: (error) => {
-      log.warn("Favourite toggle failed from home", { favouriteId, error });
-      toast.error(error instanceof ApiError ? error.message : "Favourite update failed");
-    },
-  });
-
-  const googleWalletMutation = useMutation({
-    mutationFn: async (passType: GoogleWalletPassType) => {
-      const params = new URLSearchParams({ type: passType });
-      return client!.fetchJson<GoogleWalletSaveLinkResponse>(`/wallet/google/save-link?${params.toString()}`);
-    },
-    onSuccess: (result, passType) => {
-      toast.success(
-        passType === "generic"
-          ? "Opening Google Wallet (Generic Pass)…"
-          : "Opening Google Wallet (Event Ticket)…",
-      );
-      window.location.assign(result.save_url);
-    },
-    onError: (error, passType) => {
-      log.error("Google Wallet save link generation failed", { passType, error });
-      toast.error(error instanceof ApiError ? error.message : "Unable to create Google Wallet link");
-    },
-  });
-
-  const appleWalletMutation = useMutation({
-    mutationFn: async () => {
-      const res = await client!.request("/wallet/apple/pass", { method: "GET" });
-      if (!res.ok) {
-        throw new ApiError(`HTTP ${res.status}`, res.status, await res.text());
-      }
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = "bearhacks-attendee.pkpass";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(objectUrl);
-    },
-    onSuccess: () => {
-      toast.success("Apple Wallet pass downloaded");
-    },
-    onError: (error) => {
-      log.error("Apple Wallet pass download failed", { error });
-      toast.error(error instanceof ApiError ? error.message : "Unable to download Apple Wallet pass");
-    },
-  });
-
-  const qrId = profileQuery.data?.qr_id ?? null;
-  const claimUrl = useMemo(
-    () => (typeof window !== "undefined" && qrId ? `${window.location.origin}/claim/${qrId}` : null),
-    [qrId],
-  );
-  const qrCardHref = qrId ? `/qr-card/${qrId}` : null;
-  const fallbackCardHref = qrCardHref ?? "/";
-
-  useEffect(() => {
-    let active = true;
-    if (!claimUrl) {
-      return () => {
-        active = false;
-      };
-    }
-    QRCode.toDataURL(claimUrl, {
-      width: 512,
-      margin: 2,
-      errorCorrectionLevel: "M",
-    })
-      .then((dataUrl: string) => {
-        if (active) setQrImageUrl(dataUrl);
-      })
-      .catch((error: unknown) => {
-        log.error("Failed to generate local QR image", { qrId, error });
-        if (active) setQrImageUrl(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [claimUrl, qrId]);
-
   if (!auth?.isAuthReady) {
     return (
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">BearHacks</h1>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-10">
         <p className="text-sm text-(--bearhacks-muted)">Checking session…</p>
       </main>
     );
@@ -288,418 +136,190 @@ export default function HomePage() {
 
   if (!client) {
     return (
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">BearHacks</h1>
-        <p className="text-sm text-(--bearhacks-muted)">
-          Missing public env config. Set `NEXT_PUBLIC_SUPABASE_*` and `NEXT_PUBLIC_API_URL`.
-        </p>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-10">
+        <Card>
+          <CardHeader>
+            <CardTitle>Configuration missing</CardTitle>
+            <CardDescription>
+              Set <code>NEXT_PUBLIC_SUPABASE_*</code> and <code>NEXT_PUBLIC_API_URL</code> to continue.
+            </CardDescription>
+          </CardHeader>
+        </Card>
       </main>
     );
   }
 
   if (!userId) {
-    const nextHint =
-      typeof window !== "undefined"
-        ? new URLSearchParams(window.location.search).get("next")
-        : null;
-    const hasNext = Boolean(nextHint?.startsWith("/") && !nextHint.startsWith("//"));
-
     return (
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-8">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">BearHacks</h1>
-          <p className="mt-1 text-sm text-(--bearhacks-muted)">
-            BearHacks 2026 participant portal. Public profiles and claim links work without logging in.
+      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-8 px-4 py-10">
+        <section className="flex flex-col items-center text-center">
+          <Image
+            src="/brand/logo_long.svg"
+            alt="BearHacks 2026"
+            width={320}
+            height={80}
+            priority
+            className="w-64 sm:w-80"
+            style={{ height: "auto" }}
+          />
+          <h1 className="mt-6 text-3xl font-bold tracking-tight text-(--bearhacks-primary) sm:text-4xl">
+            BearHacks 2026 Networking
+          </h1>
+          <p className="mt-3 max-w-md text-base text-(--bearhacks-muted)">
+            Sign in to create a networking profile and claim a QR code.
           </p>
-          {hasNext ? (
-            <p className="mt-2 text-sm text-(--bearhacks-muted)">
-              After you sign in, we&apos;ll send you back to your link.
-            </p>
-          ) : null}
-        </div>
-
-        <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-          <h2 className="text-base font-medium text-(--bearhacks-fg)">Join BearHacks 2026 (Discord)</h2>
-          <p className="mt-1 text-sm text-(--bearhacks-muted)">
-            Use this only to get verified and added to the official hackathon Discord server—not for day-to-day
-            portal sync.
-          </p>
-          <div className="mt-3 flex w-full justify-center">
-            <button
-              type="button"
-              onClick={() => {
-                void auth
-                  .joinBearhacks2026WithDiscord()
-                  .catch((error) => {
-                    log.error("Discord join flow failed", { error });
-                    if (error instanceof Error && error.message.toLowerCase().includes("provider is not enabled")) {
-                      toast.error("Discord is not enabled for this project in Supabase Auth.");
-                    } else {
-                      toast.error("Unable to start Discord");
-                    }
-                  });
-              }}
-              className="min-h-(--bearhacks-touch-min) w-full max-w-sm cursor-pointer rounded-(--bearhacks-radius-sm) bg-(--bearhacks-fg) px-4 text-sm font-medium text-(--bearhacks-bg) sm:w-auto"
-            >
-              JOIN BEARHACKS 2026
-            </button>
-          </div>
         </section>
 
-        <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-          <h2 className="text-base font-medium text-(--bearhacks-fg)">Participant account</h2>
-          <p className="mt-1 text-sm text-(--bearhacks-muted)">
-            Sign in to edit your profile, sync scans and favourites, claim your QR, and use wallet features on this
-            site. Use Google or LinkedIn—not Discord.
-          </p>
-          <div className="mt-3">
-            <DashboardOAuthButtons />
-          </div>
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Sign in to continue</CardTitle>
+            <CardDescription>
+              Use Google or LinkedIn to create your attendee profile.
+            </CardDescription>
+          </CardHeader>
+          <DashboardOAuthButtons />
+        </Card>
       </main>
     );
   }
 
-  const draft: ProfileDraft = profileDraft ?? {
-    display_name: profileQuery.data?.display_name ?? "",
-    bio: profileQuery.data?.bio ?? "",
-    linkedin_url: profileQuery.data?.linkedin_url ?? "",
-    github_url: profileQuery.data?.github_url ?? "",
-  };
-  const signedInLabel = user?.email ?? userId;
-  const providerLabel = user ? primaryAuthProviderLabel(user) : "OAuth";
-  const googleWalletConfigured = walletCapabilitiesQuery.data?.google.configured ?? false;
-  const appleWalletConfigured = walletCapabilitiesQuery.data?.apple.configured ?? false;
-  const showFallbackMode = walletCapabilitiesQuery.data
-    ? walletCapabilitiesQuery.data.fallback.enabled
-    : true;
-
-  const downloadFallbackPng = async () => {
-    if (!qrImageUrl || !qrId) return;
-    try {
-      const res = await fetch(qrImageUrl);
-      if (!res.ok) throw new Error(`QR image request failed (${res.status})`);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = `bearhacks-qr-${qrId}.png`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(objectUrl);
-      toast.success("QR PNG downloaded");
-    } catch (error) {
-      log.error("QR PNG download failed", { qrId, error });
-      toast.error("Unable to download QR PNG");
-    }
-  };
-
-  const downloadFallbackPdf = () => {
-    if (!qrCardHref) return;
-    const printUrl = `${window.location.origin}${qrCardHref}?print=1`;
-    window.open(printUrl, "_blank", "noopener,noreferrer");
-    toast.success("Opened printable page. Choose 'Save as PDF' in print dialog.");
-  };
+  const draft: ProfileDraft = profileDraft ?? draftFromProfile(profileQuery.data);
+  const qrId = profileQuery.data?.qr_id ?? null;
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">BearHacks</h1>
-        <p className="mt-1 text-sm text-(--bearhacks-muted)">
-          Signed in as <code className="rounded bg-(--bearhacks-border)/30 px-1">{signedInLabel}</code> via{" "}
-          {providerLabel}.
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            void auth.signOut().catch((error) => {
-              log.error("Sign out failed", { error });
-              toast.error("Unable to sign out");
-            });
-          }}
-          className="mt-3 inline-flex min-h-(--bearhacks-touch-min) items-center underline"
-        >
-          Sign out
-        </button>
-      </header>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-(--bearhacks-primary)">
+            Welcome back
+          </h1>
+          {user?.email ? (
+            <p className="text-sm text-(--bearhacks-muted)">{user.email}</p>
+          ) : null}
+        </div>
+        <div className="flex gap-2">
+          <Link
+            href={`/contacts/${userId}`}
+            className="inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-surface-alt)"
+          >
+            My profile
+          </Link>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              void auth.signOut().catch((error) => {
+                log.error("Sign out failed", { error });
+                toast.error("Unable to sign out");
+              });
+            }}
+          >
+            Sign out
+          </Button>
+        </div>
+      </div>
 
-      <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-        <h2 className="text-base font-medium text-(--bearhacks-fg)">My profile</h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>My profile</CardTitle>
+          <CardDescription>
+            This is what other attendees see when they scan your QR.
+          </CardDescription>
+        </CardHeader>
         {profileQuery.isLoading ? (
-          <p className="mt-3 text-sm text-(--bearhacks-muted)">Loading profile…</p>
+          <p className="text-sm text-(--bearhacks-muted)">Loading profile…</p>
         ) : profileQuery.isError ? (
-          <p className="mt-3 text-sm text-red-700">
-            {profileQuery.error instanceof ApiError ? profileQuery.error.message : "Failed to load profile"}
+          <p className="text-sm text-red-700">
+            {profileQuery.error instanceof ApiError
+              ? profileQuery.error.message
+              : "Failed to load profile"}
           </p>
         ) : (
           <form
-            className="mt-3 flex flex-col gap-3"
+            className="flex flex-col gap-4"
             onSubmit={(event) => {
               event.preventDefault();
               saveProfileMutation.mutate();
             }}
           >
-            <input
+            <InputField
+              label="Display name"
               value={draft.display_name}
               onChange={(event) =>
-                setProfileDraft((prev) => ({
-                  display_name: event.target.value,
-                  bio: prev?.bio ?? draft.bio,
-                  linkedin_url: prev?.linkedin_url ?? draft.linkedin_url,
-                  github_url: prev?.github_url ?? draft.github_url,
-                }))
+                setProfileDraft({ ...draft, display_name: event.target.value })
               }
-              className="min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-base"
-              placeholder="Display name"
+              placeholder="Your name"
+              autoComplete="name"
             />
-            <textarea
+            <InputField
+              label="Role or title"
+              value={draft.role}
+              onChange={(event) =>
+                setProfileDraft({ ...draft, role: event.target.value })
+              }
+              placeholder="Hacker, Mentor, Sponsor…"
+            />
+            <TextareaField
+              label="Bio"
               value={draft.bio}
               onChange={(event) =>
-                setProfileDraft((prev) => ({
-                  display_name: prev?.display_name ?? draft.display_name,
-                  bio: event.target.value,
-                  linkedin_url: prev?.linkedin_url ?? draft.linkedin_url,
-                  github_url: prev?.github_url ?? draft.github_url,
-                }))
+                setProfileDraft({ ...draft, bio: event.target.value })
               }
               rows={4}
-              className="rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 py-2 text-base"
-              placeholder="Bio"
+              placeholder="What are you building, looking for, or excited about?"
             />
-            <input
+            <InputField
+              label="LinkedIn URL"
               type="url"
               value={draft.linkedin_url}
               onChange={(event) =>
-                setProfileDraft((prev) => ({
-                  display_name: prev?.display_name ?? draft.display_name,
-                  bio: prev?.bio ?? draft.bio,
-                  linkedin_url: event.target.value,
-                  github_url: prev?.github_url ?? draft.github_url,
-                }))
+                setProfileDraft({ ...draft, linkedin_url: event.target.value })
               }
-              className="min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-base"
-              placeholder="LinkedIn URL"
+              placeholder="https://linkedin.com/in/you"
             />
-            <input
+            <InputField
+              label="GitHub URL"
               type="url"
               value={draft.github_url}
               onChange={(event) =>
-                setProfileDraft((prev) => ({
-                  display_name: prev?.display_name ?? draft.display_name,
-                  bio: prev?.bio ?? draft.bio,
-                  linkedin_url: prev?.linkedin_url ?? draft.linkedin_url,
-                  github_url: event.target.value,
-                }))
+                setProfileDraft({ ...draft, github_url: event.target.value })
               }
-              className="min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-base"
-              placeholder="GitHub URL"
+              placeholder="https://github.com/you"
             />
-            <button
-              type="submit"
-              disabled={saveProfileMutation.isPending}
-              className="min-h-(--bearhacks-touch-min) w-full cursor-pointer rounded-(--bearhacks-radius-sm) bg-(--bearhacks-fg) px-4 text-sm font-medium text-(--bearhacks-bg) disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-            >
-              {saveProfileMutation.isPending ? "Saving…" : "Save profile"}
-            </button>
-          </form>
-        )}
-      </section>
-
-      {(googleWalletConfigured || appleWalletConfigured) && (
-        <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-          <h2 className="text-base font-medium text-(--bearhacks-fg)">Wallet passes</h2>
-          <p className="mt-1 text-sm text-(--bearhacks-muted)">
-            Add your attendee pass to Google Wallet or Apple Wallet after your QR has been claimed.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {googleWalletConfigured && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => googleWalletMutation.mutate("generic")}
-                  disabled={googleWalletMutation.isPending || appleWalletMutation.isPending}
-                  className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {googleWalletMutation.isPending ? "Preparing…" : "Add Generic Pass to Google Wallet"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => googleWalletMutation.mutate("event")}
-                  disabled={googleWalletMutation.isPending || appleWalletMutation.isPending}
-                  className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {googleWalletMutation.isPending ? "Preparing…" : "Add Event Ticket to Google Wallet"}
-                </button>
-              </>
-            )}
-            {appleWalletConfigured && (
-              <button
-                type="button"
-                onClick={() => appleWalletMutation.mutate()}
-                disabled={appleWalletMutation.isPending || googleWalletMutation.isPending}
-                className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {appleWalletMutation.isPending ? "Generating…" : "Add to Apple Wallet"}
-              </button>
-            )}
-          </div>
-        </section>
-      )}
-
-      {showFallbackMode && (
-        <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-          <h2 className="text-base font-medium text-(--bearhacks-fg)">Wallet Export</h2>
-          <p className="mt-1 text-sm text-(--bearhacks-muted)">Save your networking QR in portable formats.</p>
-          {!qrId || !claimUrl || !qrImageUrl ? (
-            <p className="mt-3 text-sm text-(--bearhacks-muted)">
-              Claim your QR first to unlock Wallet Export options.
-            </p>
-          ) : (
-            <div className="mt-3 flex flex-col gap-3">
-              <div className="w-full max-w-[220px] overflow-hidden rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border)">
-                <Image
-                  src={qrImageUrl}
-                  alt="Your networking QR code"
-                  width={220}
-                  height={220}
-                  className="h-auto w-full"
-                  unoptimized
-                />
-              </div>
-              <p className="text-xs break-all text-(--bearhacks-muted)">
-                QR target: <span className="font-medium">{claimUrl}</span>
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void downloadFallbackPng();
-                  }}
-                  className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium"
-                >
-                  Download PNG
-                </button>
-                <button
-                  type="button"
-                  onClick={downloadFallbackPdf}
-                  className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium"
-                >
-                  Download PDF
-                </button>
-                <Link
-                  href={fallbackCardHref}
-                  className="inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium no-underline"
-                >
-                  Open Add-to-Home-Screen page
-                </Link>
-              </div>
-              <ul className="text-xs text-(--bearhacks-muted)">
-                <li>Includes in-app QR display + PNG/PDF download + Add-to-Home-Screen QR page.</li>
-                <li>Android fallback: upload the downloaded PNG/PDF in your pass app workflow to create a custom pass.</li>
-                <li>Apple Wallet does not support photo/PDF custom pass import without proper PassKit issuance.</li>
-              </ul>
+            <InputField
+              label="Personal link"
+              type="url"
+              value={draft.personal_url}
+              onChange={(event) =>
+                setProfileDraft({ ...draft, personal_url: event.target.value })
+              }
+              placeholder="https://yourportfolio.com"
+              hint="Portfolio, project, Notion, anything you want to share."
+            />
+            <div>
+              <Button type="submit" disabled={saveProfileMutation.isPending}>
+                {saveProfileMutation.isPending ? "Saving…" : "Save profile"}
+              </Button>
             </div>
-          )}
-        </section>
-      )}
-
-      <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-        <h2 className="text-base font-medium text-(--bearhacks-fg)">Quick scan + favourite actions</h2>
-        <p className="mt-1 text-sm text-(--bearhacks-muted)">
-          Demo actions for persistence flows while QR scan hardware is out of browser scope.
-        </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <form
-            className="flex flex-col gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!scanId.trim()) return;
-              scanMutation.mutate();
-            }}
-          >
-            <input
-              value={scanId}
-              onChange={(event) => setScanId(event.target.value)}
-              className="min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-base"
-              placeholder="Profile id to auto-save scan"
-            />
-            <button
-              type="submit"
-              disabled={scanMutation.isPending}
-              className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {scanMutation.isPending ? "Saving…" : "Save scanned contact"}
-            </button>
           </form>
-          <form
-            className="flex flex-col gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!favouriteId.trim()) return;
-              favouriteMutation.mutate();
-            }}
+        )}
+      </Card>
+
+      {qrId ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>My QR card</CardTitle>
+            <CardDescription>
+              Show this QR to other attendees to share your profile.
+            </CardDescription>
+          </CardHeader>
+          <Link
+            href={`/qr-card/${qrId}`}
+            className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-md) bg-(--bearhacks-accent) px-4 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-accent-soft)"
           >
-            <input
-              value={favouriteId}
-              onChange={(event) => setFavouriteId(event.target.value)}
-              className="min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-base"
-              placeholder="Profile id to favourite"
-            />
-            <button
-              type="submit"
-              disabled={favouriteMutation.isPending}
-              className="min-h-(--bearhacks-touch-min) cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {favouriteMutation.isPending ? "Updating…" : "Toggle favourite"}
-            </button>
-          </form>
-        </div>
-      </section>
-
-      <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-        <h2 className="text-base font-medium text-(--bearhacks-fg)">Scanned contacts</h2>
-        {scannedQuery.isLoading ? (
-          <p className="mt-2 text-sm text-(--bearhacks-muted)">Loading scans…</p>
-        ) : scannedQuery.data && scannedQuery.data.length > 0 ? (
-          <ul className="mt-3 flex flex-col gap-2 text-sm">
-            {scannedQuery.data.map((row, index) => (
-              <li
-                key={`${row.profiles?.id ?? "unknown"}-${row.scanned_at ?? index}`}
-                className="rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 py-2"
-              >
-                <div className="font-medium text-(--bearhacks-fg)">{row.profiles?.display_name ?? "Unknown attendee"}</div>
-                <div className="text-(--bearhacks-muted)">
-                  {row.scanned_at ? new Date(row.scanned_at).toLocaleString() : "Timestamp unavailable"}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-2 text-sm text-(--bearhacks-muted)">No scanned contacts yet.</p>
-        )}
-      </section>
-
-      <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-        <h2 className="text-base font-medium text-(--bearhacks-fg)">Favourites</h2>
-        {favouritesQuery.isLoading ? (
-          <p className="mt-2 text-sm text-(--bearhacks-muted)">Loading favourites…</p>
-        ) : favouritesQuery.data && favouritesQuery.data.length > 0 ? (
-          <ul className="mt-3 flex flex-col gap-2 text-sm">
-            {favouritesQuery.data.map((profile, index) => (
-              <li
-                key={`${profile.id ?? "unknown"}-${index}`}
-                className="rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 py-2"
-              >
-                <div className="font-medium text-(--bearhacks-fg)">{profile.display_name ?? "Unknown attendee"}</div>
-                <div className="text-(--bearhacks-muted)">{profile.role ?? "No role listed"}</div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-2 text-sm text-(--bearhacks-muted)">No favourites yet.</p>
-        )}
-      </section>
+            Open my QR card →
+          </Link>
+        </Card>
+      ) : null}
     </main>
   );
 }

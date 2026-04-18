@@ -8,6 +8,10 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
 import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InputField, TextareaField } from "@/components/ui/field";
+import { PageHeader } from "@/components/ui/page-header";
 import { useApiClient } from "@/lib/use-api-client";
 
 type ClaimStatus = {
@@ -23,6 +27,7 @@ type Profile = {
   bio?: string | null;
   linkedin_url?: string | null;
   github_url?: string | null;
+  personal_url?: string | null;
   role?: string | null;
 };
 
@@ -32,6 +37,7 @@ type ProfileDraft = {
   bio: string;
   linkedin_url: string;
   github_url: string;
+  personal_url: string;
 };
 
 export default function ClaimQrPage() {
@@ -62,7 +68,6 @@ export default function ClaimQrPage() {
       try {
         return await client!.fetchJson<Profile>(`/profiles/${viewerId}`);
       } catch (error) {
-        // First-time OAuth users may not have a row until first write.
         if (error instanceof ApiError && error.status === 404) {
           await client!.fetchJson<Profile>("/profiles/me", {
             method: "PATCH",
@@ -85,6 +90,7 @@ export default function ClaimQrPage() {
         bio: myProfileQuery.data?.bio ?? "",
         linkedin_url: myProfileQuery.data?.linkedin_url ?? "",
         github_url: myProfileQuery.data?.github_url ?? "",
+        personal_url: myProfileQuery.data?.personal_url ?? "",
       };
       if (!form.display_name.trim() || !form.role.trim()) {
         throw new Error("Display name and role are required");
@@ -99,6 +105,7 @@ export default function ClaimQrPage() {
           bio: form.bio.trim() || undefined,
           linkedin_url: form.linkedin_url.trim() || undefined,
           github_url: form.github_url.trim() || undefined,
+          personal_url: form.personal_url.trim() || undefined,
         }),
       });
 
@@ -116,10 +123,6 @@ export default function ClaimQrPage() {
           toast.error("Sign in to your participant account first");
           return;
         }
-        if (error.status === 409) {
-          toast.error(error.message);
-          return;
-        }
         toast.error(error.message);
         return;
       }
@@ -129,8 +132,11 @@ export default function ClaimQrPage() {
 
   if (!qrId) {
     return (
-      <main className="mx-auto w-full max-w-md flex-1 px-4 py-8">
-        <p className="text-sm text-(--bearhacks-muted)">Missing QR id.</p>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-8">
+        <PageHeader title="Claim QR" showBack backHref="/" />
+        <Card>
+          <CardDescription>Missing QR id.</CardDescription>
+        </Card>
       </main>
     );
   }
@@ -141,40 +147,54 @@ export default function ClaimQrPage() {
     bio: myProfileQuery.data?.bio ?? "",
     linkedin_url: myProfileQuery.data?.linkedin_url ?? "",
     github_url: myProfileQuery.data?.github_url ?? "",
+    personal_url: myProfileQuery.data?.personal_url ?? "",
   };
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-(--bearhacks-fg)">Claim QR</h1>
-        <p className="mt-1 text-sm text-(--bearhacks-muted)">
-          Scan flow: authenticate, complete required profile fields, then claim once.
-        </p>
-      </header>
+    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-8">
+      <PageHeader
+        title="Claim your QR"
+        subtitle="Confirm your details to link this QR code to your account."
+        showBack
+        backHref="/"
+      />
 
-      {claimStatusQuery.isLoading && <p className="text-sm text-(--bearhacks-muted)">Checking QR status…</p>}
+      {claimStatusQuery.isLoading && (
+        <p className="text-sm text-(--bearhacks-muted)">Checking QR status…</p>
+      )}
       {claimStatusQuery.isError && (
         <p className="text-sm text-red-700">
-          {claimStatusQuery.error instanceof ApiError ? claimStatusQuery.error.message : "Failed to load QR status"}
+          {claimStatusQuery.error instanceof ApiError
+            ? claimStatusQuery.error.message
+            : "Failed to load QR status"}
         </p>
       )}
 
       {claimStatusQuery.data?.claimed ? (
-        <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-          <h2 className="text-base font-medium text-(--bearhacks-fg)">This QR is already claimed</h2>
+        <Card>
+          <CardHeader>
+            <CardTitle>This QR is already claimed</CardTitle>
+            {ownerProfileQuery.data ? (
+              <CardDescription>
+                Claimed by{" "}
+                <span className="font-semibold text-(--bearhacks-primary)">
+                  {ownerProfileQuery.data.display_name ?? "an attendee"}
+                </span>
+                .
+              </CardDescription>
+            ) : (
+              <CardDescription>Loading owner profile…</CardDescription>
+            )}
+          </CardHeader>
           {ownerProfileQuery.data ? (
-            <>
-              <p className="mt-2 text-sm text-(--bearhacks-muted)">
-                Claimed by <span className="text-(--bearhacks-fg)">{ownerProfileQuery.data.display_name ?? "an attendee"}</span>
-              </p>
-              <Link href={`/contacts/${ownerProfileQuery.data.id}`} className="mt-3 inline-flex min-h-(--bearhacks-touch-min) items-center underline">
-                View public profile
-              </Link>
-            </>
-          ) : (
-            <p className="mt-2 text-sm text-(--bearhacks-muted)">Loading claimed profile…</p>
-          )}
-        </section>
+            <Link
+              href={`/contacts/${ownerProfileQuery.data.id}`}
+              className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-md) bg-(--bearhacks-accent) px-4 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-accent-soft)"
+            >
+              View profile →
+            </Link>
+          ) : null}
+        </Card>
       ) : null}
 
       {claimStatusQuery.data && !claimStatusQuery.data.claimed ? (
@@ -182,86 +202,96 @@ export default function ClaimQrPage() {
           {!auth?.isAuthReady ? (
             <p className="text-sm text-(--bearhacks-muted)">Checking session…</p>
           ) : !auth.user ? (
-            <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-              <p className="text-sm text-(--bearhacks-muted)">
-                Claiming links this QR to your attendee account. Sign in with Google or LinkedIn (use
-                the JOIN flow on the home page only for Discord server access).
-              </p>
-              <div className="mt-3">
-                <DashboardOAuthButtons />
-              </div>
-            </section>
+            <Card>
+              <CardHeader>
+                <CardTitle>Sign in to claim</CardTitle>
+                <CardDescription>
+                  Use Google or LinkedIn to link this QR to your attendee account.
+                </CardDescription>
+              </CardHeader>
+              <DashboardOAuthButtons />
+            </Card>
           ) : (
-            <section className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-bg) p-4">
-              <h2 className="text-base font-medium text-(--bearhacks-fg)">Complete required profile fields</h2>
+            <Card>
+              <CardHeader>
+                <CardTitle>Confirm your details</CardTitle>
+                <CardDescription>
+                  Display name and role are required. Everything else is optional.
+                </CardDescription>
+              </CardHeader>
               <form
-                className="mt-3 flex flex-col gap-3"
+                className="flex flex-col gap-4"
                 onSubmit={(event) => {
                   event.preventDefault();
                   claimMutation.mutate();
                 }}
               >
-                <input
+                <InputField
+                  label="Display name"
+                  required
                   value={profileDraft.display_name}
                   onChange={(event) =>
-                    setDraft((prev) => ({
-                      display_name: event.target.value,
-                      role: prev?.role ?? profileDraft.role,
-                      bio: prev?.bio ?? profileDraft.bio,
-                      linkedin_url: prev?.linkedin_url ?? profileDraft.linkedin_url,
-                      github_url: prev?.github_url ?? profileDraft.github_url,
-                    }))
+                    setDraft({ ...profileDraft, display_name: event.target.value })
                   }
-                  className="min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-base"
-                  placeholder="Display name (required)"
+                  placeholder="Your name"
+                  autoComplete="name"
                 />
-                <input
+                <InputField
+                  label="Role or title"
+                  required
                   value={profileDraft.role}
                   onChange={(event) =>
-                    setDraft((prev) => ({
-                      display_name: prev?.display_name ?? profileDraft.display_name,
-                      role: event.target.value,
-                      bio: prev?.bio ?? profileDraft.bio,
-                      linkedin_url: prev?.linkedin_url ?? profileDraft.linkedin_url,
-                      github_url: prev?.github_url ?? profileDraft.github_url,
-                    }))
+                    setDraft({ ...profileDraft, role: event.target.value })
                   }
-                  className="min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 text-base"
-                  placeholder="Role (required)"
+                  placeholder="Hacker, Mentor, Sponsor…"
                 />
-                <textarea
+                <TextareaField
+                  label="Bio"
                   value={profileDraft.bio}
-                  onChange={(event) =>
-                    setDraft((prev) => ({
-                      display_name: prev?.display_name ?? profileDraft.display_name,
-                      role: prev?.role ?? profileDraft.role,
-                      bio: event.target.value,
-                      linkedin_url: prev?.linkedin_url ?? profileDraft.linkedin_url,
-                      github_url: prev?.github_url ?? profileDraft.github_url,
-                    }))
-                  }
                   rows={3}
-                  className="rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) px-3 py-2 text-base"
-                  placeholder="Bio (optional)"
+                  onChange={(event) =>
+                    setDraft({ ...profileDraft, bio: event.target.value })
+                  }
+                  placeholder="Optional"
                 />
-                <button
-                  type="submit"
-                  disabled={claimMutation.isPending}
-                  className="min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-sm) bg-(--bearhacks-fg) px-4 text-sm font-medium text-(--bearhacks-bg) disabled:opacity-60"
-                >
-                  {claimMutation.isPending ? "Claiming…" : "Claim this QR"}
-                </button>
+                <InputField
+                  label="LinkedIn URL"
+                  type="url"
+                  value={profileDraft.linkedin_url}
+                  onChange={(event) =>
+                    setDraft({ ...profileDraft, linkedin_url: event.target.value })
+                  }
+                  placeholder="https://linkedin.com/in/you"
+                />
+                <InputField
+                  label="GitHub URL"
+                  type="url"
+                  value={profileDraft.github_url}
+                  onChange={(event) =>
+                    setDraft({ ...profileDraft, github_url: event.target.value })
+                  }
+                  placeholder="https://github.com/you"
+                />
+                <InputField
+                  label="Personal link"
+                  type="url"
+                  value={profileDraft.personal_url}
+                  onChange={(event) =>
+                    setDraft({ ...profileDraft, personal_url: event.target.value })
+                  }
+                  placeholder="https://yourportfolio.com"
+                  hint="Portfolio, project, or anything you want to share."
+                />
+                <div>
+                  <Button type="submit" disabled={claimMutation.isPending}>
+                    {claimMutation.isPending ? "Claiming…" : "Claim this QR"}
+                  </Button>
+                </div>
               </form>
-            </section>
+            </Card>
           )}
         </>
       ) : null}
-
-      <nav className="flex items-center gap-4 text-sm">
-        <Link href="/" className="inline-flex min-h-(--bearhacks-touch-min) items-center underline">
-          Portal
-        </Link>
-      </nav>
     </main>
   );
 }
