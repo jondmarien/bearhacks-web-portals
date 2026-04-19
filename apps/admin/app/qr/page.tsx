@@ -87,6 +87,7 @@ export default function AdminQrPage() {
   const [generateMode, setGenerateMode] = useState<"print" | "generate">("print");
   const [selectedQr, setSelectedQr] = useState<QrRow | null>(null);
   const [selectedQrImage, setSelectedQrImage] = useState<string | null>(null);
+  const [showQrPreview, setShowQrPreview] = useState(false);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
@@ -125,6 +126,7 @@ export default function AdminQrPage() {
   if (prevClaimUrl !== selectedClaimUrl) {
     setPrevClaimUrl(selectedClaimUrl);
     setSelectedQrImage(null);
+    setShowQrPreview(false);
   }
 
   useEffect(() => {
@@ -1082,57 +1084,76 @@ export default function AdminQrPage() {
               </Button>
             </div>
             <div className="max-h-[calc(80vh-60px)] overflow-auto p-4">
-              <div className="mb-4 flex flex-col items-center gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) p-4 sm:flex-row sm:items-start">
-                <div className="flex h-44 w-44 shrink-0 items-center justify-center rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) bg-white p-2">
-                  {selectedQrImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={selectedQrImage}
-                      alt={`QR code for ${selectedQr.id ?? "selected QR"}`}
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <span className="text-xs text-(--bearhacks-muted)">Rendering…</span>
-                  )}
-                </div>
-                <div className="flex min-w-0 flex-1 flex-col gap-2 text-sm">
-                  <span
-                    className={`inline-flex w-fit rounded-full px-2 py-1 text-xs font-medium ${
-                      selectedQr.claimed
-                        ? "bg-(--bearhacks-primary) text-(--bearhacks-on-primary)"
-                        : "bg-(--bearhacks-border)/40 text-(--bearhacks-muted)"
-                    }`}
-                  >
-                    {selectedQr.claimed ? "Claimed" : "Unclaimed"}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-[0.1rem] text-(--bearhacks-text-marketing)/70">
-                      Encoded URL
-                    </p>
-                    {selectedClaimUrl ? (
-                      <a
-                        href={selectedClaimUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block break-all font-mono text-xs text-(--bearhacks-primary) underline underline-offset-2"
-                      >
-                        {selectedClaimUrl}
-                      </a>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <span
+                  className={`inline-flex w-fit rounded-full px-2 py-1 text-xs font-medium ${
+                    selectedQr.claimed
+                      ? "bg-(--bearhacks-primary) text-(--bearhacks-on-primary)"
+                      : "bg-(--bearhacks-border)/40 text-(--bearhacks-muted)"
+                  }`}
+                >
+                  {selectedQr.claimed ? "Claimed" : "Unclaimed"}
+                </span>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    const next = !showQrPreview;
+                    log("info", {
+                      event: "admin_qr_view_preview_toggle",
+                      actor,
+                      resourceId: String(selectedQr.id ?? "unknown"),
+                      result: next ? "shown" : "hidden",
+                    });
+                    setShowQrPreview(next);
+                  }}
+                >
+                  {showQrPreview ? "Hide QR preview" : "Show QR preview"}
+                </Button>
+              </div>
+              {showQrPreview ? (
+                <div className="mb-4 flex flex-col items-center gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) p-4 sm:flex-row sm:items-start">
+                  <div className="flex h-44 w-44 shrink-0 items-center justify-center rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) bg-white p-2">
+                    {selectedQrImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={selectedQrImage}
+                        alt={`QR code for ${selectedQr.id ?? "selected QR"}`}
+                        className="h-full w-full object-contain"
+                      />
                     ) : (
-                      <span className="text-xs text-(--bearhacks-muted)">—</span>
+                      <span className="text-xs text-(--bearhacks-muted)">Rendering…</span>
                     )}
                   </div>
-                  {selectedQrImage ? (
-                    <a
-                      href={selectedQrImage}
-                      download={`bearhacks-qr-${selectedQr.id ?? "unknown"}.png`}
-                      className="w-fit text-xs font-semibold text-(--bearhacks-primary) underline underline-offset-2"
-                    >
-                      Download PNG
-                    </a>
-                  ) : null}
+                  <div className="flex min-w-0 flex-1 flex-col gap-2 text-sm">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-[0.1rem] text-(--bearhacks-text-marketing)/70">
+                        Encoded URL
+                      </p>
+                      {selectedClaimUrl ? (
+                        <a
+                          href={selectedClaimUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block break-all font-mono text-xs text-(--bearhacks-primary) underline underline-offset-2"
+                        >
+                          {selectedClaimUrl}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-(--bearhacks-muted)">—</span>
+                      )}
+                    </div>
+                    {selectedQrImage ? (
+                      <a
+                        href={selectedQrImage}
+                        download={`bearhacks-qr-${selectedQr.id ?? "unknown"}.png`}
+                        className="w-fit text-xs font-semibold text-(--bearhacks-primary) underline underline-offset-2"
+                      >
+                        Download PNG
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
+              ) : null}
               <table className="w-full border-collapse text-left text-sm">
                 <thead className="border-b border-(--bearhacks-border) bg-(--bearhacks-surface-alt)">
                   <tr>
