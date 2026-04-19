@@ -2,7 +2,7 @@
 
 import { ApiError } from "@bearhacks/api-client";
 import { createLogger } from "@bearhacks/logger";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -27,6 +27,15 @@ type PublicProfile = {
   qr_id?: string | null;
 };
 
+type FavouriteProfile = {
+  id: string;
+  display_name?: string | null;
+  role?: string | null;
+  bio?: string | null;
+  linkedin_url?: string | null;
+  github_url?: string | null;
+};
+
 function isUuidLike(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -48,8 +57,11 @@ export default function ContactPage() {
   const validProfileId = isUuidLike(profileId);
   const auth = useMeAuth();
   const client = useApiClient();
+  const queryClient = useQueryClient();
   const didTrackScanRef = useRef(false);
-  const isOwnProfile = Boolean(auth?.user?.id && auth.user.id === profileId);
+  const viewerId = auth?.user?.id ?? null;
+  const isOwnProfile = Boolean(viewerId && viewerId === profileId);
+  const favouritesKey = ["me-favourites", viewerId] as const;
 
   const profileQuery = useQuery({
     queryKey: ["public-profile", profileId],
@@ -64,6 +76,17 @@ export default function ContactPage() {
     enabled: Boolean(client && validProfileId),
   });
 
+  const favouritesQuery = useQuery({
+    queryKey: favouritesKey,
+    queryFn: () => client!.fetchJson<FavouriteProfile[]>("/social/favourites"),
+    enabled: Boolean(client && viewerId && !isOwnProfile),
+    staleTime: 30_000,
+  });
+
+  const isFavourited = Boolean(
+    favouritesQuery.data?.some((fav) => fav.id === profileId),
+  );
+
   const favouriteMutation = useMutation({
     mutationFn: () =>
       client!.fetchJson<{ favourited: boolean }>(`/social/favourite/${profileId}`, {
@@ -71,6 +94,17 @@ export default function ContactPage() {
       }),
     onSuccess: (result) => {
       toast.success(result.favourited ? "Added to favourites" : "Removed from favourites");
+      queryClient.setQueryData<FavouriteProfile[] | undefined>(favouritesKey, (prev) => {
+        if (result.favourited) {
+          if (!prev) return profileQuery.data ? [profileQuery.data as FavouriteProfile] : prev;
+          if (prev.some((fav) => fav.id === profileId)) return prev;
+          return profileQuery.data
+            ? [...prev, profileQuery.data as FavouriteProfile]
+            : prev;
+        }
+        return prev ? prev.filter((fav) => fav.id !== profileId) : prev;
+      });
+      void queryClient.invalidateQueries({ queryKey: favouritesKey });
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 401) {
@@ -274,6 +308,7 @@ export default function ContactPage() {
               <Button onClick={() => router.push("/")}>Edit profile</Button>
             ) : (
               <Button
+                variant={isFavourited ? "ghost" : "primary"}
                 onClick={() => {
                   if (!auth?.user) {
                     router.push(
@@ -284,12 +319,17 @@ export default function ContactPage() {
                   favouriteMutation.mutate();
                 }}
                 disabled={favouriteMutation.isPending}
+                aria-pressed={isFavourited}
               >
                 {favouriteMutation.isPending
-                  ? "Saving…"
-                  : auth?.user
-                    ? "Favourite"
-                    : "Sign in to favourite"}
+                  ? isFavourited
+                    ? "Removing…"
+                    : "Saving…"
+                  : !auth?.user
+                    ? "Sign in to favourite"
+                    : isFavourited
+                      ? "♥ Favourited — tap to remove"
+                      : "Favourite"}
               </Button>
             )}
           </div>
