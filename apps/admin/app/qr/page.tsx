@@ -85,6 +85,7 @@ export default function AdminQrPage() {
   const [generateMode, setGenerateMode] = useState<"print" | "generate">("print");
   const [selectedQr, setSelectedQr] = useState<QrRow | null>(null);
   const [selectedQrImage, setSelectedQrImage] = useState<string | null>(null);
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [structuredLogs, setStructuredLogs] = useState<StructuredLogEntry[]>([]);
 
@@ -101,6 +102,10 @@ export default function AdminQrPage() {
 
   const isStaff = isStaffUser(user);
   const actor = user?.id ?? "anonymous";
+
+  useEffect(() => {
+    setSelectedRowIds(new Set());
+  }, [statusFilter, claimedBySearch]);
 
   const selectedClaimUrl = useMemo(() => {
     if (!selectedQr?.id) return null;
@@ -383,6 +388,67 @@ export default function AdminQrPage() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (qrIds: string[]) => {
+      const results = await Promise.allSettled(
+        qrIds.map((qrId) =>
+          client!
+            .fetchJson<{ deleted: boolean; qr_id: string }>(`/qr/${qrId}`, {
+              method: "DELETE",
+            })
+            .then(() => qrId),
+        ),
+      );
+      const succeeded: string[] = [];
+      const failed: { qrId: string; error: unknown }[] = [];
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          succeeded.push(qrIds[index]);
+        } else {
+          failed.push({ qrId: qrIds[index], error: result.reason });
+        }
+      });
+      return { succeeded, failed };
+    },
+    onSuccess: ({ succeeded, failed }) => {
+      log("info", {
+        event: "admin_qr_bulk_delete",
+        actor,
+        resourceId: "/qr/bulk",
+        result: failed.length === 0 ? "success" : "partial",
+        succeededCount: succeeded.length,
+        failedCount: failed.length,
+      });
+      if (succeeded.length > 0) {
+        setSelectedRowIds((prev) => {
+          const next = new Set(prev);
+          succeeded.forEach((id) => next.delete(id));
+          return next;
+        });
+      }
+      if (failed.length === 0) {
+        toast.success(`Deleted ${succeeded.length} QR code(s).`);
+      } else if (succeeded.length === 0) {
+        toast.error(`Failed to delete ${failed.length} QR code(s).`);
+      } else {
+        toast.warning(
+          `Deleted ${succeeded.length}/${succeeded.length + failed.length}. ${failed.length} failed.`,
+        );
+      }
+      void qrQuery.refetch();
+    },
+    onError: (error) => {
+      log("error", {
+        event: "admin_qr_bulk_delete",
+        actor,
+        resourceId: "/qr/bulk",
+        result: "error",
+        error,
+      });
+      toast.error(error instanceof ApiError ? error.message : "Bulk delete failed");
+    },
+  });
+
   return (
     <>
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-10">
@@ -652,21 +718,57 @@ export default function AdminQrPage() {
                     Filter the QR pool by claim state and inspect or reprint individual codes.
                   </CardDescription>
                 </div>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    log("info", {
-                      event: "admin_generated_by_backfill",
-                      actor,
-                      resourceId: "/qr/generated-by/backfill",
-                      result: "submitted",
-                    });
-                    backfillGeneratedByMutation.mutate();
-                  }}
-                  disabled={backfillGeneratedByMutation.isPending}
-                >
-                  {backfillGeneratedByMutation.isPending ? "Backfilling…" : "Backfill legacy generated_by"}
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      const ids = Array.from(selectedRowIds);
+                      if (ids.length === 0) return;
+                      const confirmed = window.confirm(
+                        `Delete ${ids.length} selected QR code(s)? This permanently removes them from the database.`,
+                      );
+                      if (!confirmed) {
+                        log("info", {
+                          event: "admin_qr_bulk_delete",
+                          actor,
+                          resourceId: "/qr/bulk",
+                          result: "cancelled",
+                          count: ids.length,
+                        });
+                        return;
+                      }
+                      log("info", {
+                        event: "admin_qr_bulk_delete",
+                        actor,
+                        resourceId: "/qr/bulk",
+                        result: "submitted",
+                        count: ids.length,
+                      });
+                      bulkDeleteMutation.mutate(ids);
+                    }}
+                    disabled={selectedRowIds.size === 0 || bulkDeleteMutation.isPending}
+                    className="text-red-700"
+                  >
+                    {bulkDeleteMutation.isPending
+                      ? `Deleting ${selectedRowIds.size}…`
+                      : `Delete selected (${selectedRowIds.size})`}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      log("info", {
+                        event: "admin_generated_by_backfill",
+                        actor,
+                        resourceId: "/qr/generated-by/backfill",
+                        result: "submitted",
+                      });
+                      backfillGeneratedByMutation.mutate();
+                    }}
+                    disabled={backfillGeneratedByMutation.isPending}
+                  >
+                    {backfillGeneratedByMutation.isPending ? "Backfilling…" : "Backfill legacy generated_by"}
+                  </Button>
+                </div>
               </div>
               <form
                 className="mt-4 grid gap-3 sm:grid-cols-3"
@@ -725,6 +827,37 @@ export default function AdminQrPage() {
                   <table className="w-full min-w-xl border-collapse text-left text-sm">
                     <thead className="border-b border-(--bearhacks-border) bg-(--bearhacks-surface-alt)">
                       <tr>
+                        <th scope="col" className="w-10 px-3 py-3">
+                          {(() => {
+                            const selectableIds = (qrQuery.data ?? [])
+                              .map((row) => row.id)
+                              .filter((id): id is string => Boolean(id));
+                            const allSelected =
+                              selectableIds.length > 0 &&
+                              selectableIds.every((id) => selectedRowIds.has(id));
+                            const someSelected =
+                              !allSelected && selectableIds.some((id) => selectedRowIds.has(id));
+                            return (
+                              <input
+                                type="checkbox"
+                                aria-label="Select all rows"
+                                className="h-4 w-4 cursor-pointer accent-(--bearhacks-primary)"
+                                checked={allSelected}
+                                ref={(el) => {
+                                  if (el) el.indeterminate = someSelected;
+                                }}
+                                onChange={(event) => {
+                                  if (event.target.checked) {
+                                    setSelectedRowIds(new Set(selectableIds));
+                                  } else {
+                                    setSelectedRowIds(new Set());
+                                  }
+                                }}
+                                disabled={selectableIds.length === 0 || bulkDeleteMutation.isPending}
+                              />
+                            );
+                          })()}
+                        </th>
                         <th scope="col" className="px-3 py-3 font-medium">
                           QR id
                         </th>
@@ -752,8 +885,30 @@ export default function AdminQrPage() {
                           : "legacy/unknown";
                         const deletingThisRow =
                           deleteMutation.isPending && deleteMutation.variables === qrId;
+                        const isSelected = canMutate && selectedRowIds.has(qrId);
                         return (
                           <tr key={qrId} className="border-b border-(--bearhacks-border) last:border-0">
+                            <td className="px-3 py-3">
+                              <input
+                                type="checkbox"
+                                aria-label={`Select QR ${qrId}`}
+                                className="h-4 w-4 cursor-pointer accent-(--bearhacks-primary)"
+                                checked={isSelected}
+                                onChange={(event) => {
+                                  if (!canMutate) return;
+                                  setSelectedRowIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (event.target.checked) {
+                                      next.add(qrId);
+                                    } else {
+                                      next.delete(qrId);
+                                    }
+                                    return next;
+                                  });
+                                }}
+                                disabled={!canMutate || bulkDeleteMutation.isPending}
+                              />
+                            </td>
                             <td className="px-3 py-3 font-mono text-xs text-(--bearhacks-muted)">{qrId}</td>
                             <td className="px-3 py-3 font-mono text-xs text-(--bearhacks-muted)">{generatedBy}</td>
                             <td className="px-3 py-3">
@@ -796,7 +951,12 @@ export default function AdminQrPage() {
                                     });
                                     reprintMutation.mutate(qrId);
                                   }}
-                                  disabled={!canMutate || reprintMutation.isPending || deleteMutation.isPending}
+                                  disabled={
+                                    !canMutate ||
+                                    reprintMutation.isPending ||
+                                    deleteMutation.isPending ||
+                                    bulkDeleteMutation.isPending
+                                  }
                                 >
                                   Reprint
                                 </Button>
@@ -824,7 +984,12 @@ export default function AdminQrPage() {
                                     });
                                     deleteMutation.mutate(qrId);
                                   }}
-                                  disabled={!canMutate || reprintMutation.isPending || deleteMutation.isPending}
+                                  disabled={
+                                    !canMutate ||
+                                    reprintMutation.isPending ||
+                                    deleteMutation.isPending ||
+                                    bulkDeleteMutation.isPending
+                                  }
                                   className="text-red-700"
                                 >
                                   {deletingThisRow ? "Deleting…" : "Delete"}
