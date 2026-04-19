@@ -4,6 +4,7 @@ import { ApiError } from "@bearhacks/api-client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
+import QRCode from "qrcode";
 import { toast } from "sonner";
 import { useSupabase } from "@/app/providers";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,21 @@ type PrinterStatusResponse = {
 
 const log = createStructuredLogger("admin/qr-dashboard");
 
+function resolveMeBaseUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_ME_URL;
+  if (fromEnv && fromEnv.trim()) return fromEnv.replace(/\/$/, "");
+  if (typeof window !== "undefined") {
+    const { origin } = window.location;
+    if (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1")) {
+      return "http://localhost:3000";
+    }
+    if (origin.includes("admin.")) {
+      return origin.replace("admin.", "me.");
+    }
+  }
+  return "https://me.bearhacks.com";
+}
+
 export default function AdminQrPage() {
   const supabase = useSupabase();
   const client = useApiClient();
@@ -68,6 +84,7 @@ export default function AdminQrPage() {
   const [generated, setGenerated] = useState<GeneratedQr[]>([]);
   const [generateMode, setGenerateMode] = useState<"print" | "generate">("print");
   const [selectedQr, setSelectedQr] = useState<QrRow | null>(null);
+  const [selectedQrImage, setSelectedQrImage] = useState<string | null>(null);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [structuredLogs, setStructuredLogs] = useState<StructuredLogEntry[]>([]);
 
@@ -84,6 +101,42 @@ export default function AdminQrPage() {
 
   const isStaff = isStaffUser(user);
   const actor = user?.id ?? "anonymous";
+
+  const selectedClaimUrl = useMemo(() => {
+    if (!selectedQr?.id) return null;
+    return `${resolveMeBaseUrl()}/claim/${selectedQr.id}`;
+  }, [selectedQr]);
+
+  useEffect(() => {
+    let active = true;
+    if (!selectedClaimUrl) {
+      setSelectedQrImage(null);
+      return () => {
+        active = false;
+      };
+    }
+    QRCode.toDataURL(selectedClaimUrl, {
+      width: 512,
+      margin: 2,
+      errorCorrectionLevel: "M",
+    })
+      .then((dataUrl: string) => {
+        if (active) setSelectedQrImage(dataUrl);
+      })
+      .catch((error: unknown) => {
+        log("warn", {
+          event: "admin_qr_render",
+          actor,
+          resourceId: String(selectedQr?.id ?? "unknown"),
+          result: "error",
+          error,
+        });
+        if (active) setSelectedQrImage(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedClaimUrl, actor, selectedQr]);
 
   const listPath = useMemo(() => {
     const params = new URLSearchParams();
@@ -814,6 +867,57 @@ export default function AdminQrPage() {
               </Button>
             </div>
             <div className="max-h-[calc(80vh-60px)] overflow-auto p-4">
+              <div className="mb-4 flex flex-col items-center gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) p-4 sm:flex-row sm:items-start">
+                <div className="flex h-44 w-44 shrink-0 items-center justify-center rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) bg-white p-2">
+                  {selectedQrImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={selectedQrImage}
+                      alt={`QR code for ${selectedQr.id ?? "selected QR"}`}
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-xs text-(--bearhacks-muted)">Rendering…</span>
+                  )}
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-2 text-sm">
+                  <span
+                    className={`inline-flex w-fit rounded-full px-2 py-1 text-xs font-medium ${
+                      selectedQr.claimed
+                        ? "bg-(--bearhacks-primary) text-(--bearhacks-on-primary)"
+                        : "bg-(--bearhacks-border)/40 text-(--bearhacks-muted)"
+                    }`}
+                  >
+                    {selectedQr.claimed ? "Claimed" : "Unclaimed"}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.1rem] text-(--bearhacks-text-marketing)/70">
+                      Encoded URL
+                    </p>
+                    {selectedClaimUrl ? (
+                      <a
+                        href={selectedClaimUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block break-all font-mono text-xs text-(--bearhacks-primary) underline underline-offset-2"
+                      >
+                        {selectedClaimUrl}
+                      </a>
+                    ) : (
+                      <span className="text-xs text-(--bearhacks-muted)">—</span>
+                    )}
+                  </div>
+                  {selectedQrImage ? (
+                    <a
+                      href={selectedQrImage}
+                      download={`bearhacks-qr-${selectedQr.id ?? "unknown"}.png`}
+                      className="w-fit text-xs font-semibold text-(--bearhacks-primary) underline underline-offset-2"
+                    >
+                      Download PNG
+                    </a>
+                  ) : null}
+                </div>
+              </div>
               <table className="w-full border-collapse text-left text-sm">
                 <thead className="border-b border-(--bearhacks-border) bg-(--bearhacks-surface-alt)">
                   <tr>
