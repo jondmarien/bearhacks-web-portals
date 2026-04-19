@@ -28,6 +28,15 @@ type MyProfile = {
   role?: string | null;
 };
 
+type FavouriteProfile = {
+  id: string;
+  display_name?: string | null;
+  role?: string | null;
+  bio?: string | null;
+  linkedin_url?: string | null;
+  github_url?: string | null;
+};
+
 type ProfileDraft = {
   display_name: string;
   bio: string;
@@ -65,6 +74,12 @@ export default function HomePage() {
       router.replace(next);
     }
   }, [auth?.isAuthReady, user, router]);
+
+  const favouritesQuery = useQuery({
+    queryKey: ["me-favourites", userId],
+    queryFn: () => client!.fetchJson<FavouriteProfile[]>("/social/favourites"),
+    enabled: Boolean(client && userId),
+  });
 
   const profileQuery = useQuery({
     queryKey: ["me-profile", userId],
@@ -322,6 +337,55 @@ export default function HomePage() {
           </Link>
         </Card>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            Favourited <span className="bg-(--bearhacks-cream) px-1 rounded-sm">contacts</span>
+          </CardTitle>
+          <CardDescription>
+            Profiles you&apos;ve hearted. Tap one to revisit it.
+          </CardDescription>
+        </CardHeader>
+        {favouritesQuery.isLoading ? (
+          <p className="text-sm text-(--bearhacks-muted)">Loading favourites…</p>
+        ) : favouritesQuery.isError ? (
+          <p className="text-sm text-red-700">
+            {favouritesQuery.error instanceof ApiError
+              ? favouritesQuery.error.message
+              : "Failed to load favourites"}
+          </p>
+        ) : (favouritesQuery.data?.length ?? 0) === 0 ? (
+          <p className="text-sm text-(--bearhacks-muted)">
+            No favourites yet — scan or open a profile and tap the heart to save it here.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {favouritesQuery.data?.map((fav) => (
+              <li key={fav.id}>
+                <Link
+                  href={`/contacts/${fav.id}`}
+                  className="flex min-h-(--bearhacks-touch-min) items-center justify-between gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-3 no-underline hover:bg-(--bearhacks-accent-soft)"
+                >
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm font-semibold text-(--bearhacks-primary)">
+                      {fav.display_name?.trim() || "Unnamed attendee"}
+                    </span>
+                    {fav.role?.trim() ? (
+                      <span className="truncate text-xs text-(--bearhacks-text-marketing)/70">
+                        {fav.role}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span aria-hidden="true" className="text-(--bearhacks-primary)">
+                    →
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </main>
   );
 }
