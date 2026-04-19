@@ -15,6 +15,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { InputField, TextareaField } from "@/components/ui/field";
 import { QrPreview } from "@/components/ui/qr-preview";
 import { useApiClient } from "@/lib/use-api-client";
+import { useDocumentTitle } from "@/lib/use-document-title";
 
 const log = createLogger("me/home");
 
@@ -63,6 +64,7 @@ export default function HomePage() {
   const router = useRouter();
   const client = useApiClient();
   const [profileDraft, setProfileDraft] = useState<ProfileDraft | null>(null);
+  useDocumentTitle(auth?.user ? "Welcome back" : "Sign in");
 
   const user = auth?.user ?? null;
   const userId = user?.id ?? null;

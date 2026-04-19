@@ -14,7 +14,10 @@ export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
   ),
-  title: "BearHacks 2026 Networking",
+  title: {
+    default: "BearHacks 2026 Networking",
+    template: "%s · BearHacks 2026",
+  },
   description: "Create your networking profile and claim your event QR.",
   icons: {
     icon: "/brand/icon_black.svg",

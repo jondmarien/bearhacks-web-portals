@@ -13,6 +13,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { InputField, TextareaField } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { useApiClient } from "@/lib/use-api-client";
+import { useDocumentTitle } from "@/lib/use-document-title";
 
 type ClaimStatus = {
   id: string;
@@ -44,6 +45,7 @@ export default function ClaimQrPage() {
   const params = useParams();
   const qrId = typeof params.qrId === "string" ? params.qrId : "";
   const auth = useMeAuth();
+  useDocumentTitle("Claim QR");
   const client = useApiClient();
   const [draft, setDraft] = useState<ProfileDraft | null>(null);
 

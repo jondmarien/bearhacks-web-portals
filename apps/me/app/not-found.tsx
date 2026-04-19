@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Clouds } from "@/components/decorative/clouds";
+
+export const metadata: Metadata = {
+  title: "Page not found",
+};
 
 export default function NotFound() {
   return (

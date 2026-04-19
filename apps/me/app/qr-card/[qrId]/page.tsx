@@ -11,6 +11,7 @@ import { useMeAuth } from "@/app/providers";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { useApiClient } from "@/lib/use-api-client";
+import { useDocumentTitle } from "@/lib/use-document-title";
 
 const log = createLogger("me/qr-card");
 
@@ -27,6 +28,7 @@ export default function QrCardPage() {
   const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
   const qrId = typeof params?.qrId === "string" ? params.qrId : "";
   const viewerId = auth?.user?.id ?? null;
+  useDocumentTitle("My QR card");
 
   const claimUrl = useMemo(() => {
     if (!qrId || typeof window === "undefined") return null;

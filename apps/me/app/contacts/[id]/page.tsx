@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { QrPreview } from "@/components/ui/qr-preview";
 import { queuePendingScan } from "@/lib/pending-scans";
 import { useApiClient } from "@/lib/use-api-client";
+import { useDocumentTitle } from "@/lib/use-document-title";
 
 const log = createLogger("me/contact-page");
 
@@ -75,6 +76,12 @@ export default function ContactPage() {
     },
     enabled: Boolean(client && validProfileId),
   });
+
+  useDocumentTitle(
+    isOwnProfile
+      ? "My profile"
+      : profileQuery.data?.display_name?.trim() || "Attendee profile",
+  );
 
   const favouritesQuery = useQuery({
     queryKey: favouritesKey,
