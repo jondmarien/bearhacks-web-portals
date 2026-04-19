@@ -63,7 +63,7 @@ export default function AdminSuperAdminsPage() {
   const supabase = useSupabase();
   const client = useApiClient();
   const queryClient = useQueryClient();
-  useDocumentTitle("Super-admins");
+  useDocumentTitle("Super Admins");
   const confirm = useConfirm();
   const [user, setUser] = useState<User | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
@@ -209,7 +209,7 @@ export default function AdminSuperAdminsPage() {
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-10">
       <PageHeader
-        title="Super-admins"
+        title="Super Admins"
         tone="marketing"
         subtitle="Grant or revoke super-admin access by Discord email."
         backHref="/"
@@ -220,7 +220,7 @@ export default function AdminSuperAdminsPage() {
         <Card>
           <CardTitle>Staff access required</CardTitle>
           <CardDescription className="mt-1">
-            Sign in with a staff account to manage super-admins.
+            Sign in with a staff account to manage Super Admins.
           </CardDescription>
         </Card>
       )}
@@ -228,10 +228,10 @@ export default function AdminSuperAdminsPage() {
       {staff && !isSuper && (
         <Card className="border-amber-200 bg-amber-50">
           <CardTitle className="text-amber-900">
-            Super-admin access required
+            Super Admin access required
           </CardTitle>
           <CardDescription className="mt-1 text-amber-900">
-            This page is limited to super-admins. Ask a super-admin to grant
+            This page is limited to Super Admins. Ask a Super Admin to grant
             your account access, then sign out and back in.
           </CardDescription>
         </Card>
@@ -240,10 +240,10 @@ export default function AdminSuperAdminsPage() {
       {isSuper && (
         <>
           <Card>
-            <CardTitle>Grant super-admin</CardTitle>
+            <CardTitle>Grant Super Admin</CardTitle>
             <CardDescription className="mt-1">
               They need to have signed in with Discord at least once before you
-              can grant access.
+              can grant Super Admin access.
             </CardDescription>
             <form
               className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
@@ -275,7 +275,7 @@ export default function AdminSuperAdminsPage() {
                 variant="primary"
                 disabled={grantMutation.isPending}
               >
-                {grantMutation.isPending ? "Granting…" : "Grant super-admin"}
+                {grantMutation.isPending ? "Granting…" : "Grant Super Admin"}
               </Button>
             </form>
           </Card>
@@ -286,7 +286,7 @@ export default function AdminSuperAdminsPage() {
                 <CardTitle className="text-base">
                   Current{" "}
                   <span className="bg-(--bearhacks-cream) px-1 rounded-sm">
-                    super-admins
+                    Super Admins
                   </span>
                 </CardTitle>
                 <CardDescription className="mt-1">
@@ -412,7 +412,7 @@ export default function AdminSuperAdminsPage() {
                               }
                               title={
                                 isSelf
-                                  ? "You can't revoke your own super-admin role."
+                                  ? "You can't revoke your own Super Admin role."
                                   : missingUserId
                                     ? "No matching auth user — clean up the allowlist row directly in Supabase."
                                     : undefined
@@ -421,8 +421,8 @@ export default function AdminSuperAdminsPage() {
                                 if (isSelf || missingUserId) return;
                                 void (async () => {
                                   const ok = await confirm({
-                                    title: "Revoke super-admin access?",
-                                    description: `${row.email} will lose super-admin access immediately.`,
+                                    title: "Revoke Super Admin access?",
+                                    description: `${row.email} will lose Super Admin access immediately.`,
                                     confirmLabel: "Revoke",
                                     tone: "danger",
                                   });
@@ -445,7 +445,7 @@ export default function AdminSuperAdminsPage() {
               </div>
             ) : (
               <p className="px-4 py-6 text-sm text-(--bearhacks-muted)">
-                No super-admins yet.
+                No Super Admins yet.
               </p>
             )}
           </Card>
