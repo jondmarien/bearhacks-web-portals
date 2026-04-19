@@ -121,7 +121,7 @@ export default function AdminProfilesPage() {
         <Card className="border-amber-200 bg-amber-50">
           <CardTitle className="text-amber-900">Super-admin access required</CardTitle>
           <CardDescription className="mt-1 text-amber-900">
-            This page is limited to super-admins. Ask a super-admin to grant your
+            This page is limited to Super Admins. Ask a Super Admin to grant your
             account access, then sign out and back in.
           </CardDescription>
         </Card>
