@@ -20,6 +20,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { InputField } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { useApiClient } from "@/lib/use-api-client";
+import { useDocumentTitle } from "@/lib/use-document-title";
 import { isStaffUser, isSuperAdminUser } from "@/lib/supabase-role";
 import { createStructuredLogger } from "@/lib/structured-logging";
 
@@ -62,6 +63,7 @@ export default function AdminSuperAdminsPage() {
   const supabase = useSupabase();
   const client = useApiClient();
   const queryClient = useQueryClient();
+  useDocumentTitle("Super-admins");
   const confirm = useConfirm();
   const [user, setUser] = useState<User | null>(null);
   const [emailDraft, setEmailDraft] = useState("");

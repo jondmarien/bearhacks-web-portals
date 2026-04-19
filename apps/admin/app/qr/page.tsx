@@ -18,6 +18,7 @@ import {
   type StructuredLogEntry,
 } from "@/lib/structured-logging";
 import { useApiClient } from "@/lib/use-api-client";
+import { useDocumentTitle } from "@/lib/use-document-title";
 import { resolveMeBaseUrl } from "@/lib/me-base-url";
 import { isStaffUser } from "@/lib/supabase-role";
 
@@ -63,6 +64,7 @@ export default function AdminQrPage() {
   const supabase = useSupabase();
   const client = useApiClient();
   const confirm = useConfirm();
+  useDocumentTitle("QR fulfillment");
   const [user, setUser] = useState<User | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "claimed" | "unclaimed">("all");
   const [claimedBySearch, setClaimedBySearch] = useState("");

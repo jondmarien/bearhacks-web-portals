@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { createStructuredLogger } from "@/lib/structured-logging";
+import { useDocumentTitle } from "@/lib/use-document-title";
 
 const log = createStructuredLogger("admin/home-dashboard");
 
@@ -17,6 +18,7 @@ export default function AdminHome() {
   const supabase = useSupabase();
   const [user, setUser] = useState<User | null>(null);
   const actor = user?.id ?? "anonymous";
+  useDocumentTitle("Dashboard");
 
   useEffect(() => {
     if (!supabase) return;

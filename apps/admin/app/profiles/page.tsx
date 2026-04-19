@@ -19,6 +19,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { InputField } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { useApiClient } from "@/lib/use-api-client";
+import { useDocumentTitle } from "@/lib/use-document-title";
 import { resolveMeBaseUrl } from "@/lib/me-base-url";
 import { isStaffUser, isSuperAdminUser } from "@/lib/supabase-role";
 
@@ -34,6 +35,7 @@ export default function AdminProfilesPage() {
   const supabase = useSupabase();
   const client = useApiClient();
   const confirm = useConfirm();
+  useDocumentTitle("Profiles");
   const [user, setUser] = useState<User | null>(null);
   const [appliedSearch, setAppliedSearch] = useState("");
   const [draftSearch, setDraftSearch] = useState("");

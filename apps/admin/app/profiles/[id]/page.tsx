@@ -18,6 +18,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { InputField, TextareaField } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { useApiClient } from "@/lib/use-api-client";
+import { useDocumentTitle } from "@/lib/use-document-title";
 import { isSuperAdminUser } from "@/lib/supabase-role";
 
 type ProfileDetail = {
@@ -152,6 +153,7 @@ export default function AdminProfileEditPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const supabase = useSupabase();
+  useDocumentTitle("Edit profile");
   const client = useApiClient();
   const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
