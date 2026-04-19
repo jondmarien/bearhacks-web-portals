@@ -947,7 +947,7 @@ export default function AdminQrPage() {
                             <td className="px-3 py-3 font-mono text-xs text-(--bearhacks-muted)">{generatedBy}</td>
                             <td className="px-3 py-3">
                               <span
-                                className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                                className={`inline-flex w-24 justify-center rounded-full px-2 py-1 text-xs font-medium ${
                                   claimed
                                     ? "bg-(--bearhacks-primary) text-(--bearhacks-on-primary)"
                                     : "bg-(--bearhacks-border)/40 text-(--bearhacks-muted)"
@@ -1122,7 +1122,7 @@ export default function AdminQrPage() {
                               {qrId}
                             </p>
                             <span
-                              className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              className={`inline-flex w-24 justify-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
                                 claimed
                                   ? "bg-(--bearhacks-primary) text-(--bearhacks-on-primary)"
                                   : "bg-(--bearhacks-border)/40 text-(--bearhacks-muted)"
@@ -1259,7 +1259,7 @@ export default function AdminQrPage() {
             <div className="max-h-[calc(92vh-56px)] overflow-auto p-3 sm:max-h-[calc(85vh-60px)] sm:p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-4">
                 <span
-                  className={`inline-flex w-fit rounded-full px-2 py-1 text-xs font-medium ${
+                  className={`inline-flex w-24 justify-center rounded-full px-2 py-1 text-xs font-medium ${
                     selectedQr.claimed
                       ? "bg-(--bearhacks-primary) text-(--bearhacks-on-primary)"
                       : "bg-(--bearhacks-border)/40 text-(--bearhacks-muted)"
