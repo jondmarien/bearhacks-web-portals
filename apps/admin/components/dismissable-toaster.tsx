@@ -14,7 +14,9 @@ import { Toaster, type ToasterProps } from "sonner";
  *     toast's built-in close button via `.click()` rather than reaching
  *     into Sonner's internal store.
  */
-export function DismissableToaster(props: Omit<ToasterProps, "closeButton">) {
+export function DismissableToaster(
+  props: Omit<ToasterProps, "closeButton" | "toastOptions">,
+) {
   useEffect(() => {
     function handler(event: MouseEvent) {
       const target = event.target as HTMLElement | null;
