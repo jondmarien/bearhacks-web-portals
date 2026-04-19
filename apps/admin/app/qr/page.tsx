@@ -335,6 +335,7 @@ export default function AdminQrPage() {
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-10">
         <PageHeader
           title="QR fulfillment"
+          tone="marketing"
           subtitle="Generate batches, search by claim status, reprint labels, and inspect details."
           backHref="/"
           showBack
@@ -853,7 +854,9 @@ export default function AdminQrPage() {
           <Card as="div" className="max-h-[85vh] w-full max-w-6xl overflow-hidden p-0">
             <div className="flex items-center justify-between gap-3 border-b border-(--bearhacks-border) px-4 py-3">
               <div>
-                <CardTitle className="text-base">Admin logs</CardTitle>
+                <CardTitle className="text-base text-(--bearhacks-text-marketing)">
+                  Admin <span className="bg-(--bearhacks-cream) px-1 rounded-sm">logs</span>
+                </CardTitle>
                 <CardDescription className="mt-0.5">
                   Structured view of in-app admin dashboard events.
                 </CardDescription>

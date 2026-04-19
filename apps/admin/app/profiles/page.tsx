@@ -74,6 +74,7 @@ export default function AdminProfilesPage() {
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-10">
       <PageHeader
         title="Profiles"
+        tone="marketing"
         subtitle="Search and edit attendee profiles."
         backHref="/"
         showBack
@@ -166,7 +167,7 @@ export default function AdminProfilesPage() {
                         <td className="px-3 py-3">
                           <Link
                             href={`/profiles/${row.id}`}
-                            className="inline-flex min-h-(--bearhacks-touch-min) items-center justify-center rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) px-3 text-sm font-semibold text-(--bearhacks-primary) hover:bg-(--bearhacks-surface-alt)"
+                            className="inline-flex min-h-(--bearhacks-touch-min) items-center justify-center rounded-(--bearhacks-radius-pill) border border-black/50 bg-white px-6 py-3 text-sm font-semibold text-black no-underline shadow-[0_1px_4px_0_rgba(0,0,0,0.25)] hover:bg-(--bearhacks-cream)"
                           >
                             Edit
                           </Link>

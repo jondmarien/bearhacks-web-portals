@@ -340,3 +340,155 @@ a new event volunteer.
 - `AdminGateBanner` auth logic (Discord OAuth stays — admin still uses Discord).
 - Any backend changes (this round is frontend-only; backend was already done in the `me` plan).
 - A signed-out hero with `logo_long.svg` (asset is shipped but not yet rendered — reserved for a future round).
+
+---
+
+## 12. Visual alignment with bearhacks.com (2026)
+
+Date: 2026-04-18 (companion to [`apps/me` §12](../../me/docs/PRODUCTION_POLISH.md#12-visual-alignment-with-bearhackscom-2026)). Source: `bearhacks-frontend/2026`.
+
+Per-app asset copy, mirrored `pill` variant + `tone="marketing"` PageHeader, lite hero on signed-out, light pass on signed-in pages, cream footer with `bear_footer`. **No functional changes.** Out of scope: clouds on signed-in pages, wooden frame, floating pill nav.
+
+### 12.1 Shared design tokens (already shipped in the me pass)
+
+[`packages/config/src/tokens.css`](../../../packages/config/src/tokens.css) already exposes the marketing tokens consumed here:
+
+- `--bearhacks-cream: #FFF4CF`
+- `--bearhacks-sky-from: #CEE5FF`
+- `--bearhacks-text-marketing: #512B10`
+- `--bearhacks-radius-pill: 3.125rem`
+
+Admin already consumes these — no token edits in this round.
+
+### 12.2 Per-app asset copy
+
+Mirrored 9 brand files from [`apps/me/public/brand/`](../../me/public/brand/) into [`apps/admin/public/brand/`](../public/brand/):
+
+`wordmark_hero.webp`, `bear_cloud_left.webp`, `bear_cloud_right.webp`, `bear_redirect.webp`, `bear_walking.webp`, `bee.webp`, `bear_footer.webp`, `wooden_frame.svg`, `icon_color.svg`. (Copied rather than symlinked so Vercel `public/` resolution stays stable.)
+
+### 12.3 Primitive parity
+
+- **`pill` variant** added to [`components/ui/button.tsx`](../components/ui/button.tsx) — same shape as me: `rounded-[var(--bearhacks-radius-pill)] px-6 py-3` white pill with thin black/50 border, soft shadow, cream hover. Existing `primary | secondary | ghost` variants now own their own `rounded-` and `px-` classes (pulled out of the base) so the new pill rounding doesn't conflict.
+- **`tone="marketing"`** added to [`components/ui/page-header.tsx`](../components/ui/page-header.tsx) — opt-in switch that renders the title as `font-extrabold uppercase tracking-[0.15rem] text-(--bearhacks-text-marketing)` and the subtitle in muted brown. Default `tone` unchanged.
+
+### 12.4 Page-by-page deltas
+
+- **Signed-out `/`** ([`app/page.tsx`](../app/page.tsx) `!user` branch) — replaces the dashboard cards with a centered cream lite hero: cream page surface, watercolor `wordmark_hero.webp` (smaller than me's hero — `max-w-xs sm:max-w-sm`), brown uppercase "Staff console · BearHacks 2026" subline, helper copy pointing at the existing `AdminGateBanner` Discord pill above. No clouds, no cloud-bears — keeps it clearly "staff console" not "marketing".
+- **Signed-in `/`** (same file) — `PageHeader tone="marketing"` ("ADMIN" in brown uppercase), "Sign out" action becomes `variant="pill"`, card titles get the cream highlight on the keyword (`QR fulfillment`, `Profile directory`), and the "Open …" CTAs swap rectangular `rounded-md` for `rounded-pill px-6 py-3` so they read as marketing pills.
+- **`/qr`** ([`app/qr/page.tsx`](../app/qr/page.tsx)) — `PageHeader tone="marketing"`. Logs modal heading picks up brown text + cream highlight on the "logs" keyword. Workflow buttons (Generate, Print, Reprint, Delete, View) stay `variant="primary"`/`"ghost"` for affordance density.
+- **`/profiles`** ([`app/profiles/page.tsx`](../app/profiles/page.tsx)) — `PageHeader tone="marketing"`. Per-row "Edit" link becomes a pill.
+- **`/profiles/[id]`** ([`app/profiles/[id]/page.tsx`](../app/profiles/[id]/page.tsx)) — `PageHeader tone="marketing"`. Display name preview rendered in brown extrabold above the form. "Save changes" stays `variant="primary"` (dense form, not a pill surface).
+- **Gate banner** ([`components/admin-gate-banner.tsx`](../components/admin-gate-banner.tsx)) — Discord sign-in and Sign-out buttons swap to `variant="pill"`. Traffic-light role colors (green/amber) and the missing-env amber stripe stay — those are functional signals.
+- **`/some-bogus-url`** ([`app/not-found.tsx`](../app/not-found.tsx)) — cream page background, `bear_redirect.webp` instead of the icon, brown uppercase headline, pill "Go home" CTA. Intentionally **no** `<Clouds />` — keeps a subtle distinction from the me 404.
+- **Site footer** ([`components/site-footer.tsx`](../components/site-footer.tsx)) — cream background, `bear_footer.webp` inline next to the copy line, brown uppercase tracking text, brown link.
+
+### 12.5 What stayed unchanged (intentional)
+
+- Site header ([`components/site-header.tsx`](../components/site-header.tsx)) — dark-blue chrome with the white icon and "Admin" label is already on-brand.
+- Error boundary ([`app/error.tsx`](../app/error.tsx)) — same call as me's pass.
+- Workflow form inputs (`InputField`, `TextareaField`) — no decorative styling, contrast-first.
+- All API surfaces, React Query keys, structured logging, role gates (`isStaffUser` / `isSuperAdminUser`), and Supabase auth.
+
+### 12.6 Verification
+
+| Check                                           | Result   |
+| ----------------------------------------------- | -------- |
+| `bun lint` (`apps/me` + `apps/admin`)           | ✅ Clean |
+| `bun typecheck` (`apps/me` + `apps/admin`)      | ✅ Clean |
+| Cream `#FFF4CF` on brown `#512B10` contrast     | ✅ ~12:1, well above AA |
+
+Manual smoke (against `http://127.0.0.1:8000`):
+
+1. Signed-out `/` → cream page with watercolor wordmark + helper copy; pill Discord button in the gate banner above. No QR/Profiles cards visible.
+2. Sign in as super-admin → green gate banner stripe + brown uppercase "ADMIN" PageHeader + cream-highlight cards + pill "Open …" CTAs.
+3. Sign in as non-staff Discord account → amber gate banner with the "ask a super-admin" copy; page below renders the same dashboard (visual gate, not a route gate — by design).
+4. `/qr` → marketing-tone PageHeader; QR generation flow unchanged; logs modal renders with brown heading + cream highlight.
+5. `/profiles` → marketing-tone PageHeader; search works; row "Edit" links are pills.
+6. `/profiles/{id}` (as super-admin) → marketing-tone PageHeader; brown display name above the form; save still PATCHes and toasts.
+7. `/some-bogus-url` → cream + bear_redirect + brown headline + pill CTA. No clouds.
+8. Footer: cream stripe + bear_footer image + brown uppercase copy.
+9. Side-by-side with `apps/me` open in another tab — both feel like the same product family.
+
+---
+
+## 13. Super-admin manager
+
+Date: 2026-04-18. Lets an existing super-admin grant or revoke `super_admin` access to/from a Supabase user identified by their Discord email, directly from the admin portal. One UI action mutates **both** sides of the gate so they stay in sync:
+
+1. Supabase Auth `app_metadata.role` (the JWT check used by `require_super_admin`).
+2. `portal_super_admin_emails` Postgres allowlist (the portal email gate).
+
+### 13.1 Backend
+
+New router [`bearhacks-backend/routers/admin_super_admins.py`](../../../../bearhacks-backend/routers/admin_super_admins.py), mounted at `/admin/super-admins` in [`main.py`](../../../../bearhacks-backend/main.py). All routes guarded by `require_accepted_super_admin` (portal-access gate + super-admin role).
+
+| Route | Behavior |
+| ----- | -------- |
+| `GET  /admin/super-admins` | Returns `list[SuperAdminRow]` from `auth.users` filtered to `app_metadata.role == "super_admin"`, cross-referenced with `portal_super_admin_emails`. Allowlist rows with no matching auth user surface as drift entries (`user_id: ""`, `on_allowlist: true`, `has_jwt_role: false`) so the UI can flag them. |
+| `POST /admin/super-admins` `{ email }` | Looks up the user by email via `supabase.auth.admin.list_users`. **404** if no Supabase user exists ("they need to sign in with Discord at least once first"). Otherwise calls `update_user_by_id` with `app_metadata = { ...existing, role: "super_admin" }` (preserves other metadata) and upserts into `portal_super_admin_emails`. |
+| `DELETE /admin/super-admins/{user_id}` | **403** if `user_id == caller.sub` (self-revoke guard — prevents accidental lockout). **400** if this would leave zero super-admins. Otherwise clears `app_metadata.role` (per the open question in the plan — clear, not demote) and deletes the matching email from `portal_super_admin_emails`. Returns 204. |
+
+Service-role: reuses the existing `core.db.supabase` client, which is already created with the service-role key (it's the same client that writes to RLS-locked `portal_super_admin_emails` in the existing portal gate). No new env or helper needed.
+
+Audit: every grant/revoke writes a structured `event=admin_super_admin_{grant,revoke}` log line through the existing `logging` module with `actor`, `resource_id`, and `result` fields.
+
+### 13.2 Frontend
+
+New page [`apps/admin/app/super-admins/page.tsx`](../app/super-admins/page.tsx) mirrors the conventions from [`profiles/page.tsx`](../app/profiles/page.tsx):
+
+- Same `useSupabase` + session effect, `isStaffUser` / `isSuperAdminUser` gates.
+- Non-staff and non-super-admin states render the existing amber "access required" `Card`.
+- `PageHeader title="Super-admins" tone="marketing" backHref="/" showBack`.
+- `useApiClient` + React Query: `useQuery(["admin-super-admins"])` + `useMutation` for grant/revoke; both invalidate `["admin-super-admins"]` and toast on success/failure with friendly messages parsed from FastAPI `detail.message`.
+- `createStructuredLogger("admin/super-admins")` mirrors the `event` / `actor` / `resourceId` / `result` shape used in [`app/qr/page.tsx`](../app/qr/page.tsx).
+
+Layout — two stacked `Card`s, no new primitives:
+
+1. **Grant card** — `<InputField type="email">` + `<Button variant="primary">Grant super-admin</Button>`. Helper copy: "They need to have signed in with Discord at least once before you can grant access."
+2. **Current super-admins card** — table with columns `Email | Granted | Status | Actions`. `Status` shows an amber **Drift** chip when `on_allowlist !== has_jwt_role`. `Actions`: pill "Revoke" — disabled with `title=` for the caller's own row and for orphaned allowlist rows (no matching auth user). Revoke prompts `window.confirm`.
+
+### 13.3 Dashboard wire-up
+
+[`apps/admin/app/page.tsx`](../app/page.tsx) gains a third `Card` linking to `/super-admins`. Grid bumped from `sm:grid-cols-2` to `sm:grid-cols-2 lg:grid-cols-3`. Card uses the same cream-highlight title pattern (`Super- <span class="bg-cream">admins</span>`) and pill CTA as the existing two cards. Card is rendered for any signed-in user; the page itself enforces super-admin via `isSuperAdminUser`, and the API enforces it via `require_accepted_super_admin`.
+
+### 13.4 File map
+
+```
+bearhacks-backend/
+  routers/admin_super_admins.py                 (new — GET/POST/DELETE)
+  main.py                                       (modified — mount /admin/super-admins)
+  tests/test_admin_super_admins_router.py       (new — list/grant/revoke smoke + guards)
+  tests/conftest.py                             (new — sys.path shim so `from core...` resolves regardless of cwd)
+
+bearhacks-web/apps/admin/
+  app/super-admins/page.tsx                     (new)
+  app/page.tsx                                  (modified — third Card; grid bumped to 3-up at lg)
+  docs/PRODUCTION_POLISH.md                     (modified — this section)
+```
+
+### 13.5 Verification
+
+| Check | Result |
+| ----- | ------ |
+| `uv run pytest tests/test_admin_super_admins_router.py` | ✅ All passed (list + drift, grant 404, grant success, self-revoke 403, last-admin 400, revoke clears metadata + allowlist) |
+| `bun lint` (`apps/me` + `apps/admin`) | ✅ Clean |
+| `bun typecheck` (`apps/me` + `apps/admin`) | ✅ Clean |
+
+Manual smoke (local FastAPI + `bun dev:admin`):
+
+1. Sign in as super-admin → dashboard now shows three cards.
+2. Open `/super-admins` → see yourself listed; **Revoke** is disabled on your row with a tooltip explaining why.
+3. Grant a known Discord-signed-in test email → row appears with `Granted = now`, status `In sync`.
+4. Sign in as that user in another browser → JWT now has `app_metadata.role: super_admin`; they can also access `/super-admins`.
+5. Revoke them from the original session → after their next session refresh they drop back to non-super.
+6. Try granting `noone@example.com` → friendly 404 toast ("No account found…").
+7. Sign in as a regular `admin` → page shows the amber "Super-admin access required" card; direct API call returns 403.
+8. Sanity-check `portal_super_admin_emails` in Supabase SQL editor matches each grant/revoke.
+
+### 13.6 Out of scope (intentional)
+
+- Granting `admin` (vs `super_admin`) — only the requested role for v1.
+- Email invites for users who haven't signed in yet (would require Supabase `inviteUserByEmail` + a pending state).
+- Audit log viewer in the UI (audit rows write server-side; surfacing them is a follow-up).
+- Bulk import / CSV.
+

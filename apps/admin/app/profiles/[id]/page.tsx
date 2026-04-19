@@ -186,7 +186,7 @@ export default function AdminProfileEditPage() {
   if (!isSuper) {
     return (
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-6 py-10">
-        <PageHeader title="Edit profile" backHref="/profiles" showBack />
+        <PageHeader title="Edit profile" tone="marketing" backHref="/profiles" showBack />
         <Card className="border-amber-200 bg-amber-50">
           <CardTitle className="text-amber-900">Super-admin access required</CardTitle>
           <CardDescription className="mt-1 text-amber-900">
@@ -207,10 +207,17 @@ export default function AdminProfileEditPage() {
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-6 py-10">
       <PageHeader
         title="Edit profile"
+        tone="marketing"
         subtitle="Update an attendee's display name, bio, links, and role."
         backHref="/profiles"
         showBack
       />
+
+      {profileQuery.data?.display_name ? (
+        <p className="text-2xl font-extrabold text-(--bearhacks-text-marketing) sm:text-3xl">
+          {profileQuery.data.display_name}
+        </p>
+      ) : null}
 
       {profileQuery.isLoading && <p className="text-sm text-(--bearhacks-muted)">Loading…</p>}
       {profileQuery.error && (

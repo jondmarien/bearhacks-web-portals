@@ -4,12 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
+type Tone = "default" | "marketing";
+
 type Props = {
   title: string;
   subtitle?: ReactNode;
   backHref?: string;
   showBack?: boolean;
   actions?: ReactNode;
+  tone?: Tone;
 };
 
 export function PageHeader({
@@ -18,7 +21,16 @@ export function PageHeader({
   backHref,
   showBack = false,
   actions,
+  tone = "default",
 }: Props) {
+  const titleClass =
+    tone === "marketing"
+      ? "text-2xl font-extrabold uppercase tracking-[0.15rem] text-(--bearhacks-text-marketing) sm:text-3xl"
+      : "text-3xl font-bold tracking-tight text-(--bearhacks-primary)";
+  const subtitleClass =
+    tone === "marketing"
+      ? "mt-1 text-sm text-(--bearhacks-text-marketing)/70"
+      : "mt-1 text-sm text-(--bearhacks-muted)";
   const router = useRouter();
   return (
     <header className="flex flex-col gap-3">
@@ -48,12 +60,8 @@ export function PageHeader({
       ) : null}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-(--bearhacks-primary)">
-            {title}
-          </h1>
-          {subtitle ? (
-            <p className="mt-1 text-sm text-(--bearhacks-muted)">{subtitle}</p>
-          ) : null}
+          <h1 className={titleClass}>{title}</h1>
+          {subtitle ? <p className={subtitleClass}>{subtitle}</p> : null}
         </div>
         {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
       </div>

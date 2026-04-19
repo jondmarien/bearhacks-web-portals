@@ -406,3 +406,134 @@ bearhacks-web/
 - Wallet (Google/Apple) flows â€” descoped by Aleks.
 - Hardware QR scanner UX â€” out of browser scope.
 - Visual redesign of the email-claim modal (kept mounted but never triggered).
+
+
+---
+
+## 12. Visual alignment with bearhacks.com (2026)
+
+Date: 2026-04-18 (follow-up pass on top of §1-§11). Source of truth for the
+design language: `bearhacks-frontend/2026` (the public marketing site).
+
+**Goal.** Make `apps/me` feel like the same product family as bearhacks.com:
+same watercolor brand, same Hanken Grotesk + brown-type voice, same
+cream/sky/orange surfaces, same pill CTAs.
+
+**Non-goals.** No functional changes. Auth, API calls, React Query, role gates,
+structured logging, profile schema, and claim / QR-card behavior all stay
+bit-for-bit identical. Forms remain dense and readable (no playful styling on
+inputs). `apps/admin` is out of scope for this round.
+
+### 12.1 Design tokens added (shared)
+
+[`packages/config/src/tokens.css`](../../../packages/config/src/tokens.css) —
+purely additive, both portals consume:
+
+```css
+--bearhacks-cream: #fff4cf;            /* "dinner" surface on the public site */
+--bearhacks-sky-from: #cee5ff;         /* hero gradient top */
+--bearhacks-text-marketing: #512b10;   /* brown body type for marketing surfaces */
+--bearhacks-radius-pill: 3.125rem;     /* hero / marketing CTAs */
+```
+
+The existing `--bearhacks-fg` (`#1a1a1a`) stays the form default so input
+contrast isn't disturbed. `--bearhacks-text-marketing` is opt-in per surface.
+
+### 12.2 Asset copy
+
+Copied from `bearhacks-frontend/2026/src/assets/images/` into
+`apps/me/public/brand/`:
+
+| Source                                       | Destination                  |
+| -------------------------------------------- | ---------------------------- |
+| `art/art_hero_title_opt.webp`                | `wordmark_hero.webp`         |
+| `art/art_hero_1.webp`                        | `bear_cloud_left.webp`       |
+| `art/art_hero_2.webp`                        | `bear_cloud_right.webp`      |
+| `art/art_redirect.webp`                      | `bear_redirect.webp`         |
+| `art/art_final_message.webp`                 | `bear_walking.webp`          |
+| `art/art_last_year_bee.webp`                 | `bee.webp`                   |
+| `art/art_footer.webp`                        | `bear_footer.webp`           |
+| `art/wooden_frame.svg`                       | `wooden_frame.svg`           |
+| `logos/logo_icon.svg`                        | `icon_color.svg`             |
+
+### 12.3 New building blocks
+
+- **`apps/me/components/decorative/clouds.tsx`** — pure-SVG component that
+  renders two large white watercolor clouds (the same path data + `feTurbulence`
+  noise filter from `bearhacks-frontend/2026/src/components/sections/HeroSection.jsx`),
+  positioned absolute inside a `relative` parent. `aria-hidden`, no JS, no state.
+  Used on the signed-out home and the not-found page.
+- **`pill` button variant** in [`components/ui/button.tsx`](../components/ui/button.tsx) —
+  `rounded-[var(--bearhacks-radius-pill)]`, white background, thin black/50
+  border, soft shadow, cream hover. Existing `primary | secondary | ghost`
+  variants unchanged. Used for the hero OAuth CTAs and the not-found "Go home".
+- **`tone="marketing"` on `PageHeader`** — opt-in switch that renders the title
+  as `font-extrabold uppercase tracking-[0.15rem] text-(--bearhacks-text-marketing)`
+  instead of the default dark-blue tracking-tight. Default `tone` is unchanged.
+- **Inline cream highlight pattern** —
+  `<span className="bg-(--bearhacks-cream) px-1 rounded-sm">…</span>`. Used as a
+  one-off accent on the signed-in home's "QR card" CardTitle. No helper
+  component (it's a one-className utility — abstracting it isn't worth it).
+
+### 12.4 Page-by-page deltas
+
+- **Signed-out `/`** ([`app/page.tsx`](../app/page.tsx) `!userId` branch) —
+  full marketing hero. Sky gradient (`from-(--bearhacks-sky-from) to-white`),
+  inline `<Clouds />` layer, watercolor `wordmark_hero.webp`, dark-blue date
+  subline, and the OAuth pill CTAs. Two cloud-bear mascots anchored to the
+  bottom corners (hidden under `sm`). Site header still renders as branded
+  chrome above the gradient (intentional — no layout.tsx changes).
+- **Signed-in `/`** (same file, main return) — light typography pass only.
+  "Welcome back" greeting becomes brown uppercase tracking-wide. "My QR card"
+  CardTitle picks up the cream highlight on the keyword. "Open my QR card ?"
+  CTA is now pill-rounded. Form rendering, validation, save flow unchanged.
+- **`/contacts/[id]`** ([`app/contacts/[id]/page.tsx`](../app/contacts/[id]/page.tsx)) —
+  `PageHeader tone="marketing"`, display name as `text-2xl font-extrabold`
+  brown, role label uppercase tracking. No layout shifts.
+- **`/claim/[qrId]`** ([`app/claim/[qrId]/page.tsx`](../app/claim/[qrId]/page.tsx)) —
+  the **already-claimed** Card switches to cream with a brown bottom border
+  (mirrors the FAQ card pattern from the public site). "View profile ?" CTA is
+  a pill. The form Card stays white for legibility.
+- **`/qr-card/[qrId]`** ([`app/qr-card/[qrId]/page.tsx`](../app/qr-card/[qrId]/page.tsx)) —
+  page background tinted cream to mimic a printed event card. The QR image is
+  wrapped in a container that uses `wooden_frame.svg` as a CSS background,
+  decorative only (the QR itself is on a clean white inner panel so it still
+  scans). Owner name + role rendered in brown-type below.
+- **`/some-bogus-url`** ([`app/not-found.tsx`](../app/not-found.tsx)) — replaces
+  the icon with `bear_redirect.webp`, adds a low-opacity `<Clouds />` layer,
+  cream page background, brown headline, pill "Go home" CTA.
+- **Site footer** ([`components/site-footer.tsx`](../components/site-footer.tsx)) —
+  cream background, `bear_footer.webp` inline next to the copy line, brown
+  uppercase tracking text.
+
+### 12.5 What stayed unchanged (intentional)
+
+- Site header (`components/site-header.tsx`) — dark-blue chrome with the white
+  icon already reads as on-brand. Switching to a floating pill nav would touch
+  every signed-in page and is outside Medium scope.
+- `<InputField>` / `<TextareaField>` — no decorative styling. Forms stay
+  contrast-first.
+- `apps/admin` — staff console keeps its current branded chrome.
+- All API surfaces, React Query keys, structured logging, and Supabase auth.
+
+### 12.6 Verification
+
+| Check                                           | Result   |
+| ----------------------------------------------- | -------- |
+| `bun lint` (`apps/me` + `apps/admin`)           | ? Clean |
+| `bun typecheck` (`apps/me` + `apps/admin`)      | ? Clean |
+| Cream `#FFF4CF` on brown `#512B10` contrast     | ? ~12:1, well above AA |
+
+Manual smoke (against `http://127.0.0.1:8000`):
+1. Signed-out `/` ? sky gradient + watercolor wordmark + two pill CTAs + cloud
+   bears on `= sm`, mobile stays clean.
+2. Sign in ? signed-in home renders with brown headings, cream highlight on
+   "QR card", pill "Open my QR card" CTA. Profile save still redirects to
+   `/contacts/{me.id}`.
+3. `/contacts/{me.id}` ? brown typography, layout intact.
+4. `/claim/{claimedQrId}` ? cream already-claimed card + pill "View profile" CTA;
+   `/claim/{unclaimedQrId}` ? form still readable, can claim.
+5. `/qr-card/{qrId}` ? cream page, wooden frame around QR, QR still scans on a
+   phone.
+6. `/some-bogus-url` ? redirect bear + low-opacity clouds + pill CTA.
+7. `apps/admin` portal opened side-by-side ? visually unchanged.

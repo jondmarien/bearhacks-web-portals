@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
 import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
+import { Clouds } from "@/components/decorative/clouds";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputField, TextareaField } from "@/components/ui/field";
@@ -151,34 +152,50 @@ export default function HomePage() {
 
   if (!userId) {
     return (
-      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-8 px-4 py-10">
-        <section className="flex flex-col items-center text-center">
+      <main className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-linear-to-b from-(--bearhacks-sky-from) from-70% to-white px-4 py-16 sm:py-24">
+        <Clouds />
+
+        <Image
+          src="/brand/bear_cloud_left.webp"
+          alt=""
+          aria-hidden="true"
+          width={256}
+          height={192}
+          priority
+          className="pointer-events-none absolute bottom-12 left-6 hidden w-44 sm:block lg:w-64"
+          style={{ height: "auto" }}
+        />
+        <Image
+          src="/brand/bear_cloud_right.webp"
+          alt=""
+          aria-hidden="true"
+          width={192}
+          height={144}
+          priority
+          className="pointer-events-none absolute bottom-16 right-6 hidden w-32 sm:block lg:w-48"
+          style={{ height: "auto" }}
+        />
+
+        <section className="relative z-10 flex w-full max-w-3xl flex-col items-center gap-8 text-center">
           <Image
-            src="/brand/logo_long.svg"
+            src="/brand/wordmark_hero.webp"
             alt="BearHacks 2026"
-            width={320}
-            height={80}
+            width={738}
+            height={220}
             priority
-            className="w-64 sm:w-80"
+            className="w-full max-w-xs sm:max-w-md md:max-w-xl"
             style={{ height: "auto" }}
           />
-          <h1 className="mt-6 text-3xl font-bold tracking-tight text-(--bearhacks-primary) sm:text-4xl">
-            BearHacks 2026 Networking
-          </h1>
-          <p className="mt-3 max-w-md text-base text-(--bearhacks-muted)">
-            Sign in to create a networking profile and claim a QR code.
+          <p className="text-base font-semibold tracking-tight text-(--bearhacks-primary) sm:text-2xl">
+            Networking · April 24-26 · Sheridan HMC Campus
           </p>
+          <div className="flex w-full flex-col items-center gap-3">
+            <p className="text-sm font-medium text-(--bearhacks-text-marketing) sm:text-base">
+              Sign in to create your profile and claim your QR code.
+            </p>
+            <DashboardOAuthButtons />
+          </div>
         </section>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Sign in to continue</CardTitle>
-            <CardDescription>
-              Use Google or LinkedIn to create your attendee profile.
-            </CardDescription>
-          </CardHeader>
-          <DashboardOAuthButtons />
-        </Card>
       </main>
     );
   }
@@ -190,11 +207,11 @@ export default function HomePage() {
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-(--bearhacks-primary)">
+          <h1 className="text-2xl font-extrabold uppercase tracking-[0.15rem] text-(--bearhacks-text-marketing) sm:text-3xl">
             Welcome back
           </h1>
           {user?.email ? (
-            <p className="text-sm text-(--bearhacks-muted)">{user.email}</p>
+            <p className="text-sm text-(--bearhacks-text-marketing)/70">{user.email}</p>
           ) : null}
         </div>
         <div className="flex gap-2">
@@ -307,14 +324,16 @@ export default function HomePage() {
       {qrId ? (
         <Card>
           <CardHeader>
-            <CardTitle>My QR card</CardTitle>
+            <CardTitle>
+              My <span className="bg-(--bearhacks-cream) px-1 rounded-sm">QR card</span>
+            </CardTitle>
             <CardDescription>
               Show this QR to other attendees to share your profile.
             </CardDescription>
           </CardHeader>
           <Link
             href={`/qr-card/${qrId}`}
-            className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-md) bg-(--bearhacks-accent) px-4 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-accent-soft)"
+            className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-accent-soft)"
           >
             Open my QR card →
           </Link>

@@ -105,7 +105,7 @@ export function AdminGateBanner() {
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <span>Sign in with your staff Discord account to access the admin tools.</span>
           <Button
-            variant="primary"
+            variant="pill"
             onClick={() => {
               void signInWithDiscord();
             }}
@@ -132,21 +132,23 @@ export function AdminGateBanner() {
             Signed in as <strong>{signedInLabel}</strong>. Role: {roleLabel}.
           </span>
         ) : (
-          <span>
-            Signed in as <strong>{signedInLabel}</strong>. This account is not on
-            the admin list yet — ask a super-admin to add you, then sign out and
-            back in.
-          </span>
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Signed in as <strong>{signedInLabel}</strong>. This account is not
+              on the admin list yet — ask a super-admin to add you, then sign
+              out and back in.
+            </span>
+            <Button
+              variant="pill"
+              onClick={() => {
+                void signOut();
+              }}
+              disabled={isBusy}
+            >
+              Sign out
+            </Button>
+          </div>
         )}
-        <Button
-          variant="ghost"
-          onClick={() => {
-            void signOut();
-          }}
-          disabled={isBusy}
-        >
-          Sign out
-        </Button>
       </div>
     </div>
   );

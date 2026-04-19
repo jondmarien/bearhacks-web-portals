@@ -88,45 +88,56 @@ export default function QrCardPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-8">
-      <PageHeader title="My QR card" showBack backHref="/" />
-      <Card className="flex flex-col items-center gap-4 text-center">
-        <Image
-          src="/brand/icon_black.svg"
-          alt=""
-          width={48}
-          height={48}
-          priority
-          style={{ width: "48px", height: "auto" }}
-        />
-        <div>
-          <CardTitle>{ownerName}</CardTitle>
-          {ownerRole ? (
-            <CardDescription className="mt-1">{ownerRole}</CardDescription>
-          ) : null}
-        </div>
-        {qrImageUrl ? (
-          <div className="w-full max-w-[280px] overflow-hidden rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-white p-3">
-            <Image
-              src={qrImageUrl}
-              alt="Your networking QR code"
-              width={280}
-              height={280}
-              className="h-auto w-full"
-              unoptimized
-            />
+    <main className="flex flex-1 flex-col items-center bg-(--bearhacks-cream) px-4 py-8">
+      <div className="mx-auto flex w-full max-w-md flex-col gap-5">
+        <PageHeader title="My QR card" showBack backHref="/" tone="marketing" />
+        <Card className="flex flex-col items-center gap-4 bg-white text-center">
+          <Image
+            src="/brand/icon_color.svg"
+            alt=""
+            width={48}
+            height={48}
+            priority
+            style={{ width: "48px", height: "auto" }}
+          />
+          <div>
+            <CardTitle className="text-2xl font-extrabold text-(--bearhacks-text-marketing) sm:text-3xl">
+              {ownerName}
+            </CardTitle>
+            {ownerRole ? (
+              <CardDescription className="mt-1 uppercase tracking-[0.1rem] text-(--bearhacks-text-marketing)/70">
+                {ownerRole}
+              </CardDescription>
+            ) : null}
           </div>
-        ) : (
-          <p className="text-sm text-(--bearhacks-muted)">
-            Generating your QR code…
-          </p>
-        )}
-        <CardHeader className="mb-0 items-center text-center">
-          <CardDescription>
-            Show this QR to other attendees to share your profile.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+          {qrImageUrl ? (
+            <div
+              className="relative flex w-full max-w-[320px] items-center justify-center bg-[url('/brand/wooden_frame.svg')] bg-contain bg-center bg-no-repeat p-10"
+              style={{ aspectRatio: "1 / 1" }}
+            >
+              <div className="w-full overflow-hidden rounded-md bg-white p-2">
+                <Image
+                  src={qrImageUrl}
+                  alt="Your networking QR code"
+                  width={280}
+                  height={280}
+                  className="h-auto w-full"
+                  unoptimized
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-(--bearhacks-text-marketing)/70">
+              Generating your QR code…
+            </p>
+          )}
+          <CardHeader className="mb-0 items-center text-center">
+            <CardDescription className="text-(--bearhacks-text-marketing)/80">
+              Show this QR to other attendees to share your profile.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
     </main>
   );
 }

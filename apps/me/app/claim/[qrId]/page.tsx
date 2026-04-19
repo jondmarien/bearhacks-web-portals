@@ -171,25 +171,29 @@ export default function ClaimQrPage() {
       )}
 
       {claimStatusQuery.data?.claimed ? (
-        <Card>
+        <Card className="bg-(--bearhacks-cream) border-b-4 border-b-(--bearhacks-text-marketing)">
           <CardHeader>
-            <CardTitle>This QR is already claimed</CardTitle>
+            <CardTitle className="text-(--bearhacks-text-marketing)">
+              This QR is already claimed
+            </CardTitle>
             {ownerProfileQuery.data ? (
-              <CardDescription>
+              <CardDescription className="text-(--bearhacks-text-marketing)/80">
                 Claimed by{" "}
-                <span className="font-semibold text-(--bearhacks-primary)">
+                <span className="font-semibold text-(--bearhacks-text-marketing)">
                   {ownerProfileQuery.data.display_name ?? "an attendee"}
                 </span>
                 .
               </CardDescription>
             ) : (
-              <CardDescription>Loading owner profile…</CardDescription>
+              <CardDescription className="text-(--bearhacks-text-marketing)/80">
+                Loading owner profile…
+              </CardDescription>
             )}
           </CardHeader>
           {ownerProfileQuery.data ? (
             <Link
               href={`/contacts/${ownerProfileQuery.data.id}`}
-              className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-md) bg-(--bearhacks-accent) px-4 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-accent-soft)"
+              className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-pill) border border-black/50 bg-white px-6 py-3 text-sm font-semibold text-black no-underline shadow-[0_1px_4px_0_rgba(0,0,0,0.25)] hover:bg-(--bearhacks-cream)"
             >
               View profile →
             </Link>
