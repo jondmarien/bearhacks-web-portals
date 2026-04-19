@@ -15,7 +15,7 @@ import { useApiClient } from "@/lib/use-api-client";
  * Hover-resolved profile-name tooltip rendered with the native HTML Popover
  * API + Interest Invokers when available.
  *
- * **Option B — Interest Invokers (`interestfor`)** is used in Chromium 142+
+ * **Interest Invokers (`interestfor`)** is used in Chromium 142+
  * (shipped unflagged October 2025). The browser handles hover, focus, and
  * touch (long-press) interactions natively, applies the spec's recommended
  * 0.5s show / 0.2s hide delays, restores focus on dismiss, and dispatches
@@ -25,7 +25,7 @@ import { useApiClient } from "@/lib/use-api-client";
  *   - https://developer.mozilla.org/en-US/docs/Web/API/Popover_API/Using_interest_invokers
  *   - https://open-ui.org/components/interest-invokers.explainer/
  *
- * **Option A — Popover API fallback** is used everywhere else (Safari,
+ * **Popover API fallback** is used everywhere else (Safari,
  * Firefox, older Chromium). We swap `popover="hint"` for `popover="auto"` so
  * the browser gives us free click-light-dismiss, and wire up `click` to
  * toggle plus `mouseenter`/`focus` to show. This keeps both desktop hover
@@ -106,7 +106,7 @@ export function ProfileNameTooltip({
     }
   }, [client, query]);
 
-  // === Option B: Interest Invokers ===========================================
+  // === Interest Invokers ===========================================
   // The browser opens/closes the popover; we just need to fetch + reposition
   // when the user shows interest.
   useEffect(() => {
@@ -123,7 +123,7 @@ export function ProfileNameTooltip({
     };
   }, [supportsInterest, fetchIfNeeded, positionTooltip]);
 
-  // === Option A: manual show/hide (fallback) =================================
+  // === manual show/hide (fallback) =================================
   const fallbackShow = useCallback(() => {
     if (hideTimerRef.current !== null) {
       window.clearTimeout(hideTimerRef.current);
