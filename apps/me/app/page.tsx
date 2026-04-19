@@ -189,7 +189,7 @@ export default function HomePage() {
         </section>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="items-center text-center">
             <CardTitle>Sign in to continue</CardTitle>
             <CardDescription>
               Use Google or LinkedIn to create your attendee profile.
