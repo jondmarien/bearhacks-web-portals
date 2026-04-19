@@ -1,27 +1,37 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useId, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useSyncExternalStore,
+  type ButtonHTMLAttributes,
+} from "react";
 import { useApiClient } from "@/lib/use-api-client";
 
 /**
  * Hover-resolved profile-name tooltip rendered with the native HTML Popover
- * API (`popover="hint"`), available in Chrome 114+ / Edge 114+ / Firefox 125+ /
- * Safari 17+ (Baseline 2024).
+ * API + Interest Invokers when available.
  *
- * `hint` popovers were added specifically for hover/focus tooltips: they sit
- * in the top layer (no z-index gymnastics), light-dismiss, return focus, and
- * critically do **not** close any sibling `popover="auto"` (e.g. the QR
- * details modal) when shown.
+ * **Option B — Interest Invokers (`interestfor`)** is used in Chromium 142+
+ * (shipped unflagged October 2025). The browser handles hover, focus, and
+ * touch (long-press) interactions natively, applies the spec's recommended
+ * 0.5s show / 0.2s hide delays, restores focus on dismiss, and dispatches
+ * `interest` / `loseinterest` events on the target so we can lazy-fetch the
+ * profile name on first hover/focus/long-press.
+ * Refs:
+ *   - https://developer.mozilla.org/en-US/docs/Web/API/Popover_API/Using_interest_invokers
+ *   - https://open-ui.org/components/interest-invokers.explainer/
  *
- * The lookup is lazy — the first hover/focus refetches the profile and
- * subsequent hovers within `staleTime` are instant. We position the tooltip
- * with `getBoundingClientRect()` rather than CSS anchor positioning, since
- * Safari's CSS Anchor Positioning support is still partial.
- *
+ * **Option A — Popover API fallback** is used everywhere else (Safari,
+ * Firefox, older Chromium). We swap `popover="hint"` for `popover="auto"` so
+ * the browser gives us free click-light-dismiss, and wire up `click` to
+ * toggle plus `mouseenter`/`focus` to show. This keeps both desktop hover
+ * and mobile tap-to-open working without JS managing the open state itself.
  * Refs:
  *   - https://developer.mozilla.org/en-US/docs/Web/API/Popover_API/Using
- *   - https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/popover
  */
 
 type ProfileLookup = {
@@ -39,6 +49,20 @@ type Props = {
 
 const HIDE_DELAY_MS = 120;
 
+function getInterestSupportSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+  if (typeof HTMLButtonElement === "undefined") return false;
+  return "interestForElement" in HTMLButtonElement.prototype;
+}
+
+function subscribeNoop(): () => void {
+  return () => {};
+}
+
+function getServerSnapshot(): boolean {
+  return false;
+}
+
 export function ProfileNameTooltip({
   profileId,
   triggerLabel,
@@ -51,6 +75,12 @@ export function ProfileNameTooltip({
   const reactId = useId();
   const tipId = `profile-tip-${reactId.replace(/:/g, "")}`;
 
+  const supportsInterest = useSyncExternalStore(
+    subscribeNoop,
+    getInterestSupportSnapshot,
+    getServerSnapshot,
+  );
+
   const query = useQuery({
     queryKey: ["admin-profile-lookup", profileId],
     queryFn: () => client!.fetchJson<ProfileLookup>(`/profiles/${profileId}`),
@@ -59,7 +89,7 @@ export function ProfileNameTooltip({
     gcTime: 30 * 60_000,
   });
 
-  const positionTooltip = () => {
+  const positionTooltip = useCallback(() => {
     const trigger = triggerRef.current;
     const tip = tooltipRef.current;
     if (!trigger || !tip) return;
@@ -68,28 +98,49 @@ export function ProfileNameTooltip({
     tip.style.margin = "0";
     tip.style.top = `${Math.round(rect.bottom + 6)}px`;
     tip.style.left = `${Math.round(rect.left)}px`;
-  };
+  }, []);
 
-  const show = () => {
+  const fetchIfNeeded = useCallback(() => {
+    if (client && !query.data && !query.isFetching && !query.isError) {
+      void query.refetch();
+    }
+  }, [client, query]);
+
+  // === Option B: Interest Invokers ===========================================
+  // The browser opens/closes the popover; we just need to fetch + reposition
+  // when the user shows interest.
+  useEffect(() => {
+    if (!supportsInterest) return;
+    const tip = tooltipRef.current;
+    if (!tip) return;
+    const onInterest = () => {
+      fetchIfNeeded();
+      positionTooltip();
+    };
+    tip.addEventListener("interest", onInterest);
+    return () => {
+      tip.removeEventListener("interest", onInterest);
+    };
+  }, [supportsInterest, fetchIfNeeded, positionTooltip]);
+
+  // === Option A: manual show/hide (fallback) =================================
+  const fallbackShow = useCallback(() => {
     if (hideTimerRef.current !== null) {
       window.clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
     }
-    if (client && !query.data && !query.isFetching && !query.isError) {
-      void query.refetch();
-    }
+    fetchIfNeeded();
     const tip = tooltipRef.current;
-    if (!tip) return;
-    if (typeof tip.showPopover !== "function") return;
+    if (!tip || typeof tip.showPopover !== "function") return;
     try {
       positionTooltip();
       tip.showPopover();
     } catch {
-      // Already open or unsupported — ignore.
+      // already open or unsupported
     }
-  };
+  }, [fetchIfNeeded, positionTooltip]);
 
-  const hide = () => {
+  const fallbackHide = useCallback(() => {
     if (hideTimerRef.current !== null) {
       window.clearTimeout(hideTimerRef.current);
     }
@@ -103,7 +154,19 @@ export function ProfileNameTooltip({
         /* not open */
       }
     }, HIDE_DELAY_MS);
-  };
+  }, []);
+
+  const fallbackToggle = useCallback(() => {
+    const tip = tooltipRef.current;
+    if (!tip || typeof tip.togglePopover !== "function") return;
+    fetchIfNeeded();
+    positionTooltip();
+    try {
+      tip.togglePopover();
+    } catch {
+      /* unsupported */
+    }
+  }, [fetchIfNeeded, positionTooltip]);
 
   const display = query.data?.display_name?.trim();
   const tooltipText = query.isFetching
@@ -112,32 +175,49 @@ export function ProfileNameTooltip({
       ? "Lookup failed"
       : display || "Unnamed profile";
 
+  // `interestfor` is a brand-new HTML global attribute and isn't in React's
+  // HTMLButtonElement attribute types yet — cast through unknown to attach it
+  // declaratively only when the browser supports the API.
+  const triggerProps: ButtonHTMLAttributes<HTMLButtonElement> = supportsInterest
+    ? ({ interestfor: tipId } as unknown as ButtonHTMLAttributes<HTMLButtonElement>)
+    : {
+        onClick: fallbackToggle,
+        onMouseEnter: fallbackShow,
+        onFocus: fallbackShow,
+        onMouseLeave: fallbackHide,
+        onBlur: fallbackHide,
+      };
+
   return (
     <>
       <button
         type="button"
         ref={triggerRef}
         aria-describedby={tipId}
-        onMouseEnter={show}
-        onFocus={show}
-        onMouseLeave={hide}
-        onBlur={hide}
         className={`cursor-help bg-transparent p-0 text-left font-[inherit] text-[length:inherit] break-all text-(--bearhacks-muted) underline decoration-dotted underline-offset-2 hover:text-(--bearhacks-fg) ${className}`}
+        {...triggerProps}
       >
         {triggerLabel ?? profileId}
       </button>
       <div
         ref={tooltipRef}
         id={tipId}
-        popover="hint"
+        // `hint` coexists with any open `auto` popovers (e.g. the QR details
+        // modal); `auto` gives us free click-light-dismiss on touch when we
+        // can't rely on the browser-managed Interest Invokers behavior.
+        popover={supportsInterest ? "hint" : "auto"}
         role="tooltip"
-        onMouseEnter={() => {
-          if (hideTimerRef.current !== null) {
-            window.clearTimeout(hideTimerRef.current);
-            hideTimerRef.current = null;
-          }
-        }}
-        onMouseLeave={hide}
+        onMouseEnter={
+          supportsInterest
+            ? undefined
+            : () => {
+                if (hideTimerRef.current !== null) {
+                  window.clearTimeout(hideTimerRef.current);
+                  hideTimerRef.current = null;
+                }
+              }
+        }
+        onMouseLeave={supportsInterest ? undefined : fallbackHide}
         className="m-0 max-w-[18rem] rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-primary) px-3 py-2 text-xs text-(--bearhacks-on-primary) shadow-lg"
       >
         {tooltipText}
