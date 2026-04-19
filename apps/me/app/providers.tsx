@@ -6,7 +6,8 @@ import { createLogger } from "@bearhacks/logger";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createClient, type User, type SupabaseClient } from "@supabase/supabase-js";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
+import { DismissableToaster } from "@/components/dismissable-toaster";
 import { EmailClaimModal } from "@/components/email-claim-modal";
 import { ConfirmDialogProvider } from "@/components/ui/confirm-dialog";
 import {
@@ -264,7 +265,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             onVerified={handleEmailClaimVerified}
             onSignOut={handleEmailClaimSignOut}
           />
-          <Toaster richColors position="top-center" />
+          <DismissableToaster richColors position="top-center" />
         </MeAuthContext.Provider>
       </SupabaseContext.Provider>
     </QueryClientProvider>

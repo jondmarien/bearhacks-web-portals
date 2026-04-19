@@ -5,7 +5,7 @@ import { createLogger } from "@bearhacks/logger";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createContext, useContext, useEffect, useState } from "react";
-import { Toaster } from "sonner";
+import { DismissableToaster } from "@/components/dismissable-toaster";
 import { ConfirmDialogProvider } from "@/components/ui/confirm-dialog";
 
 const log = createLogger("admin/providers");
@@ -38,7 +38,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <SupabaseContext.Provider value={supabase}>
         <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
-        <Toaster richColors position="top-center" />
+        <DismissableToaster richColors position="top-center" />
       </SupabaseContext.Provider>
     </QueryClientProvider>
   );
