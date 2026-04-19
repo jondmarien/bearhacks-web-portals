@@ -106,24 +106,30 @@ export default function AdminQrPage() {
   const isStaff = isStaffUser(user);
   const actor = user?.id ?? "anonymous";
 
-  useEffect(() => {
+  const [prevFilters, setPrevFilters] = useState({ statusFilter, claimedBySearch });
+  if (
+    prevFilters.statusFilter !== statusFilter ||
+    prevFilters.claimedBySearch !== claimedBySearch
+  ) {
+    setPrevFilters({ statusFilter, claimedBySearch });
     setSelectedRowIds(new Set());
     setIsBulkMode(false);
-  }, [statusFilter, claimedBySearch]);
+  }
 
   const selectedClaimUrl = useMemo(() => {
     if (!selectedQr?.id) return null;
     return `${resolveMeBaseUrl()}/claim/${selectedQr.id}`;
   }, [selectedQr]);
 
+  const [prevClaimUrl, setPrevClaimUrl] = useState<string | null>(selectedClaimUrl);
+  if (prevClaimUrl !== selectedClaimUrl) {
+    setPrevClaimUrl(selectedClaimUrl);
+    setSelectedQrImage(null);
+  }
+
   useEffect(() => {
+    if (!selectedClaimUrl) return;
     let active = true;
-    if (!selectedClaimUrl) {
-      setSelectedQrImage(null);
-      return () => {
-        active = false;
-      };
-    }
     QRCode.toDataURL(selectedClaimUrl, {
       width: 512,
       margin: 2,

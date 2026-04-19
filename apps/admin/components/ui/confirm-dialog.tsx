@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,10 @@ const ConfirmContext = createContext<((opts: ConfirmOptions) => Promise<boolean>
   null,
 );
 
+const subscribeNoop = () => () => {};
+const getMountedSnapshot = () => true;
+const getMountedServerSnapshot = () => false;
+
 export function useConfirm(): (opts: ConfirmOptions) => Promise<boolean> {
   const ctx = useContext(ConfirmContext);
   if (!ctx) {
@@ -40,13 +45,13 @@ export function useConfirm(): (opts: ConfirmOptions) => Promise<boolean> {
 
 export function ConfirmDialogProvider({ children }: { children: React.ReactNode }) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(
+    subscribeNoop,
+    getMountedSnapshot,
+    getMountedServerSnapshot,
+  );
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const confirm = useCallback(
     (opts: ConfirmOptions) =>
