@@ -15,10 +15,11 @@ import { toast } from "sonner";
 import { useSupabase } from "@/app/providers";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { InputField, TextareaField } from "@/components/ui/field";
+import { InputField, SelectField, TextareaField } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
+import { MAX_DISPLAY_NAME_LENGTH, PROFILE_ROLE_OPTIONS } from "@/lib/profile-roles";
 import { isSuperAdminUser } from "@/lib/supabase-role";
 
 type ProfileDetail = {
@@ -104,6 +105,8 @@ function ProfileEditForm({
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           autoComplete="name"
+          maxLength={MAX_DISPLAY_NAME_LENGTH}
+          hint={`Up to ${MAX_DISPLAY_NAME_LENGTH} characters.`}
         />
 
         <TextareaField
@@ -132,11 +135,13 @@ function ProfileEditForm({
           placeholder="https://"
         />
 
-        <InputField
+        <SelectField
           label="Role"
           id="role"
           value={role}
           onChange={(e) => setRole(e.target.value)}
+          options={PROFILE_ROLE_OPTIONS}
+          placeholder="— Unset —"
         />
 
         <div>

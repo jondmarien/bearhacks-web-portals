@@ -3,6 +3,7 @@ import {
   useId,
   type InputHTMLAttributes,
   type ReactNode,
+  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
 
@@ -80,6 +81,48 @@ export const TextareaField = forwardRef<HTMLTextAreaElement, TextareaFieldProps>
           className={`rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-primary) focus:outline-none ${className}`}
           {...rest}
         />
+      </FieldShell>
+    );
+  },
+);
+
+export type SelectFieldOption = {
+  value: string;
+  label: string;
+};
+
+type SelectFieldProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "children"> & {
+  label: string;
+  hint?: ReactNode;
+  error?: ReactNode;
+  options: ReadonlyArray<SelectFieldOption>;
+  placeholder?: string;
+};
+
+export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(
+  function SelectField(
+    { label, hint, error, id, className = "", options, placeholder, ...rest },
+    ref,
+  ) {
+    const generatedId = useId();
+    const selectId = id ?? generatedId;
+    return (
+      <FieldShell label={label} hint={hint} error={error} htmlFor={selectId}>
+        <select
+          ref={ref}
+          id={selectId}
+          className={`${inputClasses} appearance-none bg-position-[right_0.75rem_center] bg-no-repeat pr-9 ${className}`}
+          {...rest}
+        >
+          {placeholder !== undefined ? (
+            <option value="">{placeholder}</option>
+          ) : null}
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </FieldShell>
     );
   },

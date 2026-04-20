@@ -13,10 +13,11 @@ import { BobaStatusCard } from "@/components/boba-status-card";
 import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { InputField, TextareaField } from "@/components/ui/field";
+import { InputField, SelectField, TextareaField } from "@/components/ui/field";
 import { QrPreview } from "@/components/ui/qr-preview";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
+import { MAX_DISPLAY_NAME_LENGTH, PROFILE_ROLE_OPTIONS } from "@/lib/profile-roles";
 
 const log = createLogger("me/home");
 
@@ -270,14 +271,17 @@ export default function HomePage() {
               }
               placeholder="Your name"
               autoComplete="name"
+              maxLength={MAX_DISPLAY_NAME_LENGTH}
+              hint={`Up to ${MAX_DISPLAY_NAME_LENGTH} characters.`}
             />
-            <InputField
-              label="Role or title"
+            <SelectField
+              label="Role"
               value={draft.role}
               onChange={(event) =>
                 setProfileDraft({ ...draft, role: event.target.value })
               }
-              placeholder="Hacker, Mentor, Sponsor…"
+              options={PROFILE_ROLE_OPTIONS}
+              placeholder="— Select a role —"
             />
             <TextareaField
               label="Bio"
