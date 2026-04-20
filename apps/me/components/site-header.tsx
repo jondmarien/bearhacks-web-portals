@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeToggle } from "@bearhacks/ui/theme";
 import { useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
@@ -65,6 +66,7 @@ export function SiteHeader() {
             </>
           ) : null}
           <span className="hidden shrink-0 sm:inline">Networking</span>
+          <ThemeToggle className="ml-1" />
         </div>
       </div>
     </header>

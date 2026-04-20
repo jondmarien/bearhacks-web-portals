@@ -175,7 +175,7 @@ export default function ContactPage() {
         <p className="text-sm text-(--bearhacks-muted)">Loading profile…</p>
       )}
       {profileQuery.isError && (
-        <p className="text-sm text-red-700">
+        <p className="text-sm text-(--bearhacks-danger)">
           {profileQuery.error instanceof ApiError
             ? profileQuery.error.message
             : "Failed to load profile"}

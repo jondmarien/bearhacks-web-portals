@@ -682,7 +682,7 @@ function PaymentsTableCard({
       {query.isLoading ? (
         <p className="px-4 py-6 text-sm text-(--bearhacks-muted)">Loading…</p>
       ) : query.isError ? (
-        <p className="px-4 py-6 text-sm text-red-700">
+        <p className="px-4 py-6 text-sm text-(--bearhacks-danger)">
           {query.error instanceof ApiError
             ? query.error.message
             : "Failed to load payments"}

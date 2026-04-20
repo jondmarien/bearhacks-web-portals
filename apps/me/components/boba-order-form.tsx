@@ -153,7 +153,7 @@ export function BobaCombinedOrderForm({
                   : "Place order"}
             </Button>
             {!includeDrink && !includeMomo ? (
-              <p className="text-xs text-red-700">
+              <p className="text-xs text-(--bearhacks-danger)">
                 Pick a drink, momos, or both.
               </p>
             ) : null}
@@ -654,7 +654,7 @@ export function BobaDrinkEditForm({
                   variant="ghost"
                   onClick={() => void onCancelOrder()}
                   disabled={isCancelling || isSubmitting}
-                  className="border-red-300 text-red-700 hover:bg-red-50"
+                  className="border-(--bearhacks-danger)/40 text-(--bearhacks-danger) hover:bg-(--bearhacks-danger-soft)"
                 >
                   {isCancelling ? "Cancelling…" : "Cancel drink"}
                 </Button>
@@ -743,7 +743,7 @@ export function BobaMomoEditForm({
                   variant="ghost"
                   onClick={() => void onCancelOrder()}
                   disabled={isCancelling || isSubmitting}
-                  className="border-red-300 text-red-700 hover:bg-red-50"
+                  className="border-(--bearhacks-danger)/40 text-(--bearhacks-danger) hover:bg-(--bearhacks-danger-soft)"
                 >
                   {isCancelling ? "Cancelling…" : "Cancel momos"}
                 </Button>
@@ -796,7 +796,7 @@ function FieldShell({
       {hint && !error ? (
         <p className="text-xs text-(--bearhacks-muted)">{hint}</p>
       ) : null}
-      {error ? <p className="text-xs text-red-700">{error}</p> : null}
+      {error ? <p className="text-xs text-(--bearhacks-danger)">{error}</p> : null}
     </div>
   );
 }

@@ -103,7 +103,7 @@ function ProfileEditForm({
           label="Display name"
           id="display_name"
           value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisplayName(e.target.value)}
           autoComplete="name"
           maxLength={MAX_DISPLAY_NAME_LENGTH}
           hint={`Up to ${MAX_DISPLAY_NAME_LENGTH} characters.`}
@@ -113,7 +113,7 @@ function ProfileEditForm({
           label="Bio"
           id="bio"
           value={bio}
-          onChange={(e) => setBio(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setBio(e.target.value)}
           rows={4}
         />
 
@@ -122,7 +122,7 @@ function ProfileEditForm({
           id="linkedin_url"
           type="url"
           value={linkedinUrl}
-          onChange={(e) => setLinkedinUrl(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLinkedinUrl(e.target.value)}
           placeholder="https://"
         />
 
@@ -131,7 +131,7 @@ function ProfileEditForm({
           id="github_url"
           type="url"
           value={githubUrl}
-          onChange={(e) => setGithubUrl(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGithubUrl(e.target.value)}
           placeholder="https://"
         />
 
@@ -139,7 +139,7 @@ function ProfileEditForm({
           label="Role"
           id="role"
           value={role}
-          onChange={(e) => setRole(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRole(e.target.value)}
           options={PROFILE_ROLE_OPTIONS}
           placeholder="— Unset —"
         />
@@ -228,7 +228,7 @@ export default function AdminProfileEditPage() {
 
       {profileQuery.isLoading && <p className="text-sm text-(--bearhacks-muted)">Loading…</p>}
       {profileQuery.error && (
-        <p className="text-sm text-red-700">
+        <p className="text-sm text-(--bearhacks-danger)">
           {profileQuery.error instanceof ApiError ? profileQuery.error.message : "Failed to load profile"}
         </p>
       )}

@@ -111,7 +111,7 @@ export function BobaStatusCard({ isAuthReady, userId, hideEditCta = false }: Pro
       />
 
       {loadError ? (
-        <p className="mt-3 text-xs text-red-700">{loadError.message}</p>
+        <p className="mt-3 text-xs text-(--bearhacks-danger)">{loadError.message}</p>
       ) : null}
     </Card>
   );

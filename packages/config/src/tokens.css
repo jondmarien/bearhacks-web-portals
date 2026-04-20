@@ -1,49 +1,7 @@
 /**
- * BearHacks 2026 design tokens (DEV-23).
- * Shared by participant (`apps/me`) and staff (`apps/admin`) portals.
- *
- * Import in app globals: @import "@bearhacks/config/tokens.css";
- *
- * Accessibility: body text uses >=16px; link colors chosen for contrast on white;
- * focus ring uses foreground color (see globals `@layer base`).
+ * Compatibility shim. The canonical token sheet now lives in
+ * `@bearhacks/ui/tokens.css` and defines both light (`:root`) and dark
+ * (`:root.dark`) palettes. Existing imports of
+ * `@bearhacks/config/tokens.css` keep working via this re-export.
  */
-:root {
-  --bearhacks-bg: #ffffff;
-  --bearhacks-fg: #1a1a1a;
-  --bearhacks-muted: #525252;
-  --bearhacks-border: #e5e5e5;
-  /* 2026 palette alignment from bearhacks-frontend/2026/tailwind.config.js */
-  --bearhacks-dark-blue: #1d3264;
-  --bearhacks-medium-blue: #3766d4;
-  --bearhacks-light-blue: #f2f8ff;
-  --bearhacks-brown-type: #512b10;
-  --bearhacks-red: #941b0c;
-  --bearhacks-orange: #f0a422;
-  --bearhacks-brown: #966b55;
-  --bearhacks-yellow: #ffdc56;
-  --bearhacks-link: #1d3264;
-  --bearhacks-link-hover: #3766d4;
-  --bearhacks-focus-ring: #3766d4;
-  --bearhacks-radius-sm: 0.375rem;
-  --bearhacks-radius-md: 0.5rem;
-  --bearhacks-text-base: 1rem;
-  --bearhacks-leading-normal: 1.5;
-  /* Minimum touch target (WCAG 2.5.5); use min-height/min-width in components */
-  --bearhacks-touch-min: 44px;
-  /* Semantic brand surfaces (apps/me production polish) */
-  --bearhacks-surface: #ffffff;
-  --bearhacks-surface-alt: #f2f8ff;
-  --bearhacks-primary: #1d3264;
-  --bearhacks-primary-hover: #3766d4;
-  --bearhacks-accent: #f0a422;
-  --bearhacks-accent-soft: #ffdc56;
-  --bearhacks-on-primary: #ffffff;
-  --bearhacks-shadow-card: 0 1px 2px rgba(29, 50, 100, 0.06),
-    0 8px 24px rgba(29, 50, 100, 0.08);
-  --bearhacks-radius-lg: 0.75rem;
-  /* Marketing surfaces aligned with bearhacks.com (2026) */
-  --bearhacks-cream: #fff4cf;
-  --bearhacks-sky-from: #cee5ff;
-  --bearhacks-text-marketing: #512b10;
-  --bearhacks-radius-pill: 3.125rem;
-}
+@import "@bearhacks/ui/tokens.css";

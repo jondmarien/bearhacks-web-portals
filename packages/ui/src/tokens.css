@@ -1,0 +1,99 @@
+/**
+ * BearHacks 2026 design tokens — shared by `apps/me` and `apps/admin`.
+ *
+ * Import once from the app globals:
+ *   @import "@bearhacks/ui/tokens.css";
+ *
+ * Color-scheme switching is handled via next-themes setting `.dark` on
+ * <html>. Because every component style already references these CSS
+ * variables, the palette swap below is enough to drive the whole portal.
+ *
+ * Contrast targets: body/foreground pairs meet WCAG AA (>=4.5:1);
+ * large-text and icon pairs meet AA Large (>=3:1). Body text is >=16px
+ * and uses `--bearhacks-text-base` from the base tokens.
+ */
+:root {
+  color-scheme: light;
+  --bearhacks-bg: #ffffff;
+  --bearhacks-fg: #1a1a1a;
+  --bearhacks-muted: #525252;
+  --bearhacks-border: #e5e5e5;
+  /* 2026 palette alignment from bearhacks-frontend/2026/tailwind.config.js */
+  --bearhacks-dark-blue: #1d3264;
+  --bearhacks-medium-blue: #3766d4;
+  --bearhacks-light-blue: #f2f8ff;
+  --bearhacks-brown-type: #512b10;
+  --bearhacks-red: #941b0c;
+  --bearhacks-orange: #f0a422;
+  --bearhacks-brown: #966b55;
+  --bearhacks-yellow: #ffdc56;
+  --bearhacks-link: #1d3264;
+  --bearhacks-link-hover: #3766d4;
+  --bearhacks-focus-ring: #3766d4;
+  --bearhacks-radius-sm: 0.375rem;
+  --bearhacks-radius-md: 0.5rem;
+  --bearhacks-radius-lg: 0.75rem;
+  --bearhacks-radius-pill: 3.125rem;
+  --bearhacks-text-base: 1rem;
+  --bearhacks-leading-normal: 1.5;
+  /* Minimum touch target (WCAG 2.5.5); use min-height/min-width in components */
+  --bearhacks-touch-min: 44px;
+  /* Semantic brand surfaces (apps/me production polish) */
+  --bearhacks-surface: #ffffff;
+  --bearhacks-surface-alt: #f2f8ff;
+  --bearhacks-primary: #1d3264;
+  --bearhacks-primary-hover: #3766d4;
+  --bearhacks-accent: #f0a422;
+  --bearhacks-accent-soft: #ffdc56;
+  --bearhacks-on-primary: #ffffff;
+  --bearhacks-danger: #941b0c;
+  --bearhacks-danger-soft: #fde2dd;
+  --bearhacks-shadow-card: 0 1px 2px rgba(29, 50, 100, 0.06),
+    0 8px 24px rgba(29, 50, 100, 0.08);
+  /* Marketing surfaces aligned with bearhacks.com (2026) */
+  --bearhacks-cream: #fff4cf;
+  --bearhacks-sky-from: #cee5ff;
+  --bearhacks-text-marketing: #512b10;
+  /* Overlay scrim for modals/dialogs — same in both themes for contrast */
+  --bearhacks-overlay: rgba(0, 0, 0, 0.5);
+}
+
+/*
+ * Dark theme. Next-themes toggles `class="dark"` on <html>. The `:root.dark`
+ * selector wins against the base `:root` because of specificity (0,1,1 vs 0,0,1).
+ */
+:root.dark {
+  color-scheme: dark;
+  --bearhacks-bg: #0b111f;
+  --bearhacks-fg: #e8ecf4;
+  --bearhacks-muted: #9aa3b2;
+  --bearhacks-border: #1f2a44;
+  --bearhacks-dark-blue: #1d3264;
+  --bearhacks-medium-blue: #3766d4;
+  --bearhacks-light-blue: #1a2a4c;
+  --bearhacks-brown-type: #e8ecf4;
+  --bearhacks-red: #ff6b5c;
+  --bearhacks-orange: #ffcf6a;
+  --bearhacks-brown: #c6a58f;
+  --bearhacks-yellow: #ffe196;
+  --bearhacks-link: #9ab8ff;
+  --bearhacks-link-hover: #cadcff;
+  --bearhacks-focus-ring: #9ab8ff;
+  --bearhacks-surface: #121a2c;
+  --bearhacks-surface-alt: #0f1626;
+  /* Lift the primary so text on dark surfaces stays readable */
+  --bearhacks-primary: #7aa2ff;
+  --bearhacks-primary-hover: #a7c0ff;
+  --bearhacks-accent: #ffcf6a;
+  --bearhacks-accent-soft: #ffe196;
+  --bearhacks-on-primary: #0b111f;
+  --bearhacks-danger: #ff6b5c;
+  --bearhacks-danger-soft: #3a1a1a;
+  --bearhacks-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45),
+    0 8px 24px rgba(0, 0, 0, 0.35);
+  /* Replace the warm cream with a subtle dark panel so marketing surfaces don't glow */
+  --bearhacks-cream: #1a2137;
+  --bearhacks-sky-from: #1a2a4c;
+  --bearhacks-text-marketing: #e8ecf4;
+  --bearhacks-overlay: rgba(0, 0, 0, 0.6);
+}

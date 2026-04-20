@@ -486,7 +486,7 @@ function DevTestWindowToggleCard({
                 className={inputClasses}
               />
               {!capValid && capDraft.trim() !== "" ? (
-                <p className="text-xs text-red-600">
+                <p className="text-xs text-(--bearhacks-danger)">
                   Must be a whole number between 1 and{" "}
                   {DEV_WINDOW_MAX_ORDERS_HARD_CEILING}.
                 </p>
@@ -688,7 +688,7 @@ function PrepSummaryCard({ query, windowLabel }: PrepSummaryCardProps) {
       {query.isLoading ? (
         <p className="mt-4 text-sm text-(--bearhacks-muted)">Loading…</p>
       ) : query.isError ? (
-        <p className="mt-4 text-sm text-red-700">
+        <p className="mt-4 text-sm text-(--bearhacks-danger)">
           {query.error instanceof ApiError
             ? query.error.message
             : "Failed to load prep summary"}
@@ -821,7 +821,7 @@ function PickupListCard({
       {query.isLoading ? (
         <p className="mt-4 text-sm text-(--bearhacks-muted)">Loading…</p>
       ) : query.isError ? (
-        <p className="mt-4 text-sm text-red-700">
+        <p className="mt-4 text-sm text-(--bearhacks-danger)">
           {query.error instanceof ApiError
             ? query.error.message
             : "Failed to load pickup list"}
@@ -1257,7 +1257,7 @@ function OrdersTableCard({
                 <Button
                   type="button"
                   variant="ghost"
-                  className="text-red-700"
+                  className="text-(--bearhacks-danger)"
                   onClick={() => void onBulkDelete(selectedItems)}
                   disabled={selectedItems.length === 0 || isBulkDeleting}
                 >
@@ -1309,7 +1309,7 @@ function OrdersTableCard({
       {query.isLoading ? (
         <p className="px-4 py-6 text-sm text-(--bearhacks-muted)">Loading…</p>
       ) : query.isError ? (
-        <p className="px-4 py-6 text-sm text-red-700">
+        <p className="px-4 py-6 text-sm text-(--bearhacks-danger)">
           {query.error instanceof ApiError
             ? query.error.message
             : "Failed to load orders"}

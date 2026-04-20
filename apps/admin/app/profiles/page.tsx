@@ -143,7 +143,7 @@ export default function AdminProfilesPage() {
                   id="profile-search"
                   name="search"
                   value={draftSearch}
-                  onChange={(e) => setDraftSearch(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDraftSearch(e.target.value)}
                   placeholder="Substring match"
                   autoComplete="off"
                 />
@@ -200,7 +200,7 @@ export default function AdminProfilesPage() {
                               <div className="flex flex-wrap items-center gap-2">
                                 <Link
                                   href={`/profiles/${row.id}`}
-                                  className="inline-flex min-h-(--bearhacks-touch-min) items-center justify-center rounded-(--bearhacks-radius-pill) border border-black/50 bg-white px-6 py-3 text-sm font-semibold text-black no-underline shadow-[0_1px_4px_0_rgba(0,0,0,0.25)] hover:bg-(--bearhacks-cream)"
+                                  className="inline-flex min-h-(--bearhacks-touch-min) items-center justify-center rounded-(--bearhacks-radius-pill) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-6 py-3 text-sm font-semibold text-(--bearhacks-fg) no-underline shadow-(--bearhacks-shadow-card) hover:bg-(--bearhacks-cream)"
                                 >
                                   Edit
                                 </Link>
@@ -208,13 +208,13 @@ export default function AdminProfilesPage() {
                                   href={`${resolveMeBaseUrl()}/contacts/${row.id}`}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="inline-flex min-h-(--bearhacks-touch-min) items-center justify-center rounded-(--bearhacks-radius-pill) border border-black/50 bg-white px-6 py-3 text-sm font-semibold text-black no-underline shadow-[0_1px_4px_0_rgba(0,0,0,0.25)] hover:bg-(--bearhacks-cream)"
+                                  className="inline-flex min-h-(--bearhacks-touch-min) items-center justify-center rounded-(--bearhacks-radius-pill) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-6 py-3 text-sm font-semibold text-(--bearhacks-fg) no-underline shadow-(--bearhacks-shadow-card) hover:bg-(--bearhacks-cream)"
                                 >
                                   View profile
                                 </a>
                                 <Button
                                   variant="ghost"
-                                  className="text-red-700"
+                                  className="text-(--bearhacks-danger)"
                                   onClick={() => {
                                     void (async () => {
                                       const label = row.display_name?.trim() || "this profile";
@@ -275,7 +275,7 @@ export default function AdminProfilesPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <Link
                             href={`/profiles/${row.id}`}
-                            className="inline-flex min-h-(--bearhacks-touch-min) items-center justify-center rounded-(--bearhacks-radius-pill) border border-black/50 bg-white px-4 py-2 text-sm font-semibold text-black no-underline shadow-[0_1px_4px_0_rgba(0,0,0,0.25)] hover:bg-(--bearhacks-cream)"
+                            className="inline-flex min-h-(--bearhacks-touch-min) items-center justify-center rounded-(--bearhacks-radius-pill) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-4 py-2 text-sm font-semibold text-(--bearhacks-fg) no-underline shadow-(--bearhacks-shadow-card) hover:bg-(--bearhacks-cream)"
                           >
                             Edit
                           </Link>
@@ -283,13 +283,13 @@ export default function AdminProfilesPage() {
                             href={`${resolveMeBaseUrl()}/contacts/${row.id}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex min-h-(--bearhacks-touch-min) items-center justify-center rounded-(--bearhacks-radius-pill) border border-black/50 bg-white px-4 py-2 text-sm font-semibold text-black no-underline shadow-[0_1px_4px_0_rgba(0,0,0,0.25)] hover:bg-(--bearhacks-cream)"
+                            className="inline-flex min-h-(--bearhacks-touch-min) items-center justify-center rounded-(--bearhacks-radius-pill) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-4 py-2 text-sm font-semibold text-(--bearhacks-fg) no-underline shadow-(--bearhacks-shadow-card) hover:bg-(--bearhacks-cream)"
                           >
                             View
                           </a>
                           <Button
                             variant="ghost"
-                            className="text-red-700"
+                            className="text-(--bearhacks-danger)"
                             onClick={() => {
                               void (async () => {
                                 const label = row.display_name?.trim() || "this profile";

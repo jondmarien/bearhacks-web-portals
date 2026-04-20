@@ -165,7 +165,7 @@ export default function ClaimQrPage() {
         <p className="text-sm text-(--bearhacks-muted)">Checking QR status…</p>
       )}
       {claimStatusQuery.isError && (
-        <p className="text-sm text-red-700">
+        <p className="text-sm text-(--bearhacks-danger)">
           {claimStatusQuery.error instanceof ApiError
             ? claimStatusQuery.error.message
             : "Failed to load QR status"}
@@ -195,7 +195,7 @@ export default function ClaimQrPage() {
           {ownerProfileQuery.data ? (
             <Link
               href={`/contacts/${ownerProfileQuery.data.id}`}
-              className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-pill) border border-black/50 bg-white px-6 py-3 text-sm font-semibold text-black no-underline shadow-[0_1px_4px_0_rgba(0,0,0,0.25)] hover:bg-(--bearhacks-cream)"
+              className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-pill) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-6 py-3 text-sm font-semibold text-(--bearhacks-fg) no-underline shadow-(--bearhacks-shadow-card) hover:bg-(--bearhacks-cream)"
             >
               View profile →
             </Link>
@@ -236,7 +236,7 @@ export default function ClaimQrPage() {
                   label="Display name"
                   required
                   value={profileDraft.display_name}
-                  onChange={(event) =>
+                  onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                     setDraft({ ...profileDraft, display_name: event.target.value })
                   }
                   placeholder="Your name"
@@ -246,7 +246,7 @@ export default function ClaimQrPage() {
                   label="Role or title"
                   required
                   value={profileDraft.role}
-                  onChange={(event) =>
+                  onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                     setDraft({ ...profileDraft, role: event.target.value })
                   }
                   placeholder="Hacker, Mentor, Sponsor…"
@@ -255,7 +255,7 @@ export default function ClaimQrPage() {
                   label="Bio"
                   value={profileDraft.bio}
                   rows={3}
-                  onChange={(event) =>
+                  onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) =>
                     setDraft({ ...profileDraft, bio: event.target.value })
                   }
                   placeholder="Optional"
@@ -264,7 +264,7 @@ export default function ClaimQrPage() {
                   label="LinkedIn URL"
                   type="url"
                   value={profileDraft.linkedin_url}
-                  onChange={(event) =>
+                  onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                     setDraft({ ...profileDraft, linkedin_url: event.target.value })
                   }
                   placeholder="https://linkedin.com/in/you"
@@ -273,7 +273,7 @@ export default function ClaimQrPage() {
                   label="GitHub URL"
                   type="url"
                   value={profileDraft.github_url}
-                  onChange={(event) =>
+                  onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                     setDraft({ ...profileDraft, github_url: event.target.value })
                   }
                   placeholder="https://github.com/you"
@@ -282,7 +282,7 @@ export default function ClaimQrPage() {
                   label="Personal link"
                   type="url"
                   value={profileDraft.personal_url}
-                  onChange={(event) =>
+                  onChange={(event: React.ChangeEvent<HTMLInputElement> ) =>
                     setDraft({ ...profileDraft, personal_url: event.target.value })
                   }
                   placeholder="https://yourportfolio.com"

@@ -1,3 +1,4 @@
+import { ThemeProvider } from "@bearhacks/ui/theme";
 import type { Metadata } from "next";
 import { Hanken_Grotesk } from "next/font/google";
 import { AdminGateBanner } from "@/components/admin-gate-banner";
@@ -42,14 +43,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${hanken.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${hanken.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
       <body className="flex min-h-full flex-col bg-(--bearhacks-surface-alt) font-sans text-(--bearhacks-fg)">
-        <Providers>
-          <SiteHeader />
-          <AdminGateBanner />
-          {children}
-          <SiteFooter />
-        </Providers>
+        <ThemeProvider>
+          <Providers>
+            <SiteHeader />
+            <AdminGateBanner />
+            {children}
+            <SiteFooter />
+          </Providers>
+        </ThemeProvider>
       </body>
     </html>
   );

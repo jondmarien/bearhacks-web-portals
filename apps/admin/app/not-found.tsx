@@ -29,7 +29,7 @@ export default function NotFound() {
         </div>
         <Link
           href="/"
-          className="inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-pill) border border-black/50 bg-white px-6 py-3 text-sm font-semibold text-black no-underline shadow-[0_1px_4px_0_rgba(0,0,0,0.25)] hover:bg-(--bearhacks-cream)"
+          className="inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-pill) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-6 py-3 text-sm font-semibold text-(--bearhacks-fg) no-underline shadow-(--bearhacks-shadow-card) hover:bg-(--bearhacks-cream)"
         >
           Go home
         </Link>

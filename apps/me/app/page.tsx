@@ -250,7 +250,7 @@ export default function HomePage() {
         {profileQuery.isLoading ? (
           <p className="text-sm text-(--bearhacks-muted)">Loading profile…</p>
         ) : profileQuery.isError ? (
-          <p className="text-sm text-red-700">
+          <p className="text-sm text-(--bearhacks-danger)">
             {profileQuery.error instanceof ApiError
               ? profileQuery.error.message
               : "Failed to load profile"}
@@ -266,7 +266,7 @@ export default function HomePage() {
             <InputField
               label="Display name"
               value={draft.display_name}
-              onChange={(event) =>
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                 setProfileDraft({ ...draft, display_name: event.target.value })
               }
               placeholder="Your name"
@@ -277,7 +277,7 @@ export default function HomePage() {
             <SelectField
               label="Role"
               value={draft.role}
-              onChange={(event) =>
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
                 setProfileDraft({ ...draft, role: event.target.value })
               }
               options={PROFILE_ROLE_OPTIONS}
@@ -286,7 +286,7 @@ export default function HomePage() {
             <TextareaField
               label="Bio"
               value={draft.bio}
-              onChange={(event) =>
+              onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) =>
                 setProfileDraft({ ...draft, bio: event.target.value })
               }
               rows={4}
@@ -296,7 +296,7 @@ export default function HomePage() {
               label="LinkedIn URL"
               type="url"
               value={draft.linkedin_url}
-              onChange={(event) =>
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                 setProfileDraft({ ...draft, linkedin_url: event.target.value })
               }
               placeholder="https://linkedin.com/in/you"
@@ -305,7 +305,7 @@ export default function HomePage() {
               label="GitHub URL"
               type="url"
               value={draft.github_url}
-              onChange={(event) =>
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                 setProfileDraft({ ...draft, github_url: event.target.value })
               }
               placeholder="https://github.com/you"
@@ -314,7 +314,7 @@ export default function HomePage() {
               label="Personal link"
               type="url"
               value={draft.personal_url}
-              onChange={(event) =>
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                 setProfileDraft({ ...draft, personal_url: event.target.value })
               }
               placeholder="https://yourportfolio.com"
@@ -363,7 +363,7 @@ export default function HomePage() {
         {favouritesQuery.isLoading ? (
           <p className="text-sm text-(--bearhacks-muted)">Loading favourites…</p>
         ) : favouritesQuery.isError ? (
-          <p className="text-sm text-red-700">
+          <p className="text-sm text-(--bearhacks-danger)">
             {favouritesQuery.error instanceof ApiError
               ? favouritesQuery.error.message
               : "Failed to load favourites"}

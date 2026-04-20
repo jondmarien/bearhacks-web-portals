@@ -517,7 +517,7 @@ export default function AdminQrPage() {
               {printerStatusQuery.isLoading ? (
                 <p className="mt-3 text-sm text-(--bearhacks-muted)">Checking printer server…</p>
               ) : printerStatusQuery.isError ? (
-                <p className="mt-3 text-sm text-red-700">
+                <p className="mt-3 text-sm text-(--bearhacks-danger)">
                   {printerStatusQuery.error instanceof ApiError
                     ? printerStatusQuery.error.message
                     : "Failed to load printer status"}
@@ -610,7 +610,7 @@ export default function AdminQrPage() {
                     min={1}
                     max={200}
                     value={generateCount}
-                    onChange={(event) => setGenerateCount(event.target.value)}
+                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => setGenerateCount(event.target.value)}
                   />
                 </div>
                 <div className="flex w-full gap-2 sm:w-auto">
@@ -691,7 +691,7 @@ export default function AdminQrPage() {
                     label="QR ids (comma separated)"
                     id="print-ids"
                     value={printIdsInput}
-                    onChange={(event) => setPrintIdsInput(event.target.value)}
+                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => setPrintIdsInput(event.target.value)}
                     placeholder="uuid-1, uuid-2"
                   />
                   <InputField
@@ -701,7 +701,7 @@ export default function AdminQrPage() {
                     min={1}
                     max={200}
                     value={printCount}
-                    onChange={(event) => setPrintCount(event.target.value)}
+                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => setPrintCount(event.target.value)}
                   />
                 </div>
                 <div>
@@ -758,7 +758,7 @@ export default function AdminQrPage() {
                           })();
                         }}
                         disabled={selectedRowIds.size === 0 || bulkDeleteMutation.isPending}
-                        className="text-red-700"
+                        className="text-(--bearhacks-danger)"
                       >
                         {bulkDeleteMutation.isPending
                           ? `Deleting ${selectedRowIds.size}…`
@@ -779,7 +779,7 @@ export default function AdminQrPage() {
                     <Button
                       variant="ghost"
                       onClick={() => setIsBulkMode(true)}
-                      className="text-red-700"
+                      className="text-(--bearhacks-danger)"
                     >
                       Bulk delete
                     </Button>
@@ -841,7 +841,7 @@ export default function AdminQrPage() {
                     label="Claimed by (profile id, optional)"
                     id="claimed-by"
                     value={claimedBySearch}
-                    onChange={(event) => setClaimedBySearch(event.target.value)}
+                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => setClaimedBySearch(event.target.value)}
                     placeholder="Filter specific claimer id"
                   />
                 </div>
@@ -849,7 +849,7 @@ export default function AdminQrPage() {
 
               {qrQuery.isLoading && <p className="mt-3 text-sm text-(--bearhacks-muted)">Loading QR list…</p>}
               {qrQuery.isError && (
-                <p className="mt-3 text-sm text-red-700">
+                <p className="mt-3 text-sm text-(--bearhacks-danger)">
                   {qrQuery.error instanceof ApiError ? qrQuery.error.message : "Failed to load QR list"}
                 </p>
               )}
@@ -1039,7 +1039,7 @@ export default function AdminQrPage() {
                                     deleteMutation.isPending ||
                                     bulkDeleteMutation.isPending
                                   }
-                                  className="px-2! text-red-700"
+                                  className="px-2! text-(--bearhacks-danger)"
                                 >
                                   {deletingThisRow ? "Deleting…" : "Delete"}
                                 </Button>
@@ -1197,7 +1197,7 @@ export default function AdminQrPage() {
                           </Button>
                           <Button
                             variant="ghost"
-                            className="text-red-700"
+                            className="text-(--bearhacks-danger)"
                             onClick={() => {
                               if (!canMutate) return;
                               void (async () => {

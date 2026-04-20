@@ -1,15 +1,13 @@
-@import "@bearhacks/config/tokens.css";
+@import "@bearhacks/ui/tokens.css";
 @import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
   --font-sans: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
-  :root {
-    color-scheme: light;
-  }
-
   body {
     font-family: var(--font-sans);
     font-size: var(--bearhacks-text-base);

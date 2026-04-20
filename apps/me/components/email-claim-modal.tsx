@@ -150,7 +150,7 @@ export function EmailClaimModal({
                   placeholder="you@school.edu"
                 />
               </label>
-              {error ? <p className="text-sm text-red-600">{error}</p> : null}
+              {error ? <p className="text-sm text-(--bearhacks-danger)">{error}</p> : null}
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
@@ -198,7 +198,7 @@ export function EmailClaimModal({
                   placeholder="123456"
                 />
               </label>
-              {error ? <p className="text-sm text-red-600">{error}</p> : null}
+              {error ? <p className="text-sm text-(--bearhacks-danger)">{error}</p> : null}
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
                 <button
                   type="button"

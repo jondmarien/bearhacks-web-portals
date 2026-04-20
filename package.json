@@ -8,8 +8,9 @@
     "lint": "bun run lint:me && bun run lint:admin",
     "lint:me": "cd apps/me && bun run lint",
     "lint:admin": "cd apps/admin && bun run lint",
-    "typecheck": "bun run typecheck:me && bun run typecheck:admin",
+    "typecheck": "bun run typecheck:me && bun run typecheck:admin && bun run typecheck:shared",
     "typecheck:me": "cd apps/me && bunx tsc --noEmit",
-    "typecheck:admin": "cd apps/admin && bunx tsc --noEmit"
+    "typecheck:admin": "cd apps/admin && bunx tsc --noEmit",
+    "typecheck:shared": "cd packages/ui && bunx tsc --noEmit"
   }
 }
