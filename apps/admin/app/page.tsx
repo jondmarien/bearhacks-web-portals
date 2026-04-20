@@ -117,7 +117,7 @@ export default function AdminHome() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link href="/qr" className="no-underline">
           <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
-            <CardTitle>
+            <CardTitle className="min-h-[2lh]">
               QR <span className="bg-(--bearhacks-cream) px-1 rounded-sm">fulfillment</span>
             </CardTitle>
             <CardDescription className="mt-1">
@@ -132,7 +132,7 @@ export default function AdminHome() {
         </Link>
         <Link href="/profiles" className="no-underline">
           <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
-            <CardTitle>
+            <CardTitle className="min-h-[2lh]">
               Profile <span className="bg-(--bearhacks-cream) px-1 rounded-sm">directory</span>
             </CardTitle>
             <CardDescription className="mt-1">
@@ -147,7 +147,7 @@ export default function AdminHome() {
         </Link>
         <Link href="/super-admins" className="no-underline">
           <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
-            <CardTitle>
+            <CardTitle className="min-h-[2lh]">
               Super Admin <span className="bg-(--bearhacks-cream) px-1 rounded-sm">tools</span>
             </CardTitle>
             <CardDescription className="mt-1">
@@ -163,7 +163,7 @@ export default function AdminHome() {
         {isSuperAdminUser(user) ? (
           <Link href="/boba-orders" className="no-underline">
             <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
-              <CardTitle>
+              <CardTitle className="min-h-[2lh]">
                 Boba &amp; Momo <span className="bg-(--bearhacks-cream) px-1 rounded-sm">orders</span>
               </CardTitle>
               <CardDescription className="mt-1">
@@ -181,7 +181,7 @@ export default function AdminHome() {
         {isSuperAdminUser(user) ? (
           <Link href="/boba-payments" className="no-underline">
             <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
-              <CardTitle>
+              <CardTitle className="min-h-[2lh]">
                 Boba &amp; Momo <span className="bg-(--bearhacks-cream) px-1 rounded-sm">payments</span>
               </CardTitle>
               <CardDescription className="mt-1">
