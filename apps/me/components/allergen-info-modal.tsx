@@ -110,12 +110,29 @@ export function AllergenInfoModal({
       if (event.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+
+    // Lock page scroll behind the modal so iOS Safari doesn't let the user
+    // pan the underlying `/boba` page while the sheet is open. Restore the
+    // prior value on close — using `previousOverflow` (not hardcoded "")
+    // keeps any ambient lock from an outer modal intact.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+    };
   }, [open]);
 
+  // Compact trigger keeps the full 44×44 touch target mandated by
+  // `--bearhacks-touch-min` (WCAG 2.5.5 / iOS HIG) — shrinking to h-9 here
+  // would break thumb-reach on phones. `touch-manipulation` disables the
+  // 300ms click-delay Safari still ships on some pages, and
+  // `-webkit-tap-highlight-color:transparent` suppresses the grey iOS flash
+  // in favour of the styled hover/focus state.
   const triggerClasses = compact
-    ? `inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) text-base font-semibold text-(--bearhacks-primary) hover:bg-(--bearhacks-accent) ${triggerClassName}`
-    : `inline-flex w-fit min-h-(--bearhacks-touch-min) cursor-pointer items-center gap-2 rounded-(--bearhacks-radius-pill) border border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 text-sm font-semibold text-(--bearhacks-primary) hover:bg-(--bearhacks-accent) ${triggerClassName}`;
+    ? `inline-flex h-11 w-11 min-h-(--bearhacks-touch-min) min-w-(--bearhacks-touch-min) cursor-pointer items-center justify-center rounded-full border border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) text-lg font-semibold leading-none text-(--bearhacks-primary) touch-manipulation [-webkit-tap-highlight-color:transparent] hover:bg-(--bearhacks-accent) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--bearhacks-focus-ring) ${triggerClassName}`
+    : `inline-flex w-fit min-h-(--bearhacks-touch-min) cursor-pointer items-center gap-2 rounded-(--bearhacks-radius-pill) border border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 text-sm font-semibold text-(--bearhacks-primary) touch-manipulation [-webkit-tap-highlight-color:transparent] hover:bg-(--bearhacks-accent) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--bearhacks-focus-ring) ${triggerClassName}`;
 
   return (
     <>
@@ -143,7 +160,16 @@ export function AllergenInfoModal({
                 if (event.target === event.currentTarget) setOpen(false);
               }}
             >
-              <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-(--bearhacks-radius-lg) border border-(--bearhacks-border) bg-(--bearhacks-surface) shadow-xl sm:max-h-[85vh] sm:rounded-(--bearhacks-radius-lg)">
+              {/*
+                Mobile bottom-sheet: `max-h-[92dvh]` uses the dynamic viewport
+                unit so the sheet shrinks correctly when iOS Safari's URL bar
+                is visible (100vh famously overflows the visible area on iOS
+                until the bar hides). Desktop stays capped at 85dvh.
+
+                `pb-[env(safe-area-inset-bottom)]` pads the scroll region so
+                content doesn't render under the iPhone home indicator.
+              */}
+              <div className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-(--bearhacks-radius-lg) border border-(--bearhacks-border) bg-(--bearhacks-surface) shadow-xl sm:max-h-[85dvh] sm:rounded-(--bearhacks-radius-lg)">
                 <header className="flex items-start justify-between gap-4 border-b border-(--bearhacks-border) px-4 py-3 sm:px-5 sm:py-4">
                   <div>
                     <h2
@@ -167,7 +193,7 @@ export function AllergenInfoModal({
                   </Button>
                 </header>
 
-                <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+                <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5">
                   <Section title="Cross-contact warning">
                     <p className="text-sm text-(--bearhacks-fg)">
                       All drinks are prepared on shared equipment. Trace amounts

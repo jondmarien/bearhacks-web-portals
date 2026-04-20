@@ -110,12 +110,14 @@ export function BobaStatusCard({
     <Card className={cardClassName}>
       {headerAction ? (
         // Top-5 / right-5 matches the Card's `p-5` padding so the action
-        // aligns with the title baseline. `pr-12` reserves room on the
-        // header (h-9 icon + small gap) so long titles never collide with
-        // the slot on narrow mobile widths.
+        // aligns with the title baseline. The button itself is 44×44
+        // (touch-min), so it consumes the right 44px of the CardHeader
+        // width — `pr-16` (64px) reserves that plus a comfortable
+        // 20px breathing gap so long titles never collide on narrow
+        // mobile widths.
         <div className="absolute top-5 right-5 z-10">{headerAction}</div>
       ) : null}
-      <CardHeader className={headerAction ? "pr-12" : ""}>
+      <CardHeader className={headerAction ? "pr-16" : ""}>
         <CardTitle>
           <span className="bg-(--bearhacks-cream) px-1 rounded-sm">Boba &amp; Momo</span> ordering
         </CardTitle>
