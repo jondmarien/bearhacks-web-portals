@@ -21,6 +21,13 @@ type Props = {
   // ``/boba``), the "Edit / Place order" CTA is redundant — the form is
   // literally the next block on screen. Set this to true there.
   hideEditCta?: boolean;
+  /**
+   * Optional slot rendered in the top-right corner of the card. Used on
+   * ``/boba`` to nest the allergens-and-vegan-info trigger inside the
+   * status card itself so it reads as one cohesive top block instead of a
+   * floating action underneath the card.
+   */
+  headerAction?: React.ReactNode;
 };
 
 /**
@@ -33,7 +40,12 @@ type Props = {
  * without spamming the network — the underlying queries already refetch on
  * their own interval.
  */
-export function BobaStatusCard({ isAuthReady, userId, hideEditCta = false }: Props) {
+export function BobaStatusCard({
+  isAuthReady,
+  userId,
+  hideEditCta = false,
+  headerAction,
+}: Props) {
   const windowsQuery = useBobaWindowsQuery();
   const orderQuery = useMyBobaOrderQuery(userId);
   const [, force] = useState(0);
@@ -79,9 +91,14 @@ export function BobaStatusCard({ isAuthReady, userId, hideEditCta = false }: Pro
     status.kind === "open-cancelled" ||
     status.kind === "open-fulfilled";
 
-  const cardClassName = isOpen
-    ? "border-(--bearhacks-accent) shadow-lg ring-2 ring-(--bearhacks-accent)/40"
-    : "";
+  // `relative` so an optional `headerAction` can pin to the top-right corner
+  // without hijacking the header's flex-column layout (long titles still get
+  // the full row width).
+  const cardClassName = `relative ${
+    isOpen
+      ? "border-(--bearhacks-accent) shadow-lg ring-2 ring-(--bearhacks-accent)/40"
+      : ""
+  }`;
 
   // Only surface the "X of Y" line when the active window allows >1 drink
   // (i.e. the dev-test window). Real meal windows are 1/user — no need for
@@ -91,7 +108,14 @@ export function BobaStatusCard({ isAuthReady, userId, hideEditCta = false }: Pro
 
   return (
     <Card className={cardClassName}>
-      <CardHeader>
+      {headerAction ? (
+        // Top-5 / right-5 matches the Card's `p-5` padding so the action
+        // aligns with the title baseline. `pr-12` reserves room on the
+        // header (h-9 icon + small gap) so long titles never collide with
+        // the slot on narrow mobile widths.
+        <div className="absolute top-5 right-5 z-10">{headerAction}</div>
+      ) : null}
+      <CardHeader className={headerAction ? "pr-12" : ""}>
         <CardTitle>
           <span className="bg-(--bearhacks-cream) px-1 rounded-sm">Boba &amp; Momo</span> ordering
         </CardTitle>

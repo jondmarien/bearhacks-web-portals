@@ -238,13 +238,14 @@ export default function BobaOrderPage() {
         tone="marketing"
       />
 
-      <BobaStatusCard isAuthReady userId={userId} hideEditCta />
-
-      {activeWindow ? (
-        <div className="flex justify-end">
-          <AllergenInfoModal />
-        </div>
-      ) : null}
+      <BobaStatusCard
+        isAuthReady
+        userId={userId}
+        hideEditCta
+        headerAction={
+          activeWindow ? <AllergenInfoModal compact /> : null
+        }
+      />
 
       {menuQuery.isError ? (
         <Card>

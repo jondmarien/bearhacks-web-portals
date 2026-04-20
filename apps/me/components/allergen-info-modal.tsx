@@ -89,9 +89,19 @@ const COMMON_ALLERGENS = [
 type Props = {
   /** Optional className applied to the trigger button. */
   triggerClassName?: string;
+  /**
+   * When true, render the trigger as a 32×32 ⓘ icon-only button instead of
+   * the full "Allergens & vegan info" pill. Used when the trigger lives
+   * inside the Boba & Momo status card's top-right corner, where the full
+   * pill would collide with the card title on narrow screens.
+   */
+  compact?: boolean;
 };
 
-export function AllergenInfoModal({ triggerClassName = "" }: Props) {
+export function AllergenInfoModal({
+  triggerClassName = "",
+  compact = false,
+}: Props) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -103,17 +113,23 @@ export function AllergenInfoModal({ triggerClassName = "" }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  const triggerClasses = compact
+    ? `inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) text-base font-semibold text-(--bearhacks-primary) hover:bg-(--bearhacks-accent) ${triggerClassName}`
+    : `inline-flex w-fit min-h-(--bearhacks-touch-min) cursor-pointer items-center gap-2 rounded-(--bearhacks-radius-pill) border border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 text-sm font-semibold text-(--bearhacks-primary) hover:bg-(--bearhacks-accent) ${triggerClassName}`;
+
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`inline-flex w-fit min-h-(--bearhacks-touch-min) cursor-pointer items-center gap-2 rounded-(--bearhacks-radius-pill) border border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 text-sm font-semibold text-(--bearhacks-primary) hover:bg-(--bearhacks-accent) ${triggerClassName}`}
+        className={triggerClasses}
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-label={compact ? "Allergens & vegan info" : undefined}
+        title={compact ? "Allergens & vegan info" : undefined}
       >
         <span aria-hidden="true">ⓘ</span>
-        Allergens & vegan info
+        {compact ? null : "Allergens & vegan info"}
       </button>
 
       {open && typeof document !== "undefined"
