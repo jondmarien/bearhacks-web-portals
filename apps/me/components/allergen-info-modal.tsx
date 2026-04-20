@@ -234,11 +234,14 @@ function VeganBadge({ value }: { value: "yes" | "with-substitution" | "no" }) {
   const label =
     value === "yes" ? "Vegan" : value === "with-substitution" ? "Vegan w/ sub" : "Not vegan";
   // Fixed width + centered + nowrap so "Vegan", "Vegan w/ sub", and "Not vegan"
-  // render as identically-sized pills across the Vegan column (the longest
-  // label, "VEGAN W/ SUB" at text-[10px] uppercase, fits in 6.25rem).
+  // render as identically-sized pills across the Vegan column on both desktop
+  // and mobile. The longest label "VEGAN W/ SUB" at text-[10px] uppercase
+  // tracking-[0.06em] with px-2 needs ~6.5rem of room; 7rem gives breathing
+  // space. The previous `w-25-0` was a typo (not a real Tailwind class), so
+  // the utility was dropped silently and pills fell back to content width.
   return (
     <span
-      className={`inline-flex w-25-0 items-center justify-center whitespace-nowrap rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] ${cls}`}
+      className={`inline-flex w-28 items-center justify-center whitespace-nowrap rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] ${cls}`}
     >
       {label}
     </span>
