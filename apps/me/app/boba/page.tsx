@@ -182,8 +182,15 @@ export default function BobaOrderPage() {
   const placedMomosCount = myOrderQuery.data?.placed_momos ?? 0;
   const maxDrinks = myOrderQuery.data?.max_drinks ?? 1;
   const maxMomos = myOrderQuery.data?.max_momos ?? 1;
-  const canPlaceDrink = placedDrinksCount < maxDrinks;
-  const canPlaceMomo = placedMomosCount < maxMomos;
+  // True unless the backend enforces a combined cap and it's already hit.
+  // Stays `true` on real event windows (per-kind only) so "1 drink + 1 momo"
+  // still works after one of the two is placed. On the dev-test window it
+  // short-circuits the per-kind gates once `placed_count >= max_orders`, so
+  // the form doesn't render toggles that every submit would immediately 409.
+  const sharedCapActive = myOrderQuery.data?.shared_cap_active ?? false;
+  const withinSharedCap = !sharedCapActive || placedCount < maxOrders;
+  const canPlaceDrink = placedDrinksCount < maxDrinks && withinSharedCap;
+  const canPlaceMomo = placedMomosCount < maxMomos && withinSharedCap;
   const canPlaceAnything = canPlaceDrink || canPlaceMomo;
 
   const [editTarget, setEditTarget] = useState<EditTarget>(null);

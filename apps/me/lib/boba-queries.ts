@@ -151,6 +151,14 @@ export type MyOrderResponse = {
    * matches ``max_orders`` for the dev-test window. One momo order == 5 momos.
    */
   max_momos: number;
+  /**
+   * True iff the backend enforces the combined drink+momo cap for the active
+   * window. Real event windows use per-kind gates only (1 drink + 1 momo) and
+   * skip the shared ceiling; the dev-test window runs both gates. The
+   * frontend ANDs this into its "can place anything" check so per-kind
+   * headroom cannot silently bypass an already-exhausted shared cap.
+   */
+  shared_cap_active: boolean;
   active_window_id: string | null;
   /** Bundled payment for the active window, or ``null`` if nothing placed. */
   payment: BobaPayment | null;
