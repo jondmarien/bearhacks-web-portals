@@ -735,11 +735,11 @@ function PrepSummaryCard({ query, windowLabel }: PrepSummaryCardProps) {
               <p className="text-xs font-semibold uppercase tracking-[0.1rem] text-(--bearhacks-text-marketing)/70">
                 Topping totals
               </p>
-              <ul className="mt-2 flex flex-wrap gap-2 text-xs text-(--bearhacks-fg)">
+              <ul className="mt-2 flex flex-wrap gap-2 text-xs">
                 {query.data.topping_totals.map((t) => (
                   <li
                     key={t.topping_id}
-                    className="rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent-soft) px-3 py-1"
+                    className="rounded-(--bearhacks-radius-pill) border border-(--bearhacks-border) bg-(--bearhacks-accent-soft) px-3 py-1 font-semibold text-(--bearhacks-primary)"
                   >
                     {t.label} × {t.count}
                   </li>

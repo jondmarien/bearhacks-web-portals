@@ -675,33 +675,41 @@ function PaymentsTableCard({
       },
       {
         id: "actions",
-        header: "",
+        header: "Actions",
         cell: (ctx) => {
           const o = ctx.row.original;
+          // Fixed-width column (see column <col> / header styling) keeps the
+          // Confirm/Refund pair from wrapping into a tall stack on narrower
+          // screens and aligns all three states (Confirm+Refund, Undo,
+          // disabled) against the same right edge.
           if (o.status === "confirmed") {
             return (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => void onUnconfirm(o)}
-              >
-                Undo
-              </Button>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => void onUnconfirm(o)}
+                >
+                  Undo
+                </Button>
+              </div>
             );
           }
           if (o.status === "refunded") {
             return (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => void onUnrefund(o)}
-              >
-                Undo
-              </Button>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => void onUnrefund(o)}
+                >
+                  Undo
+                </Button>
+              </div>
             );
           }
           return (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex items-center justify-end gap-1.5">
               <Button
                 type="button"
                 variant="pill"
@@ -790,11 +798,16 @@ function PaymentsTableCard({
                     {hg.headers.map((header) => {
                       const canSort = header.column.getCanSort();
                       const sort = header.column.getIsSorted();
+                      const isActions = header.column.id === "actions";
                       return (
                         <th
                           key={header.id}
                           scope="col"
-                          className="px-3 py-3 font-medium text-(--bearhacks-fg)"
+                          className={`px-3 py-3 font-medium text-(--bearhacks-fg) ${
+                            isActions
+                              ? "w-[200px] min-w-[200px] text-right"
+                              : ""
+                          }`}
                         >
                           {header.isPlaceholder ? null : canSort ? (
                             <button
@@ -828,11 +841,24 @@ function PaymentsTableCard({
                     key={row.id}
                     className="border-b border-(--bearhacks-border) last:border-0 align-top"
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-3 py-3">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
+                    {row.getVisibleCells().map((cell) => {
+                      const isActions = cell.column.id === "actions";
+                      return (
+                        <td
+                          key={cell.id}
+                          className={`px-3 py-3 ${
+                            isActions
+                              ? "w-[200px] min-w-[200px] text-right align-middle"
+                              : ""
+                          }`}
+                        >
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
