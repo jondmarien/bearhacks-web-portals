@@ -67,7 +67,8 @@
    * is the label color that sits on that fill. Split because dark mode needs
    * lighter error text but still wants a dark, high-contrast button fill. */
   --bearhacks-danger: #941b0c;
-  --bearhacks-danger-soft: #fde2dd;
+  --bearhacks-danger-soft: #ffeae4;
+  --bearhacks-danger-border: #f5b5ae;
   --bearhacks-danger-fill: #941b0c;
   --bearhacks-on-danger: #ffffff;
   --bearhacks-warning-bg: #fef3c7;
@@ -76,6 +77,9 @@
   --bearhacks-success-bg: #dcfce7;
   --bearhacks-success-fg: #14532d;
   --bearhacks-success-border: #86efac;
+  --bearhacks-info-bg: #e0f2fe;
+  --bearhacks-info-fg: #0c4a6e;
+  --bearhacks-info-border: #7dd3fc;
 
   /* Elevation */
   --bearhacks-shadow-card: 0 1px 2px rgba(29, 50, 100, 0.06),
@@ -164,6 +168,7 @@
    * destructive button fill stays dark red so white labels remain readable. */
   --bearhacks-danger: #ffc8bf;
   --bearhacks-danger-soft: #3a1a1a;
+  --bearhacks-danger-border: #5a2a1e;
   --bearhacks-danger-fill: #941b0c;
   --bearhacks-on-danger: #ffffff;
   --bearhacks-warning-bg: #3b2a12;
@@ -172,6 +177,9 @@
   --bearhacks-success-bg: #13301f;
   --bearhacks-success-fg: #b8ecce;
   --bearhacks-success-border: #1f4a30;
+  --bearhacks-info-bg: #0f2943;
+  --bearhacks-info-fg: #bae6fd;
+  --bearhacks-info-border: #1e4a6e;
 
   /*
    * Elevation — shadows don't read on dark. The token stays so existing

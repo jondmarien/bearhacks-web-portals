@@ -194,9 +194,9 @@ export default function AdminProfileEditPage() {
     return (
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-6 py-10">
         <PageHeader title="Edit profile" tone="marketing" backHref="/profiles" showBack />
-        <Card className="border-amber-200 bg-amber-50">
-          <CardTitle className="text-amber-900">Super-admin access required</CardTitle>
-          <CardDescription className="mt-1 text-amber-900">
+        <Card className="border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg)">
+          <CardTitle className="text-(--bearhacks-warning-fg)">Super-admin access required</CardTitle>
+          <CardDescription className="mt-1 text-(--bearhacks-warning-fg)">
             Editing profiles is limited to Super Admins. Ask a Super Admin to grant
             your account access, then sign out and back in.
           </CardDescription>

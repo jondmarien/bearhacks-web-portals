@@ -191,6 +191,11 @@ const pairs = [
   // Banner trios
   { fg: "--bearhacks-warning-fg", bg: "--bearhacks-warning-bg", role: "body" },
   { fg: "--bearhacks-success-fg", bg: "--bearhacks-success-bg", role: "body" },
+  { fg: "--bearhacks-info-fg", bg: "--bearhacks-info-bg", role: "body" },
+  { fg: "--bearhacks-danger", bg: "--bearhacks-danger-soft", role: "body" },
+
+  // Banner borders are decorative framing (not interactive UI controls), so
+  // WCAG 1.4.11 does not require 3:1. Intentionally omitted from the audit.
 
   // Non-text contrast (borders / focus ring vs every nearby surface) — role "ui"
   // Focus ring is only evaluated on bg/surfaces because :focus-visible sets

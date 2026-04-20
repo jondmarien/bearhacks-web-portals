@@ -245,11 +245,11 @@ export default function AdminSuperAdminsPage() {
       )}
 
       {staff && !isSuper && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardTitle className="text-amber-900">
+        <Card className="border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg)">
+          <CardTitle className="text-(--bearhacks-warning-fg)">
             Super Admin access required
           </CardTitle>
-          <CardDescription className="mt-1 text-amber-900">
+          <CardDescription className="mt-1 text-(--bearhacks-warning-fg)">
             This page is limited to Super Admins. Ask a Super Admin to grant
             your account access, then sign out and back in.
           </CardDescription>
@@ -416,14 +416,14 @@ export default function AdminSuperAdminsPage() {
                             <td className="px-3 py-3">
                               {isPending ? (
                                 <span
-                                  className="inline-flex items-center rounded border border-sky-300 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-900"
+                                  className="inline-flex items-center rounded border border-(--bearhacks-info-border) bg-(--bearhacks-info-bg) px-2 py-0.5 text-xs font-medium text-(--bearhacks-info-fg)"
                                   title="Pre-approved on the allowlist. They'll get the role on their first Discord sign-in."
                                 >
                                   Pending login
                                 </span>
                               ) : drift ? (
                                 <span
-                                  className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900"
+                                  className="inline-flex items-center rounded border border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg) px-2 py-0.5 text-xs font-medium text-(--bearhacks-warning-fg)"
                                   title={`JWT role: ${row.has_jwt_role ? "yes" : "no"} · Allowlist: ${row.on_allowlist ? "yes" : "no"}`}
                                 >
                                   Drift
@@ -501,14 +501,14 @@ export default function AdminSuperAdminsPage() {
                           ) : null}
                           {isPending ? (
                             <span
-                              className="inline-flex items-center rounded border border-sky-300 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-900"
+                              className="inline-flex items-center rounded border border-(--bearhacks-info-border) bg-(--bearhacks-info-bg) px-2 py-0.5 text-xs font-medium text-(--bearhacks-info-fg)"
                               title="Pre-approved on the allowlist. They'll get the role on their first Discord sign-in."
                             >
                               Pending login
                             </span>
                           ) : drift ? (
                             <span
-                              className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900"
+                              className="inline-flex items-center rounded border border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg) px-2 py-0.5 text-xs font-medium text-(--bearhacks-warning-fg)"
                               title={`JWT role: ${row.has_jwt_role ? "yes" : "no"} · Allowlist: ${row.on_allowlist ? "yes" : "no"}`}
                             >
                               Drift

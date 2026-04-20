@@ -463,9 +463,9 @@ export default function AdminQrPage() {
         />
 
         {!isStaff && (
-          <Card className="border-amber-200 bg-amber-50 text-amber-950">
-            <CardTitle className="text-amber-900">Staff access required</CardTitle>
-            <CardDescription className="mt-1 text-amber-900">
+          <Card className="border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg) text-(--bearhacks-warning-fg)">
+            <CardTitle className="text-(--bearhacks-warning-fg)">Staff access required</CardTitle>
+            <CardDescription className="mt-1 text-(--bearhacks-warning-fg)">
               Sign in with a staff account to use the QR tools. The API enforces
               admin checks on every action regardless of UI state.
             </CardDescription>
@@ -829,7 +829,7 @@ export default function AdminQrPage() {
                     onChange={(event) =>
                       setStatusFilter(event.target.value as "all" | "claimed" | "unclaimed")
                     }
-                    className="min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) focus:border-(--bearhacks-primary) focus:outline-none"
+                    className="min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) focus:border-(--bearhacks-focus-ring) focus:outline-none"
                   >
                     <option value="all">All</option>
                     <option value="claimed">Claimed</option>

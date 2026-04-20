@@ -227,10 +227,10 @@ function Section({
 function VeganBadge({ value }: { value: "yes" | "with-substitution" | "no" }) {
   const cls =
     value === "yes"
-      ? "bg-emerald-100 text-emerald-900 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:border-emerald-900"
+      ? "bg-(--bearhacks-success-bg) text-(--bearhacks-success-fg) border border-(--bearhacks-success-border)"
       : value === "with-substitution"
-        ? "bg-amber-100 text-amber-900 border border-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:border-amber-900"
-        : "bg-red-100 text-red-900 border border-red-200 dark:bg-red-950 dark:text-red-100 dark:border-red-900";
+        ? "bg-(--bearhacks-warning-bg) text-(--bearhacks-warning-fg) border border-(--bearhacks-warning-border)"
+        : "bg-(--bearhacks-danger-soft) text-(--bearhacks-danger) border border-(--bearhacks-danger-border)";
   const label =
     value === "yes" ? "Vegan" : value === "with-substitution" ? "Vegan w/ sub" : "Not vegan";
   // Fixed width + centered + nowrap so "Vegan", "Vegan w/ sub", and "Not vegan"

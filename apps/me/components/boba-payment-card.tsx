@@ -170,7 +170,7 @@ export function BobaPaymentCard({
               onChange={(e) => setReference(e.target.value)}
               maxLength={120}
               placeholder='e.g. "Sam — Sat dinner"'
-              className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-primary) focus:outline-none"
+              className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none"
             />
             <Button
               type="button"
@@ -229,9 +229,9 @@ export function BobaPaymentCard({
 function paymentToneClass(status: BobaPayment["status"]): string {
   switch (status) {
     case "confirmed":
-      return "border-emerald-300 ring-1 ring-emerald-200/60";
+      return "border-(--bearhacks-success-border) ring-1 ring-(--bearhacks-success-border)/60";
     case "submitted":
-      return "border-amber-300 ring-1 ring-amber-200/60";
+      return "border-(--bearhacks-warning-border) ring-1 ring-(--bearhacks-warning-border)/60";
     case "refunded":
       return "border-(--bearhacks-border) opacity-90";
     case "unpaid":
@@ -248,11 +248,11 @@ function PaymentStatusPill({ status }: { status: BobaPayment["status"] }) {
     },
     submitted: {
       label: "Waiting confirmation",
-      cls: "bg-amber-100 text-amber-900 border border-amber-200",
+      cls: "bg-(--bearhacks-warning-bg) text-(--bearhacks-warning-fg) border border-(--bearhacks-warning-border)",
     },
     confirmed: {
       label: "Paid",
-      cls: "bg-emerald-100 text-emerald-900 border border-emerald-200",
+      cls: "bg-(--bearhacks-success-bg) text-(--bearhacks-success-fg) border border-(--bearhacks-success-border)",
     },
     refunded: {
       label: "Refunded",

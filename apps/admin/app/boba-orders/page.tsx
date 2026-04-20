@@ -263,11 +263,11 @@ export default function AdminBobaOrdersPage() {
       )}
 
       {staff && !isSuper && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardTitle className="text-amber-900">
+        <Card className="border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg)">
+          <CardTitle className="text-(--bearhacks-warning-fg)">
             Super Admin access required
           </CardTitle>
-          <CardDescription className="mt-1 text-amber-900">
+          <CardDescription className="mt-1 text-(--bearhacks-warning-fg)">
             This console is limited to Super Admins.
           </CardDescription>
         </Card>
@@ -409,7 +409,7 @@ function DevTestWindowToggleCard({
               <span
                 className={
                   isOn
-                    ? "font-semibold text-emerald-700"
+                    ? "font-semibold text-(--bearhacks-success-fg)"
                     : "font-semibold text-(--bearhacks-muted)"
                 }
               >
@@ -1074,7 +1074,7 @@ function OrdersTableCard({
             <span
               className={`inline-flex items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-xs font-semibold ${
                 isMomo
-                  ? "bg-amber-100 text-amber-900 border border-amber-200"
+                  ? "bg-(--bearhacks-warning-bg) text-(--bearhacks-warning-fg) border border-(--bearhacks-warning-border)"
                   : "bg-(--bearhacks-accent-soft) text-(--bearhacks-primary) border border-(--bearhacks-border)"
               }`}
             >
@@ -1431,7 +1431,7 @@ function OrdersTableCard({
                     <span
                       className={`inline-flex items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-xs font-semibold ${
                         isMomo
-                          ? "bg-amber-100 text-amber-900 border border-amber-200"
+                          ? "bg-(--bearhacks-warning-bg) text-(--bearhacks-warning-fg) border border-(--bearhacks-warning-border)"
                           : "bg-(--bearhacks-accent-soft) text-(--bearhacks-primary) border border-(--bearhacks-border)"
                       }`}
                     >
@@ -1525,7 +1525,7 @@ function FilterField({ label, htmlFor, children }: FilterFieldProps) {
 }
 
 const inputClasses =
-  "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-primary) focus:outline-none";
+  "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none";
 
 const selectClasses =
-  "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) focus:border-(--bearhacks-primary) focus:outline-none";
+  "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) focus:border-(--bearhacks-focus-ring) focus:outline-none";

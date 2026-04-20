@@ -60,8 +60,9 @@ const STATUS_BADGE_CLASSES: Record<PaymentStatus, string> = {
   unpaid:
     "bg-(--bearhacks-surface-alt) text-(--bearhacks-muted) border border-(--bearhacks-border)",
   submitted:
-    "bg-amber-100 text-amber-900 border border-amber-200",
-  confirmed: "bg-emerald-100 text-emerald-900 border border-emerald-200",
+    "bg-(--bearhacks-warning-bg) text-(--bearhacks-warning-fg) border border-(--bearhacks-warning-border)",
+  confirmed:
+    "bg-(--bearhacks-success-bg) text-(--bearhacks-success-fg) border border-(--bearhacks-success-border)",
   refunded:
     "bg-(--bearhacks-surface-alt) text-(--bearhacks-muted) border border-(--bearhacks-border)",
 };
@@ -142,11 +143,11 @@ export default function AdminBobaPaymentsPage() {
       )}
 
       {staff && !isSuper && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardTitle className="text-amber-900">
+        <Card className="border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg)">
+          <CardTitle className="text-(--bearhacks-warning-fg)">
             Super Admin access required
           </CardTitle>
-          <CardDescription className="mt-1 text-amber-900">
+          <CardDescription className="mt-1 text-(--bearhacks-warning-fg)">
             This console is limited to Super Admins.
           </CardDescription>
         </Card>
@@ -905,7 +906,7 @@ function FilterField({ label, htmlFor, children }: FilterFieldProps) {
 }
 
 const inputClasses =
-  "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-primary) focus:outline-none";
+  "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none";
 
 const selectClasses =
-  "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) focus:border-(--bearhacks-primary) focus:outline-none";
+  "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) focus:border-(--bearhacks-focus-ring) focus:outline-none";

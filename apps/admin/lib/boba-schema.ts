@@ -24,7 +24,7 @@ export const STATUS_BADGE_CLASSES: Record<BobaStatus, string> = {
   cancelled:
     "bg-(--bearhacks-surface-alt) text-(--bearhacks-muted) border border-(--bearhacks-border)",
   fulfilled:
-    "bg-emerald-100 text-emerald-900 border border-emerald-200",
+    "bg-(--bearhacks-success-bg) text-(--bearhacks-success-fg) border border-(--bearhacks-success-border)",
 };
 
 export const adminFilterSchema = z.object({

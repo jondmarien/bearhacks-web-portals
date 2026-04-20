@@ -118,9 +118,9 @@ export default function AdminProfilesPage() {
       )}
 
       {staff && !isSuper && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardTitle className="text-amber-900">Super-admin access required</CardTitle>
-          <CardDescription className="mt-1 text-amber-900">
+        <Card className="border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg)">
+          <CardTitle className="text-(--bearhacks-warning-fg)">Super-admin access required</CardTitle>
+          <CardDescription className="mt-1 text-(--bearhacks-warning-fg)">
             This page is limited to Super Admins. Ask a Super Admin to grant your
             account access, then sign out and back in.
           </CardDescription>
