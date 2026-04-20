@@ -48,7 +48,7 @@ export default function BobaOrderPage() {
   const userId = auth?.user?.id ?? null;
   const confirm = useConfirm();
 
-  useDocumentTitle("Boba ordering");
+  useDocumentTitle("Boba & Momo ordering");
 
   const menuQuery = useBobaMenuQuery();
   const windowsQuery = useBobaWindowsQuery();
@@ -109,7 +109,7 @@ export default function BobaOrderPage() {
   if (!userId) {
     return (
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-8">
-        <PageHeader title="Boba ordering" showBack backHref="/" />
+        <PageHeader title="Boba & Momo ordering" showBack backHref="/" />
         <Card>
           <CardHeader>
             <CardTitle>Sign in to order</CardTitle>
@@ -127,7 +127,7 @@ export default function BobaOrderPage() {
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-8">
       <PageHeader
-        title="Boba ordering"
+        title="Boba & Momo ordering"
         subtitle={
           maxOrders > 1
             ? `Up to ${maxOrders} drinks/momos per hacker for this window. Edit or cancel until the window closes.`

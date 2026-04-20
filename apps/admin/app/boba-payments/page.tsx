@@ -82,7 +82,7 @@ const DEFAULT_FILTER: FilterValues = {
 export default function AdminBobaPaymentsPage() {
   const supabase = useSupabase();
   const confirm = useConfirm();
-  useDocumentTitle("Boba payments");
+  useDocumentTitle("Boba & Momo payments");
 
   const [user, setUser] = useState<User | null>(null);
   const [filters, setFilters] = useState<FilterValues>(DEFAULT_FILTER);
@@ -126,7 +126,7 @@ export default function AdminBobaPaymentsPage() {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
       <PageHeader
-        title="Boba payments"
+        title="Boba & Momo payments"
         tone="marketing"
         subtitle="Per-hacker × meal-window e-transfer ledger. Confirm, refund, or undo confirmations."
         backHref="/"

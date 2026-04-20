@@ -81,7 +81,7 @@ export default function AdminBobaOrdersPage() {
   const supabase = useSupabase();
   const client = useApiClient();
   const queryClient = useQueryClient();
-  useDocumentTitle("Boba orders");
+  useDocumentTitle("Boba & Momo orders");
 
   const [user, setUser] = useState<User | null>(null);
   const [filters, setFilters] = useState<FilterValues>(DEFAULT_FILTER);
@@ -235,7 +235,7 @@ export default function AdminBobaOrdersPage() {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
       <PageHeader
-        title="Boba orders"
+        title="Boba & Momo orders"
         tone="marketing"
         subtitle="Live food-team console — prep summary, pickup list, and full order audit per meal window."
         backHref="/"

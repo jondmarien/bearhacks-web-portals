@@ -93,7 +93,7 @@ export function BobaStatusCard({ isAuthReady, userId, hideEditCta = false }: Pro
     <Card className={cardClassName}>
       <CardHeader>
         <CardTitle>
-          <span className="bg-(--bearhacks-cream) px-1 rounded-sm">Boba</span> ordering
+          <span className="bg-(--bearhacks-cream) px-1 rounded-sm">Boba &amp; Momo</span> ordering
         </CardTitle>
         <CardDescription>
           Pre-order your drink during meal windows so the food team can batch

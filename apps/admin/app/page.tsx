@@ -103,74 +103,85 @@ export default function AdminHome() {
         }
       />
 
+      {/*
+       * Admin shortcut grid.
+       *
+       * Layout contract: every card uses the same 3-part column — title,
+       * description, CTA — with the CTA pinned to the bottom of the card via
+       * `mt-auto`. `h-full` makes every card fill its grid row so the CTAs in
+       * the same row align regardless of description length (otherwise the
+       * card with the shortest copy surfaces its button higher than siblings).
+       * CTAs are `flex w-full justify-center` so they all render at the same
+       * width, not sized-to-content.
+       */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link href="/qr" className="no-underline">
-          <Card className="h-full transition-shadow hover:shadow-lg">
+          <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
             <CardTitle>
               QR <span className="bg-(--bearhacks-cream) px-1 rounded-sm">fulfillment</span>
             </CardTitle>
             <CardDescription className="mt-1">
               Generate, search, reprint, and inspect attendee QR codes.
             </CardDescription>
-            <span className="mt-4 inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+            <span className="mt-auto flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
               Open QR tools →
             </span>
           </Card>
         </Link>
         <Link href="/profiles" className="no-underline">
-          <Card className="h-full transition-shadow hover:shadow-lg">
+          <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
             <CardTitle>
               Profile <span className="bg-(--bearhacks-cream) px-1 rounded-sm">directory</span>
             </CardTitle>
             <CardDescription className="mt-1">
               Search and edit attendee profiles (super-admin only).
             </CardDescription>
-            <span className="mt-4 inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+            <span className="mt-auto flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
               Open profiles →
             </span>
           </Card>
         </Link>
         <Link href="/super-admins" className="no-underline">
-          <Card className="h-full transition-shadow hover:shadow-lg">
+          <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
             <CardTitle>
               Super Admin <span className="bg-(--bearhacks-cream) px-1 rounded-sm">tools</span>
-            </CardTitle>  
+            </CardTitle>
             <CardDescription className="mt-1">
               Grant or revoke Super Admin access by Discord email.
             </CardDescription>
-            <span className="mt-4 inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+            <span className="mt-auto flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
               Open super-admin tools →
             </span>
           </Card>
         </Link>
         {isSuperAdminUser(user) ? (
           <Link href="/boba-orders" className="no-underline">
-            <Card className="h-full transition-shadow hover:shadow-lg">
+            <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
               <CardTitle>
-                Boba <span className="bg-(--bearhacks-cream) px-1 rounded-sm">orders</span>
+                Boba &amp; Momo <span className="bg-(--bearhacks-cream) px-1 rounded-sm">orders</span>
               </CardTitle>
               <CardDescription className="mt-1">
                 Live order list, prep summary, pickup list, and CSV export per
                 meal window.
               </CardDescription>
-              <span className="mt-4 inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
-                Open boba orders →
+              <span className="mt-auto flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+                Open boba &amp; momo orders →
               </span>
             </Card>
           </Link>
         ) : null}
         {isSuperAdminUser(user) ? (
           <Link href="/boba-payments" className="no-underline">
-            <Card className="h-full transition-shadow hover:shadow-lg">
+            <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
               <CardTitle>
-                Boba <span className="bg-(--bearhacks-cream) px-1 rounded-sm">payments</span>
+                Boba &amp; Momo <span className="bg-(--bearhacks-cream) px-1 rounded-sm">payments</span>
               </CardTitle>
               <CardDescription className="mt-1">
                 E-transfer ledger per hacker × meal window. Confirm, refund,
                 or undo confirmations.
               </CardDescription>
-              <span className="mt-4 inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
-                Open boba payments →
+              <span className="mt-auto flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+                Open boba &amp; momo payments →
               </span>
             </Card>
           </Link>
