@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
+import { BobaStatusCard } from "@/components/boba-status-card";
 import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -235,6 +236,8 @@ export default function HomePage() {
           </Button>
         </div>
       </div>
+
+      <BobaStatusCard isAuthReady={Boolean(auth?.isAuthReady)} userId={userId} />
 
       <Card>
         <CardHeader>

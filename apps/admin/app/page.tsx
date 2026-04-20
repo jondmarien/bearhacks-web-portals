@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { createStructuredLogger } from "@/lib/structured-logging";
+import { isSuperAdminUser } from "@/lib/supabase-role";
 import { useDocumentTitle } from "@/lib/use-document-title";
 
 const log = createStructuredLogger("admin/home-dashboard");
@@ -142,6 +143,22 @@ export default function AdminHome() {
             </span>
           </Card>
         </Link>
+        {isSuperAdminUser(user) ? (
+          <Link href="/boba-orders" className="no-underline">
+            <Card className="h-full transition-shadow hover:shadow-lg">
+              <CardTitle>
+                Boba <span className="bg-(--bearhacks-cream) px-1 rounded-sm">orders</span>
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Live order list, prep summary, pickup list, and CSV export per
+                meal window.
+              </CardDescription>
+              <span className="mt-4 inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+                Open boba orders →
+              </span>
+            </Card>
+          </Link>
+        ) : null}
       </div>
     </main>
   );

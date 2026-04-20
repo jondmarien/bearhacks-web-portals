@@ -110,14 +110,19 @@ export default function AdminSuperAdminsPage() {
         body: JSON.stringify({ email }),
       }),
     onSuccess: (row) => {
+      const pending = !row.user_id;
       log("info", {
         event: "admin_super_admin_grant",
         actor,
         resourceId: row.email,
-        result: "success",
+        result: pending ? "pending_first_login" : "success",
       });
       setEmailDraft("");
-      toast.success(`Granted super-admin to ${row.email}.`);
+      toast.success(
+        pending
+          ? `Pre-granted super-admin to ${row.email}. They'll get the role automatically when they sign in.`
+          : `Granted super-admin to ${row.email}.`,
+      );
       void queryClient.invalidateQueries({ queryKey: ["admin-super-admins"] });
     },
     onError: (error: unknown, email) => {
@@ -176,29 +181,43 @@ export default function AdminSuperAdminsPage() {
   });
 
   const revokeMutation = useMutation({
-    mutationFn: async ({ userId }: { userId: string; email: string }) =>
-      client!.fetchJson<void>(`/admin/super-admins/${userId}`, {
-        method: "DELETE",
-      }),
+    mutationFn: async ({ userId, email }: { userId: string; email: string }) => {
+      const path = userId
+        ? `/admin/super-admins/${encodeURIComponent(userId)}`
+        : `/admin/super-admins/pending/${encodeURIComponent(email)}`;
+      return client!.fetchJson<void>(path, { method: "DELETE" });
+    },
     onSuccess: (_data, variables) => {
+      const pending = !variables.userId;
       log("info", {
-        event: "admin_super_admin_revoke",
+        event: pending
+          ? "admin_super_admin_revoke_pending"
+          : "admin_super_admin_revoke",
         actor,
-        resourceId: variables.userId,
+        resourceId: variables.userId || variables.email,
         result: "success",
       });
-      toast.success(`Revoked super-admin from ${variables.email}.`);
+      toast.success(
+        pending
+          ? `Cancelled pre-grant for ${variables.email}.`
+          : `Revoked super-admin from ${variables.email}.`,
+      );
       void queryClient.invalidateQueries({ queryKey: ["admin-super-admins"] });
     },
     onError: (error: unknown, variables) => {
+      const pending = !variables.userId;
       const message = describeError(
         error,
-        "Could not revoke super-admin access.",
+        pending
+          ? "Could not cancel pre-grant."
+          : "Could not revoke super-admin access.",
       );
       log("error", {
-        event: "admin_super_admin_revoke",
+        event: pending
+          ? "admin_super_admin_revoke_pending"
+          : "admin_super_admin_revoke",
         actor,
-        resourceId: variables.userId,
+        resourceId: variables.userId || variables.email,
         result: "error",
         error: message,
       });
@@ -242,8 +261,9 @@ export default function AdminSuperAdminsPage() {
           <Card>
             <CardTitle>Grant Super Admin</CardTitle>
             <CardDescription className="mt-1">
-              They need to have signed in with Discord at least once before you
-              can grant Super Admin access.
+              Works even if the person hasn&apos;t signed in yet — we&apos;ll
+              pre-approve the email and apply the role automatically on their
+              first Discord sign-in.
             </CardDescription>
             <form
               className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
@@ -295,8 +315,10 @@ export default function AdminSuperAdminsPage() {
                 </CardDescription>
               </div>
               {(() => {
+                // Pre-grants (no auth user yet) are intentional, not drift.
                 const driftCount = (query.data ?? []).filter(
-                  (r) => r.on_allowlist !== r.has_jwt_role,
+                  (r) =>
+                    Boolean(r.user_id) && r.on_allowlist !== r.has_jwt_role,
                 ).length;
                 const disabled =
                   reconcileMutation.isPending || driftCount === 0;
@@ -371,8 +393,10 @@ export default function AdminSuperAdminsPage() {
                     <tbody>
                       {query.data.map((row) => {
                         const isSelf = row.user_id === user?.id;
-                        const drift = row.on_allowlist !== row.has_jwt_role;
                         const missingUserId = !row.user_id;
+                        const isPending = missingUserId && row.on_allowlist;
+                        const drift =
+                          !isPending && row.on_allowlist !== row.has_jwt_role;
                         return (
                           <tr
                             key={row.user_id || row.email}
@@ -390,7 +414,14 @@ export default function AdminSuperAdminsPage() {
                               {formatTimestamp(row.granted_at)}
                             </td>
                             <td className="px-3 py-3">
-                              {drift ? (
+                              {isPending ? (
+                                <span
+                                  className="inline-flex items-center rounded border border-sky-300 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-900"
+                                  title="Pre-approved on the allowlist. They'll get the role on their first Discord sign-in."
+                                >
+                                  Pending login
+                                </span>
+                              ) : drift ? (
                                 <span
                                   className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900"
                                   title={`JWT role: ${row.has_jwt_role ? "yes" : "no"} · Allowlist: ${row.on_allowlist ? "yes" : "no"}`}
@@ -406,25 +437,27 @@ export default function AdminSuperAdminsPage() {
                             <td className="px-3 py-3 text-right">
                               <Button
                                 variant="pill"
-                                disabled={
-                                  isSelf ||
-                                  missingUserId ||
-                                  revokeMutation.isPending
-                                }
+                                disabled={isSelf || revokeMutation.isPending}
                                 title={
                                   isSelf
                                     ? "You can't revoke your own Super Admin role."
-                                    : missingUserId
-                                      ? "No matching auth user — clean up the allowlist row directly in Supabase."
+                                    : isPending
+                                      ? "Cancel this pre-grant before they sign in."
                                       : undefined
                                 }
                                 onClick={() => {
-                                  if (isSelf || missingUserId) return;
+                                  if (isSelf) return;
                                   void (async () => {
                                     const ok = await confirm({
-                                      title: "Revoke Super Admin access?",
-                                      description: `${row.email} will lose Super Admin access immediately.`,
-                                      confirmLabel: "Revoke",
+                                      title: isPending
+                                        ? "Cancel pre-grant?"
+                                        : "Revoke Super Admin access?",
+                                      description: isPending
+                                        ? `${row.email} won't be auto-promoted on their first sign-in.`
+                                        : `${row.email} will lose Super Admin access immediately.`,
+                                      confirmLabel: isPending
+                                        ? "Cancel pre-grant"
+                                        : "Revoke",
                                       tone: "danger",
                                     });
                                     if (!ok) return;
@@ -435,7 +468,7 @@ export default function AdminSuperAdminsPage() {
                                   })();
                                 }}
                               >
-                                Revoke
+                                {isPending ? "Cancel" : "Revoke"}
                               </Button>
                             </td>
                           </tr>
@@ -448,8 +481,10 @@ export default function AdminSuperAdminsPage() {
                 <ul className="flex flex-col divide-y divide-(--bearhacks-border) sm:hidden">
                   {query.data.map((row) => {
                     const isSelf = row.user_id === user?.id;
-                    const drift = row.on_allowlist !== row.has_jwt_role;
                     const missingUserId = !row.user_id;
+                    const isPending = missingUserId && row.on_allowlist;
+                    const drift =
+                      !isPending && row.on_allowlist !== row.has_jwt_role;
                     return (
                       <li
                         key={row.user_id || row.email}
@@ -464,7 +499,14 @@ export default function AdminSuperAdminsPage() {
                               you
                             </span>
                           ) : null}
-                          {drift ? (
+                          {isPending ? (
+                            <span
+                              className="inline-flex items-center rounded border border-sky-300 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-900"
+                              title="Pre-approved on the allowlist. They'll get the role on their first Discord sign-in."
+                            >
+                              Pending login
+                            </span>
+                          ) : drift ? (
                             <span
                               className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900"
                               title={`JWT role: ${row.has_jwt_role ? "yes" : "no"} · Allowlist: ${row.on_allowlist ? "yes" : "no"}`}
@@ -483,25 +525,27 @@ export default function AdminSuperAdminsPage() {
                         <div>
                           <Button
                             variant="pill"
-                            disabled={
-                              isSelf ||
-                              missingUserId ||
-                              revokeMutation.isPending
-                            }
+                            disabled={isSelf || revokeMutation.isPending}
                             title={
                               isSelf
                                 ? "You can't revoke your own Super Admin role."
-                                : missingUserId
-                                  ? "No matching auth user — clean up the allowlist row directly in Supabase."
+                                : isPending
+                                  ? "Cancel this pre-grant before they sign in."
                                   : undefined
                             }
                             onClick={() => {
-                              if (isSelf || missingUserId) return;
+                              if (isSelf) return;
                               void (async () => {
                                 const ok = await confirm({
-                                  title: "Revoke Super Admin access?",
-                                  description: `${row.email} will lose Super Admin access immediately.`,
-                                  confirmLabel: "Revoke",
+                                  title: isPending
+                                    ? "Cancel pre-grant?"
+                                    : "Revoke Super Admin access?",
+                                  description: isPending
+                                    ? `${row.email} won't be auto-promoted on their first sign-in.`
+                                    : `${row.email} will lose Super Admin access immediately.`,
+                                  confirmLabel: isPending
+                                    ? "Cancel pre-grant"
+                                    : "Revoke",
                                   tone: "danger",
                                 });
                                 if (!ok) return;
@@ -512,7 +556,7 @@ export default function AdminSuperAdminsPage() {
                               })();
                             }}
                           >
-                            Revoke
+                            {isPending ? "Cancel" : "Revoke"}
                           </Button>
                         </div>
                       </li>
