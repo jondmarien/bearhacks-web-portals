@@ -20,7 +20,7 @@ function FieldShell({ label, hint, error, htmlFor, children }: FieldShellProps) 
     <div className="flex flex-col gap-1.5">
       <label
         htmlFor={htmlFor}
-        className="text-sm font-medium text-(--bearhacks-primary)"
+        className="text-sm font-medium text-(--bearhacks-title)"
       >
         {label}
       </label>

@@ -35,7 +35,7 @@ export default function GlobalError({
           <Button onClick={() => reset()}>Try again</Button>
           <Link
             href="/"
-            className="inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-4 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-surface-alt)"
+            className="inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-4 text-sm font-semibold text-(--bearhacks-fg) no-underline hover:bg-(--bearhacks-surface-alt)"
           >
             Go home
           </Link>

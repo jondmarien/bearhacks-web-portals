@@ -819,7 +819,7 @@ export default function AdminQrPage() {
                 <div className="flex flex-col gap-1.5">
                   <label
                     htmlFor="status-filter"
-                    className="text-sm font-medium text-(--bearhacks-primary)"
+                    className="text-sm font-medium text-(--bearhacks-title)"
                   >
                     Status
                   </label>
@@ -1320,7 +1320,7 @@ export default function AdminQrPage() {
                           href={selectedClaimUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="block break-all font-mono text-[11px] text-(--bearhacks-primary) underline underline-offset-2 sm:text-xs"
+                          className="block break-all font-mono text-[11px] text-(--bearhacks-link) underline underline-offset-2 sm:text-xs"
                         >
                           {selectedClaimUrl}
                         </a>
@@ -1332,7 +1332,7 @@ export default function AdminQrPage() {
                       <a
                         href={selectedQrImage}
                         download={`bearhacks-qr-${selectedQr.id ?? "unknown"}.png`}
-                        className="w-fit text-xs font-semibold text-(--bearhacks-primary) underline underline-offset-2"
+                        className="w-fit text-xs font-semibold text-(--bearhacks-link) underline underline-offset-2"
                       >
                         Download PNG
                       </a>

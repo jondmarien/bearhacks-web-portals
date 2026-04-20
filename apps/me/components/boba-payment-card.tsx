@@ -160,7 +160,7 @@ export function BobaPaymentCard({
           <div className="flex flex-col gap-2">
             <label
               htmlFor="payment-reference"
-              className="text-sm font-medium text-(--bearhacks-primary)"
+              className="text-sm font-medium text-(--bearhacks-title)"
             >
               E-transfer reference (optional)
             </label>

@@ -182,7 +182,7 @@ export default function HomePage() {
             className="w-64 sm:w-80"
             style={{ height: "auto" }}
           />
-          <h1 className="mt-6 text-3xl font-bold tracking-tight text-(--bearhacks-primary) sm:text-4xl">
+          <h1 className="mt-6 text-3xl font-bold tracking-tight text-(--bearhacks-title) sm:text-4xl">
             BearHacks 2026 Networking
           </h1>
           <p className="mt-3 max-w-md text-base text-(--bearhacks-muted)">
@@ -220,7 +220,7 @@ export default function HomePage() {
         <div className="flex gap-2">
           <Link
             href={`/contacts/${userId}`}
-            className="inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-surface-alt)"
+            className="inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 text-sm font-semibold text-(--bearhacks-fg) no-underline hover:bg-(--bearhacks-surface-alt)"
           >
             My profile
           </Link>
@@ -378,19 +378,19 @@ export default function HomePage() {
               <li key={fav.id}>
                 <Link
                   href={`/contacts/${fav.id}`}
-                  className="flex min-h-(--bearhacks-touch-min) items-center justify-between gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-3 no-underline hover:bg-(--bearhacks-accent-soft)"
+                  className="flex min-h-(--bearhacks-touch-min) items-center justify-between gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-3 no-underline hover:bg-(--bearhacks-surface-raised)"
                 >
                   <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-semibold text-(--bearhacks-primary)">
+                    <span className="truncate text-sm font-semibold text-(--bearhacks-title)">
                       {fav.display_name?.trim() || "Unnamed attendee"}
                     </span>
                     {fav.role?.trim() ? (
-                      <span className="truncate text-xs text-(--bearhacks-text-marketing)/70">
+                      <span className="truncate text-xs text-(--bearhacks-on-surface-muted)">
                         {fav.role}
                       </span>
                     ) : null}
                   </div>
-                  <span aria-hidden="true" className="text-(--bearhacks-primary)">
+                  <span aria-hidden="true" className="text-(--bearhacks-fg)">
                     →
                   </span>
                 </Link>

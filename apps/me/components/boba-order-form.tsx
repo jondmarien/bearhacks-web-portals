@@ -482,7 +482,7 @@ function MomoSubForm({
 }) {
   return (
     <fieldset className="flex flex-col gap-4 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-4">
-      <legend className="px-2 text-sm font-semibold text-(--bearhacks-primary)">
+      <legend className="px-2 text-sm font-semibold text-(--bearhacks-title)">
         Momos — {formatPriceCents(menu.momos.price_cents)}
       </legend>
 
@@ -788,7 +788,7 @@ function FieldShell({
     <div className="flex flex-col gap-1.5">
       <label
         htmlFor={htmlFor}
-        className="text-sm font-medium text-(--bearhacks-primary)"
+        className="text-sm font-medium text-(--bearhacks-title)"
       >
         {label}
       </label>
@@ -855,7 +855,7 @@ function pillClasses(isOn: boolean): string {
   return `min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-pill) border px-4 text-sm font-semibold transition-colors ${
     isOn
       ? "border-(--bearhacks-primary) bg-(--bearhacks-primary) text-(--bearhacks-on-primary)"
-      : "border-(--bearhacks-border) bg-(--bearhacks-surface) text-(--bearhacks-primary) hover:bg-(--bearhacks-surface-alt)"
+      : "border-(--bearhacks-border-strong) bg-(--bearhacks-surface) text-(--bearhacks-fg) hover:bg-(--bearhacks-surface-alt)"
   }`;
 }
 

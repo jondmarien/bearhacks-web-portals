@@ -709,7 +709,7 @@ function PrepSummaryCard({ query, windowLabel }: PrepSummaryCardProps) {
                 className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) p-3"
               >
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-sm font-semibold text-(--bearhacks-primary)">
+                  <span className="text-sm font-semibold text-(--bearhacks-title)">
                     {drink.drink_label}
                   </span>
                   <span className="text-xs font-semibold text-(--bearhacks-text-marketing)/80">
@@ -843,7 +843,7 @@ function PickupListCard({
                 className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) p-3"
               >
                 <div className="mb-2 flex items-baseline justify-between gap-2">
-                  <span className="text-sm font-semibold text-(--bearhacks-primary)">
+                  <span className="text-sm font-semibold text-(--bearhacks-title)">
                     Batch {rangeLabel}
                   </span>
                   <span className="text-xs text-(--bearhacks-muted)">
@@ -857,7 +857,7 @@ function PickupListCard({
                       className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) p-3"
                     >
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-sm font-semibold text-(--bearhacks-primary)">
+                        <span className="text-sm font-semibold text-(--bearhacks-title)">
                           {drink.drink_label}
                         </span>
                         <span className="text-xs text-(--bearhacks-text-marketing)/80">
@@ -1515,7 +1515,7 @@ function FilterField({ label, htmlFor, children }: FilterFieldProps) {
     <div className="flex flex-col gap-1.5">
       <label
         htmlFor={htmlFor}
-        className="text-sm font-medium text-(--bearhacks-primary)"
+        className="text-sm font-medium text-(--bearhacks-title)"
       >
         {label}
       </label>

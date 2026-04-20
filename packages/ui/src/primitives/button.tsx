@@ -12,7 +12,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   secondary:
     "rounded-(--bearhacks-radius-md) px-4 bg-(--bearhacks-accent) text-(--bearhacks-primary) hover:bg-(--bearhacks-accent-soft) disabled:hover:bg-(--bearhacks-accent)",
   ghost:
-    "rounded-(--bearhacks-radius-md) px-4 bg-transparent text-(--bearhacks-primary) border border-(--bearhacks-border-strong) hover:bg-(--bearhacks-surface-alt)",
+    "rounded-(--bearhacks-radius-md) px-4 bg-transparent text-(--bearhacks-fg) border border-(--bearhacks-border-strong) hover:bg-(--bearhacks-surface-alt)",
   pill:
     "rounded-[var(--bearhacks-radius-pill)] px-6 py-3 bg-(--bearhacks-surface-raised) text-(--bearhacks-fg) border border-(--bearhacks-border-strong) shadow-(--bearhacks-shadow-card) hover:bg-(--bearhacks-cream) disabled:hover:bg-(--bearhacks-surface-raised)",
 };

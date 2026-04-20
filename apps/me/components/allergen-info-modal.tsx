@@ -216,7 +216,7 @@ function Section({
 }) {
   return (
     <section className="mb-5">
-      <h3 className="mb-2 text-sm font-semibold uppercase tracking-[0.08em] text-(--bearhacks-primary)">
+      <h3 className="mb-2 text-sm font-semibold uppercase tracking-[0.08em] text-(--bearhacks-title)">
         {title}
       </h3>
       {children}

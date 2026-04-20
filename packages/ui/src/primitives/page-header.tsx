@@ -38,7 +38,7 @@ export function PageHeader({
         backHref ? (
           <Link
             href={backHref}
-            className="inline-flex w-fit items-center gap-1 text-sm font-medium text-(--bearhacks-primary) hover:text-(--bearhacks-primary-hover)"
+            className="inline-flex w-fit items-center gap-1 text-sm font-medium text-(--bearhacks-link) hover:text-(--bearhacks-link-hover)"
           >
             <span aria-hidden>←</span> Back
           </Link>
@@ -52,7 +52,7 @@ export function PageHeader({
                 router.push("/");
               }
             }}
-            className="inline-flex w-fit cursor-pointer items-center gap-1 text-sm font-medium text-(--bearhacks-primary) hover:text-(--bearhacks-primary-hover)"
+            className="inline-flex w-fit cursor-pointer items-center gap-1 text-sm font-medium text-(--bearhacks-link) hover:text-(--bearhacks-link-hover)"
           >
             <span aria-hidden>←</span> Back
           </button>
