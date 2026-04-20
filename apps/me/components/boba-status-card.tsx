@@ -45,12 +45,15 @@ export function BobaStatusCard({ isAuthReady, userId, hideEditCta = false }: Pro
 
   // Multi-order aware: prefer the most recent *placed* order so a hacker who
   // cancelled drink #1 then placed drink #2 still sees "Order placed", not
-  // "Order cancelled".
+  // "Order cancelled". Fulfilled wins over the generic fallback so a drink
+  // that was already picked up doesn't lose to a stale cancelled order
+  // sitting in `orderQuery.data?.order` (the most-recent-by-created_at).
   const orders = orderQuery.data?.orders ?? [];
   const placedCount = orderQuery.data?.placed_count ?? 0;
   const maxOrders = orderQuery.data?.max_orders ?? 1;
   const focusedOrder =
     orders.find((o) => o.status === "placed") ??
+    orders.find((o) => o.status === "fulfilled") ??
     orderQuery.data?.order ??
     null;
 
@@ -73,7 +76,8 @@ export function BobaStatusCard({ isAuthReady, userId, hideEditCta = false }: Pro
   const isOpen =
     status.kind === "open-no-order" ||
     status.kind === "open-has-order" ||
-    status.kind === "open-cancelled";
+    status.kind === "open-cancelled" ||
+    status.kind === "open-fulfilled";
 
   const cardClassName = isOpen
     ? "border-(--bearhacks-accent) shadow-lg ring-2 ring-(--bearhacks-accent)/40"
@@ -219,6 +223,27 @@ function StatusBody({
           </p>
           {quotaLine}
           {hideEditCta ? null : <CtaLink>Place a new order →</CtaLink>}
+        </div>
+      );
+
+    case "open-fulfilled":
+      // Multi-cap windows let the hacker queue another drink after pickup;
+      // single-cap (real meal) windows are done — no edit CTA, no "place
+      // another" prompt, just confirmation that the pickup happened.
+      return (
+        <div className="flex flex-col gap-3">
+          <Pill tone="muted">Picked up</Pill>
+          <p className="text-sm text-(--bearhacks-fg)">
+            Your drink for <strong>{status.window.label}</strong> was picked
+            up. Enjoy!
+            {showQuota && canPlaceMore
+              ? " Window is still open — feel free to add another drink."
+              : ""}
+          </p>
+          {quotaLine}
+          {hideEditCta || !showQuota || !canPlaceMore ? null : (
+            <CtaLink>Add another drink →</CtaLink>
+          )}
         </div>
       );
   }
