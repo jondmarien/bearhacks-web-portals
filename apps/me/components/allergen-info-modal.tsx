@@ -253,7 +253,7 @@ function DrinkTable({ rows }: { rows: DrinkRow[] }) {
           <thead>
             <tr className="border-b border-(--bearhacks-border) text-xs uppercase tracking-[0.06em] text-(--bearhacks-muted)">
               <th className="py-2 pr-2">Drink</th>
-              <th className="py-2 pr-2">Vegan</th>
+              <th className="py-2 pr-2 text-center">Vegan</th>
               <th className="py-2">Notes</th>
             </tr>
           </thead>
@@ -263,7 +263,7 @@ function DrinkTable({ rows }: { rows: DrinkRow[] }) {
                 <td className="py-2 pr-2 align-top font-medium text-(--bearhacks-fg)">
                   {row.label}
                 </td>
-                <td className="py-2 pr-2 align-top">
+                <td className="py-2 pr-2 text-center align-top">
                   <VeganBadge value={row.vegan} />
                 </td>
                 <td className="py-2 align-top text-(--bearhacks-fg)">{row.notes}</td>
@@ -303,7 +303,7 @@ function ToppingTable({ rows }: { rows: ToppingRow[] }) {
           <thead>
             <tr className="border-b border-(--bearhacks-border) text-xs uppercase tracking-[0.06em] text-(--bearhacks-muted)">
               <th className="py-2 pr-2">Topping</th>
-              <th className="py-2 pr-2">Vegan</th>
+              <th className="py-2 pr-2 text-center">Vegan</th>
               <th className="py-2">Notes</th>
             </tr>
           </thead>
@@ -313,7 +313,7 @@ function ToppingTable({ rows }: { rows: ToppingRow[] }) {
                 <td className="py-2 pr-2 align-top font-medium text-(--bearhacks-fg)">
                   {row.label}
                 </td>
-                <td className="py-2 pr-2 align-top">
+                <td className="py-2 pr-2 text-center align-top">
                   <VeganBadge value={row.vegan} />
                 </td>
                 <td className="py-2 align-top text-(--bearhacks-fg)">{row.notes}</td>
