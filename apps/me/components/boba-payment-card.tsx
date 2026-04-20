@@ -217,8 +217,9 @@ export function BobaPaymentCard({
 
         {payment.status === "refunded" ? (
           <p className="text-sm text-(--bearhacks-fg)">
-            This payment was refunded. Reach out in the hackers channel if this
-            looks wrong.
+            This payment was refunded. If you believe this was made in error,  
+            please make a ticket in the #support-tickets channel in Discord,
+            if this looks wrong.
           </p>
         ) : null}
       </div>
