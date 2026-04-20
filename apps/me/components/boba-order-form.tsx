@@ -91,11 +91,6 @@ export function BobaCombinedOrderForm({
         void form.handleSubmit();
       }}
     >
-      <p className="text-xs text-(--bearhacks-muted)">
-        Pick a drink, momos, or both for this meal window. Toggle off whichever
-        you don&apos;t want.
-      </p>
-
       {/* DRINK SECTION ------------------------------------------------------ */}
       <form.Field name="includeDrink">
         {(field: TanField<boolean>) => (
