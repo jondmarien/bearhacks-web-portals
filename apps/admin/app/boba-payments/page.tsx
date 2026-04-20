@@ -68,6 +68,66 @@ const STATUS_BADGE_CLASSES: Record<PaymentStatus, string> = {
     "bg-(--bearhacks-surface-alt) text-(--bearhacks-muted) border border-(--bearhacks-border)",
 };
 
+// Kind-pill classes mirror the "All orders" table in /boba-orders so the two
+// admin consoles read like one product. Drinks use the cream/accent pill,
+// momos reuse the warning triad (amber). Intentionally kept in sync by eye
+// rather than abstracted — the two call sites are tiny and the design tokens
+// are the shared contract.
+const KIND_PILL_CLASSES: Record<"drink" | "momo", string> = {
+  drink:
+    "bg-(--bearhacks-accent-soft) text-(--bearhacks-primary) border border-(--bearhacks-border)",
+  momo: "bg-(--bearhacks-warning-bg) text-(--bearhacks-warning-fg) border border-(--bearhacks-warning-border)",
+};
+
+type PaymentItem = AdminPaymentRow["items"][number];
+
+/**
+ * One line in the payments "Items" column, laid out like a mini-row:
+ *   [Kind pill] [size]  detail                                    $X.XX
+ *
+ * Mirrors the orders table's Kind / Size / Detail / $ columns so admins don't
+ * have to re-learn a second visual grammar when they switch consoles. Cancelled
+ * / fulfilled items fade + strike through, matching prior behaviour.
+ */
+function PaymentItemLine({ item }: { item: PaymentItem }) {
+  const isPlaced = item.status === "placed";
+  const label = item.kind === "drink" ? "Drink" : "Momos";
+  return (
+    <li
+      className={`flex flex-wrap items-baseline gap-x-2 gap-y-0.5 ${
+        isPlaced ? "" : "opacity-60"
+      }`}
+    >
+      <span
+        className={`inline-flex shrink-0 items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-[11px] font-semibold ${KIND_PILL_CLASSES[item.kind]}`}
+      >
+        {label}
+      </span>
+      {item.size ? (
+        <span className="shrink-0 text-xs text-(--bearhacks-muted)">
+          {item.size}
+        </span>
+      ) : null}
+      <span
+        className={`min-w-0 flex-1 text-xs wrap-break-word ${
+          isPlaced
+            ? "text-(--bearhacks-fg)"
+            : "text-(--bearhacks-muted) line-through"
+        }`}
+      >
+        {item.detail}
+      </span>
+      <span
+        className={`ml-auto shrink-0 text-xs font-semibold ${
+          isPlaced ? "text-(--bearhacks-fg)" : "text-(--bearhacks-muted)"
+        }`}
+      >
+        ${(item.amount_cents / 100).toFixed(2)}
+      </span>
+    </li>
+  );
+}
+
 type FilterValues = {
   meal_window_id?: string;
   status?: PaymentStatus;
@@ -542,24 +602,9 @@ function PaymentsTableCard({
             );
           }
           return (
-            <ul className="flex flex-col gap-0.5 text-xs text-(--bearhacks-fg)">
+            <ul className="flex min-w-[18rem] flex-col gap-1.5">
               {o.items.map((it) => (
-                <li
-                  key={it.id}
-                  className={
-                    it.status === "placed"
-                      ? "text-(--bearhacks-fg)"
-                      : "text-(--bearhacks-muted) line-through"
-                  }
-                >
-                  <span className="font-semibold">
-                    {it.kind === "drink" ? "Drink" : "Momos"}
-                  </span>{" "}
-                  · {it.detail} ·{" "}
-                  <span className="font-semibold">
-                    ${(it.amount_cents / 100).toFixed(2)}
-                  </span>
-                </li>
+                <PaymentItemLine key={it.id} item={it} />
               ))}
             </ul>
           );
@@ -830,24 +875,9 @@ function PaymentsTableCard({
                       No placed items
                     </p>
                   ) : (
-                    <ul className="mt-2 flex flex-col gap-0.5 text-xs">
+                    <ul className="mt-2 flex flex-col gap-1.5">
                       {o.items.map((it) => (
-                        <li
-                          key={it.id}
-                          className={
-                            it.status === "placed"
-                              ? "text-(--bearhacks-fg) wrap-break-word"
-                              : "text-(--bearhacks-muted) line-through wrap-break-word"
-                          }
-                        >
-                          <span className="font-semibold">
-                            {it.kind === "drink" ? "Drink" : "Momos"}
-                          </span>{" "}
-                          · {it.detail} ·{" "}
-                          <span className="font-semibold">
-                            ${(it.amount_cents / 100).toFixed(2)}
-                          </span>
-                        </li>
+                        <PaymentItemLine key={it.id} item={it} />
                       ))}
                     </ul>
                   )}
