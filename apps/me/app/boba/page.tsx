@@ -2,12 +2,20 @@
 
 import { ApiError } from "@bearhacks/api-client";
 import { createLogger } from "@bearhacks/logger";
-import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
+import { AllergenInfoModal } from "@/components/allergen-info-modal";
 import { BobaStatusCard } from "@/components/boba-status-card";
+import { BobaPaymentCard } from "@/components/boba-payment-card";
+import {
+  BobaCombinedOrderForm,
+  BobaDrinkEditForm,
+  BobaMomoEditForm,
+  drinkValuesFromOrder,
+  momoValuesFromOrder,
+} from "@/components/boba-order-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -15,42 +23,24 @@ import { PageHeader } from "@/components/ui/page-header";
 import {
   useBobaMenuQuery,
   useBobaWindowsQuery,
-  useCancelBobaOrderMutation,
+  useCancelBobaDrinkMutation,
+  useCancelBobaMomoMutation,
   useCreateBobaOrderMutation,
   useMyBobaOrderQuery,
-  useUpdateBobaOrderMutation,
+  useUpdateBobaDrinkMutation,
+  useUpdateBobaMomoMutation,
   type BobaMenuResponse,
+  type BobaMomoOrder,
   type BobaOrder,
 } from "@/lib/boba-queries";
-import {
-  BOBA_MAX_TOPPINGS,
-  BOBA_NOTES_MAX_LEN,
-  buildBobaOrderSchema,
-  DEFAULT_BOBA_FORM,
-  ICE_VALUES,
-  SWEETNESS_VALUES,
-  type Ice,
-  type Sweetness,
-  valuesFromOrder,
-} from "@/lib/boba-schema";
 import { useDocumentTitle } from "@/lib/use-document-title";
 
 const log = createLogger("me/boba-order");
 
-const SWEETNESS_LABELS: Record<Sweetness, string> = {
-  0: "0% (no sugar)",
-  25: "25%",
-  50: "50%",
-  75: "75%",
-  100: "100% (full sugar)",
-};
-
-const ICE_LABELS: Record<Ice, string> = {
-  none: "No ice",
-  light: "Light ice",
-  regular: "Regular ice",
-  extra: "Extra ice",
-};
+type EditTarget =
+  | { kind: "drink"; id: string }
+  | { kind: "momo"; id: string }
+  | null;
 
 export default function BobaOrderPage() {
   const auth = useMeAuth();
@@ -64,9 +54,11 @@ export default function BobaOrderPage() {
   const windowsQuery = useBobaWindowsQuery();
   const myOrderQuery = useMyBobaOrderQuery(userId);
 
-  const createMutation = useCreateBobaOrderMutation(userId);
-  const updateMutation = useUpdateBobaOrderMutation(userId);
-  const cancelMutation = useCancelBobaOrderMutation(userId);
+  const createMutation = useCreateBobaOrderMutation();
+  const updateDrinkMutation = useUpdateBobaDrinkMutation();
+  const cancelDrinkMutation = useCancelBobaDrinkMutation();
+  const updateMomoMutation = useUpdateBobaMomoMutation();
+  const cancelMomoMutation = useCancelBobaMomoMutation();
 
   const activeWindowId = windowsQuery.data?.active_window_id ?? null;
   const activeWindow = useMemo(() => {
@@ -74,61 +66,37 @@ export default function BobaOrderPage() {
     return windowsQuery.data.windows.find((w) => w.id === activeWindowId) ?? null;
   }, [activeWindowId, windowsQuery.data]);
 
-  // Multi-order support: dev-test window may allow N drinks per user. Real
-  // meal windows still cap at 1; the UI degrades to the original
-  // single-order experience for them.
-  //
-  // Pull the array reference inside useMemo so the dep is the stable
-  // ``myOrderQuery.data?.orders`` (only changes when the query data changes)
-  // instead of a fresh ``[]`` literal allocated every render.
-  const ordersSource = myOrderQuery.data?.orders;
-  const ordersForActiveWindow = useMemo(
+  const drinksSource = myOrderQuery.data?.drinks;
+  const momosSource = myOrderQuery.data?.momos;
+
+  const placedDrinks = useMemo(
     () =>
       activeWindowId
-        ? (ordersSource ?? []).filter(
-            (o) => o.meal_window_id === activeWindowId,
+        ? (drinksSource ?? []).filter(
+            (o) => o.meal_window_id === activeWindowId && o.status === "placed",
           )
         : [],
-    [ordersSource, activeWindowId],
+    [drinksSource, activeWindowId],
   );
-  const placedOrders = useMemo(
-    () => ordersForActiveWindow.filter((o) => o.status === "placed"),
-    [ordersForActiveWindow],
+
+  const placedMomos = useMemo(
+    () =>
+      activeWindowId
+        ? (momosSource ?? []).filter(
+            (o) => o.meal_window_id === activeWindowId && o.status === "placed",
+          )
+        : [],
+    [momosSource, activeWindowId],
   );
-  const placedCount = myOrderQuery.data?.placed_count ?? placedOrders.length;
+
+  const placedCount = myOrderQuery.data?.placed_count ?? 0;
   const maxOrders = myOrderQuery.data?.max_orders ?? 1;
-  const isMultiCap = maxOrders > 1;
   const canPlaceMore = placedCount < maxOrders;
 
-  // ``mode`` says which order (if any) the form below is currently bound to.
-  //   - "auto":  defer to the cap-based default (single-cap → most recent
-  //              placed order; multi-cap → place-new mode).
-  //   - "new":   explicitly placing an additional drink (multi-cap only).
-  //   - { kind: "edit", orderId }: editing a specific drink the hacker
-  //              picked from the list above.
-  type FormMode =
-    | { kind: "auto" }
-    | { kind: "new" }
-    | { kind: "edit"; orderId: string };
-  const [mode, setMode] = useState<FormMode>({ kind: "auto" });
+  const [editTarget, setEditTarget] = useState<EditTarget>(null);
 
-  const editableOrder: BobaOrder | null = (() => {
-    if (mode.kind === "edit") {
-      return placedOrders.find((o) => o.id === mode.orderId) ?? null;
-    }
-    if (mode.kind === "new") return null;
-    // auto: only auto-bind when the cap is 1 (single-order behaviour).
-    if (!isMultiCap) {
-      return placedOrders[0] ?? null;
-    }
-    return null;
-  })();
-
-  // Hide the form entirely in multi-cap when the hacker has hit the cap and
-  // hasn't picked a specific drink to edit. They can still cancel from the
-  // list above to free a slot.
-  const formVisible =
-    !isMultiCap || mode.kind === "edit" || canPlaceMore;
+  // Anything placed at all? Used to flip the "place your first order" copy.
+  const hasAnyPlaced = placedDrinks.length > 0 || placedMomos.length > 0;
 
   if (!auth?.isAuthReady) {
     return (
@@ -161,9 +129,9 @@ export default function BobaOrderPage() {
       <PageHeader
         title="Boba ordering"
         subtitle={
-          isMultiCap
-            ? `Up to ${maxOrders} drinks per hacker for this window. Edit or cancel until the window closes.`
-            : "One drink per meal window. Edit or cancel until the window closes."
+          maxOrders > 1
+            ? `Up to ${maxOrders} drinks/momos per hacker for this window. Edit or cancel until the window closes.`
+            : "One drink/momo per meal window. Edit or cancel until the window closes."
         }
         showBack
         backHref="/"
@@ -171,6 +139,12 @@ export default function BobaOrderPage() {
       />
 
       <BobaStatusCard isAuthReady userId={userId} hideEditCta />
+
+      {activeWindow ? (
+        <div className="flex justify-end">
+          <AllergenInfoModal />
+        </div>
+      ) : null}
 
       {menuQuery.isError ? (
         <Card>
@@ -191,25 +165,32 @@ export default function BobaOrderPage() {
         </Card>
       ) : (
         <>
-          {isMultiCap && placedOrders.length > 0 ? (
-            <PlacedOrdersList
-              orders={placedOrders}
+          {placedDrinks.length > 0 ? (
+            <PlacedDrinksCard
+              drinks={placedDrinks}
               menu={menuQuery.data}
-              maxOrders={maxOrders}
-              placedCount={placedCount}
-              canPlaceMore={canPlaceMore}
-              currentEditingId={
-                mode.kind === "edit" ? mode.orderId : null
-              }
-              isCancelling={cancelMutation.isPending}
-              onEdit={(orderId) => {
-                setMode({ kind: "edit", orderId });
-                if (typeof window !== "undefined") {
-                  window.scrollTo({ top: window.innerHeight, behavior: "smooth" });
+              editingId={editTarget?.kind === "drink" ? editTarget.id : null}
+              onStartEdit={(id) => setEditTarget({ kind: "drink", id })}
+              onStopEdit={() => setEditTarget(null)}
+              onSaveEdit={async (id, values) => {
+                try {
+                  await updateDrinkMutation.mutateAsync({
+                    orderId: id,
+                    values,
+                  });
+                  toast.success("Drink updated");
+                  setEditTarget(null);
+                } catch (error) {
+                  log.error("Drink update failed", { userId, error });
+                  toast.error(
+                    error instanceof ApiError
+                      ? error.message
+                      : "Failed to save drink",
+                  );
+                  throw error;
                 }
               }}
-              onAddAnother={() => setMode({ kind: "new" })}
-              onCancelOrder={async (orderId) => {
+              onCancelOrder={async (id) => {
                 const ok = await confirm({
                   title: "Cancel this drink?",
                   description:
@@ -220,15 +201,11 @@ export default function BobaOrderPage() {
                 });
                 if (!ok) return;
                 try {
-                  await cancelMutation.mutateAsync({ orderId });
+                  await cancelDrinkMutation.mutateAsync({ orderId: id });
                   toast.success("Drink cancelled");
-                  // If the cancelled drink was the one being edited, drop
-                  // back to a clean place-new form.
-                  if (mode.kind === "edit" && mode.orderId === orderId) {
-                    setMode({ kind: "new" });
-                  }
+                  setEditTarget(null);
                 } catch (error) {
-                  log.error("Boba order cancel failed", { userId, error });
+                  log.error("Drink cancel failed", { userId, error });
                   toast.error(
                     error instanceof ApiError
                       ? error.message
@@ -236,162 +213,191 @@ export default function BobaOrderPage() {
                   );
                 }
               }}
+              isCancelling={cancelDrinkMutation.isPending}
             />
           ) : null}
 
-          {formVisible ? (
-            <BobaOrderForm
-              key={
-                editableOrder
-                  ? `edit-${editableOrder.id}`
-                  : `new-${activeWindow.id}-${mode.kind}`
-              }
+          {placedMomos.length > 0 ? (
+            <PlacedMomosCard
+              momos={placedMomos}
               menu={menuQuery.data}
-              isEditing={Boolean(editableOrder)}
-              existingOrderId={editableOrder?.id ?? null}
-              isAdditionalDrink={isMultiCap && !editableOrder && placedOrders.length > 0}
-              initial={
-                editableOrder
-                  ? valuesFromOrder(editableOrder)
-                  : DEFAULT_BOBA_FORM
-              }
-              onSubmit={async (values) => {
+              editingId={editTarget?.kind === "momo" ? editTarget.id : null}
+              onStartEdit={(id) => setEditTarget({ kind: "momo", id })}
+              onStopEdit={() => setEditTarget(null)}
+              onSaveEdit={async (id, values) => {
                 try {
-                  if (editableOrder) {
-                    await updateMutation.mutateAsync({
-                      orderId: editableOrder.id,
-                      values,
-                    });
-                    toast.success("Order updated");
-                    // Stay on the edited drink so the form keeps showing it.
-                    setMode({ kind: "edit", orderId: editableOrder.id });
-                  } else {
-                    await createMutation.mutateAsync(values);
-                    toast.success("Order placed");
-                    // After a successful place, return to "auto" so the
-                    // next mode is decided by the cap (single-cap will
-                    // bind to the new order; multi-cap will reset to a
-                    // clean "place another" form on demand).
-                    setMode({ kind: "auto" });
-                  }
+                  await updateMomoMutation.mutateAsync({
+                    momoId: id,
+                    values,
+                  });
+                  toast.success("Momos updated");
+                  setEditTarget(null);
                 } catch (error) {
-                  log.error("Boba order submit failed", { userId, error });
-                  const message =
-                    error instanceof ApiError ? error.message : "Failed to save order";
-                  toast.error(message);
+                  log.error("Momo update failed", { userId, error });
+                  toast.error(
+                    error instanceof ApiError
+                      ? error.message
+                      : "Failed to save momos",
+                  );
                   throw error;
                 }
               }}
-              onCancel={
-                editableOrder
-                  ? async () => {
-                      const ok = await confirm({
-                        title: "Cancel this order?",
-                        description:
-                          "You can place a new order later as long as the meal window is still open.",
-                        confirmLabel: "Cancel order",
-                        cancelLabel: "Keep order",
-                        tone: "danger",
-                      });
-                      if (!ok) return;
-                      try {
-                        await cancelMutation.mutateAsync({
-                          orderId: editableOrder.id,
-                        });
-                        toast.success("Order cancelled");
-                        if (isMultiCap) setMode({ kind: "new" });
-                      } catch (error) {
-                        log.error("Boba order cancel failed", { userId, error });
-                        toast.error(
-                          error instanceof ApiError
-                            ? error.message
-                            : "Failed to cancel order",
-                        );
-                      }
-                    }
-                  : null
-              }
-              isCancelling={cancelMutation.isPending}
+              onCancelOrder={async (id) => {
+                const ok = await confirm({
+                  title: "Cancel this momo order?",
+                  description:
+                    "You can place a new momo order later as long as the meal window is still open.",
+                  confirmLabel: "Cancel momos",
+                  cancelLabel: "Keep momos",
+                  tone: "danger",
+                });
+                if (!ok) return;
+                try {
+                  await cancelMomoMutation.mutateAsync({ momoId: id });
+                  toast.success("Momos cancelled");
+                  setEditTarget(null);
+                } catch (error) {
+                  log.error("Momo cancel failed", { userId, error });
+                  toast.error(
+                    error instanceof ApiError
+                      ? error.message
+                      : "Failed to cancel momos",
+                  );
+                }
+              }}
+              isCancelling={cancelMomoMutation.isPending}
             />
+          ) : null}
+
+          {canPlaceMore ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {hasAnyPlaced ? "Place additional order" : "Place your order"}
+                </CardTitle>
+                <CardDescription>
+                  Pick a drink, momos, or both. The food team will batch
+                  pickups in time for the meal window.
+                </CardDescription>
+              </CardHeader>
+
+              <BobaCombinedOrderForm
+                key={`${activeWindow.id}-${placedCount}`}
+                menu={menuQuery.data}
+                isAdditional={hasAnyPlaced}
+                onSubmit={async (values) => {
+                  try {
+                    await createMutation.mutateAsync(values);
+                    toast.success("Order placed");
+                  } catch (error) {
+                    log.error("Boba order create failed", { userId, error });
+                    const message =
+                      error instanceof ApiError ? error.message : "Failed to save order";
+                    toast.error(message);
+                    throw error;
+                  }
+                }}
+              />
+            </Card>
           ) : (
             <Card>
               <CardHeader>
                 <CardTitle>You&apos;re at the limit</CardTitle>
                 <CardDescription>
-                  You&apos;ve placed {placedCount} of {maxOrders} drinks for
-                  this window. Cancel one above to free a slot, or use Edit to
-                  change an existing drink.
+                  You&apos;ve placed {placedCount} of {maxOrders} drinks/momos
+                  for this window. Cancel one above to free a slot, or use Edit
+                  to change an existing one.
                 </CardDescription>
               </CardHeader>
             </Card>
           )}
+
+          <BobaPaymentCard
+            payment={myOrderQuery.data?.payment ?? null}
+            mealWindowId={activeWindow.id}
+            recipientName={menuQuery.data.payment.etransfer_recipient_name}
+            etransferEmail={menuQuery.data.payment.etransfer_email}
+            discountNote={menuQuery.data.payment.discount_note}
+          />
         </>
       )}
     </main>
   );
 }
 
-type PlacedOrdersListProps = {
-  orders: BobaOrder[];
-  menu: BobaMenuResponse;
-  maxOrders: number;
-  placedCount: number;
-  canPlaceMore: boolean;
-  currentEditingId: string | null;
-  isCancelling: boolean;
-  onEdit: (orderId: string) => void;
-  onAddAnother: () => void;
-  onCancelOrder: (orderId: string) => Promise<void>;
-};
+// ---------------------------------------------------------------------------
+// Drink list card
+// ---------------------------------------------------------------------------
 
-/**
- * Multi-cap-only summary list of every drink the hacker has placed for the
- * active window. Each row exposes Edit + Cancel; the page header says
- * "X of Y drinks placed" and the bottom action either kicks off another
- * order or is hidden if we're at the cap.
- */
-function PlacedOrdersList({
-  orders,
+function PlacedDrinksCard({
+  drinks,
   menu,
-  maxOrders,
-  placedCount,
-  canPlaceMore,
-  currentEditingId,
-  isCancelling,
-  onEdit,
-  onAddAnother,
+  editingId,
+  onStartEdit,
+  onStopEdit,
+  onSaveEdit,
   onCancelOrder,
-}: PlacedOrdersListProps) {
-  const drinkLabel = (drinkId: string) =>
-    menu.drinks.find((d) => d.id === drinkId)?.label ?? drinkId;
-  const toppingLabel = (toppingId: string) =>
-    menu.toppings.find((t) => t.id === toppingId)?.label ?? toppingId;
+  isCancelling,
+}: {
+  drinks: BobaOrder[];
+  menu: BobaMenuResponse;
+  editingId: string | null;
+  onStartEdit: (id: string) => void;
+  onStopEdit: () => void;
+  onSaveEdit: (
+    id: string,
+    values: ReturnType<typeof drinkValuesFromOrder>,
+  ) => Promise<void>;
+  onCancelOrder: (id: string) => Promise<void>;
+  isCancelling: boolean;
+}) {
+  const drinkLabel = (id: string) =>
+    menu.drinks.find((d) => d.id === id)?.label ?? id;
+  const sizeLabel = (id: string) =>
+    menu.sizes.find((s) => s.id === id)?.label ?? id;
+  const toppingLabel = (id: string) =>
+    menu.toppings.find((t) => t.id === id)?.label ?? id;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Your drinks for this window</CardTitle>
+        <CardTitle>Your drinks</CardTitle>
         <CardDescription>
-          {placedCount} of {maxOrders} placed. Edit or cancel any drink while
-          the window is open.
+          Edit or cancel any drink while the window is open.
         </CardDescription>
       </CardHeader>
 
       <ul className="flex flex-col gap-3">
-        {orders.map((order) => {
-          const isEditing = currentEditingId === order.id;
+        {drinks.map((order) => {
+          const isEditing = editingId === order.id;
+          if (isEditing) {
+            return (
+              <li
+                key={order.id}
+                className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 py-4"
+              >
+                <p className="mb-3 text-sm font-semibold text-(--bearhacks-fg)">
+                  Editing {drinkLabel(order.drink_id)}
+                </p>
+                <BobaDrinkEditForm
+                  menu={menu}
+                  initial={drinkValuesFromOrder(order)}
+                  onSubmit={(values) => onSaveEdit(order.id, values)}
+                  onCancelEdit={onStopEdit}
+                  onCancelOrder={() => onCancelOrder(order.id)}
+                  isCancelling={isCancelling}
+                />
+              </li>
+            );
+          }
           return (
             <li
               key={order.id}
-              className={`flex flex-col gap-2 rounded-(--bearhacks-radius-md) border px-3 py-3 sm:flex-row sm:items-center sm:justify-between ${
-                isEditing
-                  ? "border-(--bearhacks-accent) bg-(--bearhacks-accent-soft)"
-                  : "border-(--bearhacks-border) bg-(--bearhacks-surface)"
-              }`}
+              className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="flex flex-col gap-0.5">
                 <p className="text-sm font-semibold text-(--bearhacks-fg)">
-                  {drinkLabel(order.drink_id)}
+                  {drinkLabel(order.drink_id)} · {sizeLabel(order.size)}
                 </p>
                 <p className="text-xs text-(--bearhacks-muted)">
                   {order.sweetness}% sweet · {order.ice} ice
@@ -408,10 +414,10 @@ function PlacedOrdersList({
               <div className="flex gap-2">
                 <Button
                   type="button"
-                  variant={isEditing ? "primary" : "ghost"}
-                  onClick={() => onEdit(order.id)}
+                  variant="ghost"
+                  onClick={() => onStartEdit(order.id)}
                 >
-                  {isEditing ? "Editing…" : "Edit"}
+                  Edit
                 </Button>
                 <Button
                   type="button"
@@ -426,352 +432,113 @@ function PlacedOrdersList({
           );
         })}
       </ul>
-
-      {canPlaceMore ? (
-        <div className="mt-4">
-          <Button type="button" variant="primary" onClick={onAddAnother}>
-            Add another drink
-          </Button>
-        </div>
-      ) : (
-        <p className="mt-4 text-xs text-(--bearhacks-muted)">
-          You&apos;re at the cap of {maxOrders} drink
-          {maxOrders === 1 ? "" : "s"}. Cancel one above to free a slot.
-        </p>
-      )}
     </Card>
   );
 }
 
-type BobaOrderFormProps = {
-  menu: BobaMenuResponse;
-  isEditing: boolean;
-  existingOrderId: string | null;
-  /**
-   * Multi-cap "place another drink" mode: the form is still in create mode
-   * (POST), but the title/copy reflects "another" instead of the first.
-   */
-  isAdditionalDrink?: boolean;
-  initial: ReturnType<typeof valuesFromOrder>;
-  onSubmit: (values: ReturnType<typeof valuesFromOrder>) => Promise<void>;
-  onCancel: (() => Promise<void>) | null;
-  isCancelling: boolean;
-};
+// ---------------------------------------------------------------------------
+// Momo list card
+// ---------------------------------------------------------------------------
 
-function BobaOrderForm({
+function PlacedMomosCard({
+  momos,
   menu,
-  isEditing,
-  isAdditionalDrink = false,
-  initial,
-  onSubmit,
-  onCancel,
+  editingId,
+  onStartEdit,
+  onStopEdit,
+  onSaveEdit,
+  onCancelOrder,
   isCancelling,
-}: BobaOrderFormProps) {
-  const schema = useMemo(
-    () =>
-      buildBobaOrderSchema({
-        drink_ids: new Set(menu.drinks.map((d) => d.id)),
-        topping_ids: new Set(menu.toppings.map((t) => t.id)),
-      }),
-    [menu],
-  );
-
-  const form = useForm({
-    defaultValues: initial,
-    validationLogic: revalidateLogic(),
-    validators: {
-      onDynamic: schema,
-    },
-    onSubmit: async ({ value }) => {
-      await onSubmit(value);
-    },
-  });
+}: {
+  momos: BobaMomoOrder[];
+  menu: BobaMenuResponse;
+  editingId: string | null;
+  onStartEdit: (id: string) => void;
+  onStopEdit: () => void;
+  onSaveEdit: (
+    id: string,
+    values: ReturnType<typeof momoValuesFromOrder>,
+  ) => Promise<void>;
+  onCancelOrder: (id: string) => Promise<void>;
+  isCancelling: boolean;
+}) {
+  const fillingLabel = (id: string) =>
+    menu.momos.fillings.find((f) => f.id === id)?.label ?? id;
+  const sauceLabel = (id: string) =>
+    menu.momos.sauces.find((s) => s.id === id)?.label ?? id;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
-          {isEditing
-            ? "Edit your drink"
-            : isAdditionalDrink
-              ? "Place another drink"
-              : "Place your order"}
-        </CardTitle>
+        <CardTitle>Your momos</CardTitle>
         <CardDescription>
-          Pick a drink, toppings, sweetness, and ice. The food team will batch
-          pickups in time for the meal window.
+          {menu.momos.description}. Edit or cancel any momo order while the
+          window is open.
         </CardDescription>
       </CardHeader>
 
-      <form
-        className="flex flex-col gap-5"
-        onSubmit={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void form.handleSubmit();
-        }}
-      >
-        <form.Field name="drink_id">
-          {(field) => (
-            <FieldShell
-              label="Drink"
-              htmlFor={field.name}
-              error={firstError(field.state.meta.errors)}
-            >
-              <select
-                id={field.name}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-                className={selectClasses}
-              >
-                <option value="" disabled>
-                  Select a drink…
-                </option>
-                {menu.drinks.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-            </FieldShell>
-          )}
-        </form.Field>
-
-        <form.Field name="topping_ids">
-          {(field) => {
-            const selected = new Set(field.state.value);
-            const toggle = (id: string) => {
-              const next = new Set(selected);
-              if (next.has(id)) next.delete(id);
-              else next.add(id);
-              field.handleChange(
-                menu.toppings.filter((t) => next.has(t.id)).map((t) => t.id),
-              );
-            };
+      <ul className="flex flex-col gap-3">
+        {momos.map((order) => {
+          const isEditing = editingId === order.id;
+          if (isEditing) {
             return (
-              <FieldShell
-                label={`Toppings (max ${BOBA_MAX_TOPPINGS})`}
-                htmlFor={field.name}
-                error={firstError(field.state.meta.errors)}
-                hint={`${selected.size}/${BOBA_MAX_TOPPINGS} selected`}
+              <li
+                key={order.id}
+                className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 py-4"
               >
-                <ul
-                  id={field.name}
-                  className="flex flex-col gap-2"
-                  role="group"
-                  aria-label="Toppings"
-                >
-                  {menu.toppings.map((t) => {
-                    const isOn = selected.has(t.id);
-                    const disabled = !isOn && selected.size >= BOBA_MAX_TOPPINGS;
-                    return (
-                      <li key={t.id}>
-                        <label
-                          className={`flex min-h-(--bearhacks-touch-min) cursor-pointer items-center gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) px-4 py-2 ${
-                            isOn
-                              ? "bg-(--bearhacks-accent-soft)"
-                              : "bg-(--bearhacks-surface)"
-                          } ${disabled ? "opacity-60" : ""}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isOn}
-                            disabled={disabled}
-                            onChange={() => toggle(t.id)}
-                            className="h-4 w-4"
-                          />
-                          <span className="text-sm text-(--bearhacks-fg)">
-                            {t.label}
-                          </span>
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </FieldShell>
+                <p className="mb-3 text-sm font-semibold text-(--bearhacks-fg)">
+                  Editing momos
+                </p>
+                <BobaMomoEditForm
+                  menu={menu}
+                  initial={momoValuesFromOrder(order)}
+                  onSubmit={(values) => onSaveEdit(order.id, values)}
+                  onCancelEdit={onStopEdit}
+                  onCancelOrder={() => onCancelOrder(order.id)}
+                  isCancelling={isCancelling}
+                />
+              </li>
             );
-          }}
-        </form.Field>
-
-        <form.Field name="sweetness">
-          {(field) => (
-            <FieldShell
-              label="Sweetness"
-              htmlFor={field.name}
-              error={firstError(field.state.meta.errors)}
+          }
+          return (
+            <li
+              key={order.id}
+              className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
-              <div
-                role="radiogroup"
-                aria-label="Sweetness"
-                className="flex flex-wrap gap-2"
-              >
-                {SWEETNESS_VALUES.map((value) => {
-                  const isOn = field.state.value === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      role="radio"
-                      aria-checked={isOn}
-                      onClick={() => field.handleChange(value)}
-                      onBlur={field.handleBlur}
-                      className={`min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-pill) border px-4 text-sm font-semibold transition-colors ${
-                        isOn
-                          ? "border-(--bearhacks-primary) bg-(--bearhacks-primary) text-(--bearhacks-on-primary)"
-                          : "border-(--bearhacks-border) bg-(--bearhacks-surface) text-(--bearhacks-primary) hover:bg-(--bearhacks-surface-alt)"
-                      }`}
-                    >
-                      {SWEETNESS_LABELS[value]}
-                    </button>
-                  );
-                })}
+              <div className="flex flex-col gap-0.5">
+                <p className="text-sm font-semibold text-(--bearhacks-fg)">
+                  Momos · {fillingLabel(order.filling)}
+                </p>
+                <p className="text-xs text-(--bearhacks-muted)">
+                  Sauce: {sauceLabel(order.sauce)}
+                </p>
+                {order.notes ? (
+                  <p className="text-xs text-(--bearhacks-muted)">
+                    Note: {order.notes}
+                  </p>
+                ) : null}
               </div>
-            </FieldShell>
-          )}
-        </form.Field>
-
-        <form.Field name="ice">
-          {(field) => (
-            <FieldShell
-              label="Ice"
-              htmlFor={field.name}
-              error={firstError(field.state.meta.errors)}
-            >
-              <div
-                role="radiogroup"
-                aria-label="Ice"
-                className="flex flex-wrap gap-2"
-              >
-                {ICE_VALUES.map((value) => {
-                  const isOn = field.state.value === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      role="radio"
-                      aria-checked={isOn}
-                      onClick={() => field.handleChange(value)}
-                      onBlur={field.handleBlur}
-                      className={`min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-pill) border px-4 text-sm font-semibold transition-colors ${
-                        isOn
-                          ? "border-(--bearhacks-primary) bg-(--bearhacks-primary) text-(--bearhacks-on-primary)"
-                          : "border-(--bearhacks-border) bg-(--bearhacks-surface) text-(--bearhacks-primary) hover:bg-(--bearhacks-surface-alt)"
-                      }`}
-                    >
-                      {ICE_LABELS[value]}
-                    </button>
-                  );
-                })}
-              </div>
-            </FieldShell>
-          )}
-        </form.Field>
-
-        <form.Field name="notes">
-          {(field) => (
-            <FieldShell
-              label="Notes (optional)"
-              htmlFor={field.name}
-              error={firstError(field.state.meta.errors)}
-              hint={`${field.state.value.length}/${BOBA_NOTES_MAX_LEN}`}
-            >
-              <textarea
-                id={field.name}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-                rows={3}
-                maxLength={BOBA_NOTES_MAX_LEN}
-                placeholder="Allergies, special asks, etc."
-                className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-primary) focus:outline-none"
-              />
-            </FieldShell>
-          )}
-        </form.Field>
-
-        <form.Subscribe
-          selector={(state) => ({
-            canSubmit: state.canSubmit,
-            isSubmitting: state.isSubmitting,
-            isDirty: state.isDirty,
-          })}
-        >
-          {({ canSubmit, isSubmitting, isDirty }) => (
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-              {onCancel ? (
+              <div className="flex gap-2">
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => void onCancel()}
-                  disabled={isCancelling || isSubmitting}
+                  onClick={() => onStartEdit(order.id)}
                 >
-                  {isCancelling ? "Cancelling…" : "Cancel order"}
+                  Edit
                 </Button>
-              ) : (
-                <span />
-              )}
-              <Button
-                type="submit"
-                disabled={
-                  !canSubmit || isSubmitting || (isEditing && !isDirty)
-                }
-              >
-                {isSubmitting
-                  ? isEditing
-                    ? "Saving…"
-                    : "Placing…"
-                  : isEditing
-                    ? "Save changes"
-                    : isAdditionalDrink
-                      ? "Place another drink"
-                      : "Place order"}
-              </Button>
-            </div>
-          )}
-        </form.Subscribe>
-      </form>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={isCancelling}
+                  onClick={() => void onCancelOrder(order.id)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </Card>
   );
-}
-
-type FieldShellProps = {
-  label: string;
-  htmlFor: string;
-  error?: string;
-  hint?: string;
-  children: React.ReactNode;
-};
-
-function FieldShell({ label, htmlFor, error, hint, children }: FieldShellProps) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor={htmlFor}
-        className="text-sm font-medium text-(--bearhacks-primary)"
-      >
-        {label}
-      </label>
-      {children}
-      {hint && !error ? (
-        <p className="text-xs text-(--bearhacks-muted)">{hint}</p>
-      ) : null}
-      {error ? <p className="text-xs text-red-700">{error}</p> : null}
-    </div>
-  );
-}
-
-const selectClasses =
-  "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) focus:border-(--bearhacks-primary) focus:outline-none";
-
-function firstError(errors: unknown): string | undefined {
-  if (!Array.isArray(errors) || errors.length === 0) return undefined;
-  const head = errors[0];
-  if (head == null) return undefined;
-  if (typeof head === "string") return head;
-  if (typeof head === "object" && "message" in head) {
-    const m = (head as { message?: unknown }).message;
-    if (typeof m === "string") return m;
-  }
-  return undefined;
 }

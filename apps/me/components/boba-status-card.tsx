@@ -135,8 +135,8 @@ function StatusBody({
   const quotaLine = showQuota ? (
     <p className="text-xs font-medium text-(--bearhacks-muted)">
       <span className="text-(--bearhacks-fg)">{placedCount}</span> of{" "}
-      <span className="text-(--bearhacks-fg)">{maxOrders}</span> drinks placed
-      for this window.
+      <span className="text-(--bearhacks-fg)">{maxOrders}</span> drinks/momos
+      placed for this window.
     </p>
   ) : null;
 
@@ -205,7 +205,7 @@ function StatusBody({
           {hideEditCta ? null : (
             <CtaLink>
               {showQuota && canPlaceMore
-                ? "Add another drink →"
+                ? "Add more →"
                 : "Edit your order →"}
             </CtaLink>
           )}
@@ -242,7 +242,7 @@ function StatusBody({
           </p>
           {quotaLine}
           {hideEditCta || !showQuota || !canPlaceMore ? null : (
-            <CtaLink>Add another drink →</CtaLink>
+            <CtaLink>Add more →</CtaLink>
           )}
         </div>
       );

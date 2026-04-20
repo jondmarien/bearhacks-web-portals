@@ -6,17 +6,17 @@
  * Three views over the same underlying orders set, picked from a single meal
  * window:
  *   - Prep summary: drink groups + variants + topping totals (barista view)
- *   - Pickup list: drinks → hackers (call-out view)
+ *   - Pickup list: drinks → hackers (call-out view), with 30-minute batches
  *   - Orders table: TanStack Table v8 with controlled sort + global filter
- *     (audit/triage view, with per-row "fulfill" action)
+ *     (audit/triage view, with per-row Fulfill/Unfill toggle)
  *
- * Filter bar is a TanStack Form so we get the same `revalidateLogic` +
- * `form.Subscribe` ergonomics as the hacker order page. Filter changes pipe
- * into React Query keys; results stay on screen via `keepPreviousData`.
+ * Filter changes pipe into React Query keys; results stay on screen via
+ * `keepPreviousData`. The header carries a persistent "Export CSV" button so
+ * the food team can pull a snapshot at any time without having to scroll.
  */
 
 import { ApiError } from "@bearhacks/api-client";
-import { revalidateLogic, useForm } from "@tanstack/react-form";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   flexRender,
   getCoreRowModel,
@@ -27,12 +27,11 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import type { User } from "@supabase/supabase-js";
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSupabase } from "@/app/providers";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import {
   adminBobaKeys,
@@ -42,40 +41,49 @@ import {
   useAdminPrepSummaryQuery,
   useAdminWindowsQuery,
   useDevWindowSettingQuery,
-  useFulfillOrderMutation,
   useToggleDevWindowMutation,
-  type AdminOrder,
+  useToggleOrderStatusMutation,
+  type AdminOrderRow,
   type AdminWindow,
   type WindowsResponse,
 } from "@/lib/boba-queries";
 import {
-  adminFilterSchema,
-  DEFAULT_ADMIN_FILTER,
   ICE_LABELS,
   STATUS_BADGE_CLASSES,
   STATUS_LABELS,
   STATUS_VALUES,
   SWEETNESS_LABELS,
-  type AdminFilterValues,
   type BobaStatus,
 } from "@/lib/boba-schema";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { isStaffUser, isSuperAdminUser } from "@/lib/supabase-role";
 import { createStructuredLogger } from "@/lib/structured-logging";
-import { useQueryClient } from "@tanstack/react-query";
 
 const log = createStructuredLogger("admin/boba-orders");
+
+type FilterValues = {
+  meal_window_id?: string;
+  status?: BobaStatus;
+  search: string;
+};
+
+const DEFAULT_FILTER: FilterValues = {
+  meal_window_id: undefined,
+  status: undefined,
+  search: "",
+};
 
 export default function AdminBobaOrdersPage() {
   const supabase = useSupabase();
   const client = useApiClient();
   const queryClient = useQueryClient();
-  const confirm = useConfirm();
   useDocumentTitle("Boba orders");
 
   const [user, setUser] = useState<User | null>(null);
-  const [filters, setFilters] = useState<AdminFilterValues>(DEFAULT_ADMIN_FILTER);
+  const [filters, setFilters] = useState<FilterValues>(DEFAULT_FILTER);
+  // useDeferredValue keeps typing snappy while the table re-filters.
+  const deferredSearch = useDeferredValue(filters.search);
 
   useEffect(() => {
     if (!supabase) return;
@@ -94,18 +102,15 @@ export default function AdminBobaOrdersPage() {
 
   const windowsQuery = useAdminWindowsQuery(isSuper);
 
-  // The food-team console is single-window by design: prep summary, pickup
-  // list, and the orders table are all scoped to one meal window. We derive
-  // a focused window at render time so the user never starts on an empty
-  // screen and we don't need a setState-in-effect to "auto-select".
-  //   - If the user explicitly picked a window, honour that.
-  //   - Otherwise fall back to the active window, then the next upcoming,
-  //     then the first window in the list.
   const fallbackWindowId =
     windowsQuery.data?.active_window_id ??
     windowsQuery.data?.next_upcoming_window_id ??
     windowsQuery.data?.windows[0]?.id;
   const focusedWindowId = filters.meal_window_id ?? fallbackWindowId;
+  const focusedWindow = useMemo(
+    () => windowsQuery.data?.windows.find((w) => w.id === focusedWindowId),
+    [windowsQuery.data, focusedWindowId],
+  );
 
   const ordersQuery = useAdminOrdersQuery(
     {
@@ -118,7 +123,30 @@ export default function AdminBobaOrdersPage() {
   const prepQuery = useAdminPrepSummaryQuery(focusedWindowId, isSuper);
   const pickupQuery = useAdminPickupListQuery(focusedWindowId, isSuper);
 
-  const fulfillMutation = useFulfillOrderMutation();
+  const toggleStatusMutation = useToggleOrderStatusMutation();
+
+  async function handleExportCsv(): Promise<void> {
+    if (!client) return;
+    try {
+      await downloadOrdersCsv(client, { meal_window_id: focusedWindowId });
+      log("info", {
+        event: "admin_boba_csv_export",
+        actor,
+        resourceId: focusedWindowId ?? "all",
+        result: "success",
+      });
+      toast.success("CSV download started.");
+    } catch (error) {
+      log("error", {
+        event: "admin_boba_csv_export",
+        actor,
+        resourceId: focusedWindowId ?? "all",
+        result: "error",
+        error,
+      });
+      toast.error(error instanceof Error ? error.message : "CSV export failed");
+    }
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
@@ -128,6 +156,17 @@ export default function AdminBobaOrdersPage() {
         subtitle="Live food-team console — prep summary, pickup list, and full order audit per meal window."
         backHref="/"
         showBack
+        actions={
+          isSuper ? (
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => void handleExportCsv()}
+            >
+              Export CSV
+            </Button>
+          ) : null
+        }
       />
 
       {!staff && (
@@ -158,32 +197,6 @@ export default function AdminBobaOrdersPage() {
           values={filters}
           fallbackWindowId={fallbackWindowId}
           onChange={setFilters}
-          onExportCsv={async () => {
-            if (!client) return;
-            try {
-              await downloadOrdersCsv(client, {
-                meal_window_id: focusedWindowId,
-              });
-              log("info", {
-                event: "admin_boba_csv_export",
-                actor,
-                resourceId: focusedWindowId ?? "all",
-                result: "success",
-              });
-              toast.success("CSV download started.");
-            } catch (error) {
-              log("error", {
-                event: "admin_boba_csv_export",
-                actor,
-                resourceId: focusedWindowId ?? "all",
-                result: "error",
-                error,
-              });
-              toast.error(
-                error instanceof Error ? error.message : "CSV export failed",
-              );
-            }
-          }}
         />
       ) : null}
 
@@ -194,10 +207,11 @@ export default function AdminBobaOrdersPage() {
         />
       ) : null}
 
-      {isSuper ? (
+      {isSuper && focusedWindow ? (
         <PickupListCard
           query={pickupQuery}
-          windowLabel={windowLabel(windowsQuery.data, focusedWindowId) ?? "—"}
+          windowLabel={focusedWindow.label}
+          windowOpensAt={focusedWindow.opens_at}
         />
       ) : null}
 
@@ -205,37 +219,42 @@ export default function AdminBobaOrdersPage() {
         <OrdersTableCard
           query={ordersQuery}
           windows={windowsQuery.data?.windows ?? []}
-          search={filters.search ?? ""}
-          onFulfill={async (order) => {
-            const ok = await confirm({
-              title: "Mark this order fulfilled?",
-              description: `${order.display_name ?? order.user_id.slice(0, 8)} — once marked, it drops off the prep view.`,
-              confirmLabel: "Mark fulfilled",
-            });
-            if (!ok) return;
+          search={deferredSearch}
+          onToggleStatus={async (row, nextStatus) => {
+            // Optimistic toast — user sees the flip immediately.
+            const verb = nextStatus === "fulfilled" ? "Fulfilled" : "Unfulfilled";
             try {
-              await fulfillMutation.mutateAsync({ orderId: order.id });
+              await toggleStatusMutation.mutateAsync({ row, nextStatus });
               log("info", {
-                event: "admin_boba_fulfill",
+                event: "admin_boba_status_toggle",
                 actor,
-                resourceId: order.id,
+                resourceId: row.id,
+                kind: row.kind,
+                nextStatus,
                 result: "success",
               });
-              toast.success("Order fulfilled.");
+              toast.success(
+                `${verb} ${row.kind === "drink" ? "drink" : "momo order"}.`,
+              );
               void queryClient.invalidateQueries({ queryKey: adminBobaKeys.all });
             } catch (error) {
               log("error", {
-                event: "admin_boba_fulfill",
+                event: "admin_boba_status_toggle",
                 actor,
-                resourceId: order.id,
+                resourceId: row.id,
+                kind: row.kind,
+                nextStatus,
                 result: "error",
                 error,
               });
               toast.error(
-                error instanceof ApiError ? error.message : "Failed to fulfill",
+                error instanceof ApiError
+                  ? error.message
+                  : `Failed to ${verb.toLowerCase()}`,
               );
             }
           }}
+          onExportCsv={handleExportCsv}
         />
       ) : null}
     </main>
@@ -272,8 +291,6 @@ function DevTestWindowToggleCard({
   const isLoading = settingQuery.isLoading;
   const isPending = mutation.isPending;
 
-  // Local draft for the cap input so the field doesn't re-clobber while
-  // the admin is mid-edit. Re-syncs whenever the server value changes.
   const [capDraft, setCapDraft] = useState<string>(String(serverCap));
   useEffect(() => {
     setCapDraft(String(serverCap));
@@ -356,13 +373,13 @@ function DevTestWindowToggleCard({
             htmlFor="dev-window-max-orders"
             className="text-sm font-medium text-(--bearhacks-fg)"
           >
-            Drinks per hacker (dev window only)
+            Drinks/momos per hacker (dev window only)
           </label>
           <p className="text-xs text-(--bearhacks-muted)">
-            Real meal windows are always capped at one drink per hacker. This
-            cap applies to <span className="font-semibold">all hackers</span>{" "}
-            ordering against the dev-test window. Range: 1–
-            {DEV_WINDOW_MAX_ORDERS_HARD_CEILING}.
+            Real meal windows are always capped at one combined drink/momo per
+            hacker. This cap applies to{" "}
+            <span className="font-semibold">all hackers</span> ordering against
+            the dev-test window. Range: 1–{DEV_WINDOW_MAX_ORDERS_HARD_CEILING}.
           </p>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <div className="flex flex-col gap-1 sm:max-w-40">
@@ -402,9 +419,7 @@ function DevTestWindowToggleCard({
                           result: "success",
                           maxOrders: data.max_orders,
                         });
-                        return `Cap set to ${data.max_orders} drink${
-                          data.max_orders === 1 ? "" : "s"
-                        } per hacker.`;
+                        return `Cap set to ${data.max_orders} per hacker.`;
                       },
                       error: (error) => {
                         log("error", {
@@ -438,7 +453,7 @@ function DevTestWindowToggleCard({
           <p className="text-xs text-(--bearhacks-muted)">
             Currently saved:{" "}
             <span className="font-semibold text-(--bearhacks-fg)">
-              {isLoading ? "…" : `${serverCap} drink${serverCap === 1 ? "" : "s"}`}
+              {isLoading ? "…" : `${serverCap} item${serverCap === 1 ? "" : "s"}`}
             </span>{" "}
             per hacker.
           </p>
@@ -456,14 +471,15 @@ function windowLabel(
   return data.windows.find((w) => w.id === windowId)?.label ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Filter bar — uncontrolled inputs with debounced state
+// ---------------------------------------------------------------------------
+
 type FilterBarProps = {
   windows: WindowsResponse;
-  values: AdminFilterValues;
-  // Window the page falls back to when the user hasn't picked one yet.
-  // Surfaced here so the <select> shows the same window the queries use.
+  values: FilterValues;
   fallbackWindowId: string | undefined;
-  onChange: (next: AdminFilterValues) => void;
-  onExportCsv: () => void | Promise<void>;
+  onChange: (next: FilterValues) => void;
 };
 
 function FilterBar({
@@ -471,141 +487,94 @@ function FilterBar({
   values,
   fallbackWindowId,
   onChange,
-  onExportCsv,
 }: FilterBarProps) {
-  const form = useForm({
-    defaultValues: values,
-    validationLogic: revalidateLogic(),
-    validators: {
-      onDynamic: adminFilterSchema,
-    },
-    onSubmit: ({ value }) => {
-      onChange(value);
-    },
-  });
-
   return (
     <Card>
-      <form
-        className="flex flex-col gap-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          void form.handleSubmit();
-        }}
-      >
-        <div className="grid gap-3 sm:grid-cols-3">
-          <form.Field name="meal_window_id">
-            {(field) => (
-              <FilterField label="Meal window" htmlFor={field.name}>
-                <select
-                  id={field.name}
-                  // Show the focused window even before the user picks one,
-                  // so the dropdown matches what prep/pickup/orders queries
-                  // actually loaded. We deliberately drop "All windows" —
-                  // this console is single-window by design.
-                  value={field.state.value ?? fallbackWindowId ?? ""}
-                  onChange={(e) => {
-                    const next = e.target.value || undefined;
-                    field.handleChange(next);
-                    onChange({ ...values, meal_window_id: next });
-                  }}
-                  className={selectClasses}
-                >
-                  {windows.windows.map((w) => {
-                    const counts =
-                      windows.counts_by_window[w.id] ?? {
-                        placed: 0,
-                        cancelled: 0,
-                        fulfilled: 0,
-                        total: 0,
-                      };
-                    return (
-                      <option key={w.id} value={w.id}>
-                        {w.label} ({counts.placed} placed / {counts.total} total)
-                      </option>
-                    );
-                  })}
-                </select>
-              </FilterField>
-            )}
-          </form.Field>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <FilterField label="Meal window" htmlFor="filter-meal-window">
+          <select
+            id="filter-meal-window"
+            value={values.meal_window_id ?? fallbackWindowId ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...values,
+                meal_window_id: e.target.value || undefined,
+              })
+            }
+            className={selectClasses}
+          >
+            {windows.windows.map((w) => {
+              const counts = windows.counts_by_window[w.id] ?? {
+                placed: 0,
+                cancelled: 0,
+                fulfilled: 0,
+                total: 0,
+              };
+              return (
+                <option key={w.id} value={w.id}>
+                  {w.label} ({counts.placed} placed / {counts.total} total)
+                </option>
+              );
+            })}
+          </select>
+        </FilterField>
 
-          <form.Field name="status">
-            {(field) => (
-              <FilterField label="Status" htmlFor={field.name}>
-                <select
-                  id={field.name}
-                  value={field.state.value ?? ""}
-                  onChange={(e) => {
-                    const next = (e.target.value || undefined) as
-                      | BobaStatus
-                      | undefined;
-                    field.handleChange(next);
-                    onChange({ ...values, status: next });
-                  }}
-                  className={selectClasses}
-                >
-                  <option value="">All statuses</option>
-                  {STATUS_VALUES.map((s) => (
-                    <option key={s} value={s}>
-                      {STATUS_LABELS[s]}
-                    </option>
-                  ))}
-                </select>
-              </FilterField>
-            )}
-          </form.Field>
+        <FilterField label="Status" htmlFor="filter-status">
+          <select
+            id="filter-status"
+            value={values.status ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...values,
+                status: (e.target.value || undefined) as BobaStatus | undefined,
+              })
+            }
+            className={selectClasses}
+          >
+            <option value="">All statuses</option>
+            {STATUS_VALUES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </FilterField>
 
-          <form.Field name="search">
-            {(field) => (
-              <FilterField label="Search (name / notes)" htmlFor={field.name}>
-                <input
-                  id={field.name}
-                  type="search"
-                  value={field.state.value ?? ""}
-                  placeholder="Type to filter the table…"
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    field.handleChange(next);
-                    onChange({ ...values, search: next });
-                  }}
-                  className={inputClasses}
-                />
-              </FilterField>
-            )}
-          </form.Field>
-        </div>
+        <FilterField
+          label="Search (name, email, item, notes)"
+          htmlFor="filter-search"
+        >
+          <input
+            id="filter-search"
+            type="search"
+            value={values.search}
+            placeholder="Type to filter the table…"
+            onChange={(e) => onChange({ ...values, search: e.target.value })}
+            className={inputClasses}
+          />
+        </FilterField>
+      </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-(--bearhacks-muted)">
-            Filters update live as you type. CSV always reflects the current
-            window filter.
-          </p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                form.reset();
-                onChange(DEFAULT_ADMIN_FILTER);
-              }}
-            >
-              Reset
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              onClick={() => void onExportCsv()}
-            >
-              Export CSV
-            </Button>
-          </div>
-        </div>
-      </form>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-(--bearhacks-muted)">
+          Search runs across hacker name, email, item, and notes. Use the
+          Export CSV button at the top to grab the current window snapshot.
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => onChange({ ...DEFAULT_FILTER })}
+        >
+          Reset
+        </Button>
+      </div>
     </Card>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Prep summary
+// ---------------------------------------------------------------------------
 
 type PrepSummaryCardProps = {
   query: ReturnType<typeof useAdminPrepSummaryQuery>;
@@ -694,12 +663,58 @@ function PrepSummaryCard({ query, windowLabel }: PrepSummaryCardProps) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Pickup list with 30-minute batch grouping
+// ---------------------------------------------------------------------------
+
 type PickupListCardProps = {
   query: ReturnType<typeof useAdminPickupListQuery>;
   windowLabel: string;
+  windowOpensAt: string;
 };
 
-function PickupListCard({ query, windowLabel }: PickupListCardProps) {
+function PickupListCard({
+  query,
+  windowLabel,
+  windowOpensAt,
+}: PickupListCardProps) {
+  // Group all pickup rows by 30-minute batch derived from the window's
+  // opens_at, using the order's *id* (UUID) as a deterministic-but-spread
+  // bucket — there's no per-order placement timestamp on the pickup rows,
+  // so we'd otherwise group everything into a single batch. Keeping the
+  // grouping deterministic + visible per row helps the food team rotate
+  // pickups in 30-minute waves without thinking about it.
+  const data = query.data;
+  const grouped = useMemo(() => {
+    if (!data) return [];
+    const opensMs = new Date(windowOpensAt).getTime();
+    const batches = new Map<string, typeof data.drinks>();
+    for (const drink of data.drinks) {
+      for (const row of drink.rows) {
+        const bucketIdx = bucketForId(row.order_id);
+        const bucketStart = new Date(opensMs + bucketIdx * 30 * 60_000);
+        const key = bucketStart.toISOString();
+        if (!batches.has(key)) batches.set(key, []);
+        const batchDrinks = batches.get(key)!;
+        let bd = batchDrinks.find((d) => d.drink_id === drink.drink_id);
+        if (!bd) {
+          bd = {
+            drink_id: drink.drink_id,
+            drink_label: drink.drink_label,
+            count: 0,
+            rows: [],
+          };
+          batchDrinks.push(bd);
+        }
+        bd.count += 1;
+        bd.rows.push(row);
+      }
+    }
+    return Array.from(batches.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    );
+  }, [data, windowOpensAt]);
+
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-2">
@@ -709,7 +724,8 @@ function PickupListCard({ query, windowLabel }: PickupListCardProps) {
         <span className="text-xs text-(--bearhacks-muted)">{windowLabel}</span>
       </div>
       <CardDescription className="mt-1">
-        Call hackers up by drink. Names sorted alphabetically.
+        Call hackers up by drink, batched into 30-minute waves so you can
+        rotate pickups smoothly through the window.
       </CardDescription>
 
       {query.isLoading ? (
@@ -725,66 +741,117 @@ function PickupListCard({ query, windowLabel }: PickupListCardProps) {
           No placed orders for this window yet.
         </p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-4">
-          {query.data.drinks.map((drink) => (
-            <li
-              key={drink.drink_id}
-              className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) p-3"
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-sm font-semibold text-(--bearhacks-primary)">
-                  {drink.drink_label}
-                </span>
-                <span className="text-xs text-(--bearhacks-text-marketing)/80">
-                  {drink.count} hacker{drink.count === 1 ? "" : "s"}
-                </span>
-              </div>
-              <ul className="mt-2 flex flex-col divide-y divide-(--bearhacks-border)">
-                {drink.rows.map((row) => (
-                  <li
-                    key={row.order_id}
-                    className="grid gap-1 py-2 sm:grid-cols-[1fr,auto]"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-(--bearhacks-fg)">
-                        {row.name}
-                      </p>
-                      <p className="text-xs text-(--bearhacks-muted)">
-                        {SWEETNESS_LABELS[row.sweetness] ?? `${row.sweetness}%`}{" "}
-                        · {ICE_LABELS[row.ice] ?? row.ice}
-                        {row.topping_labels.length > 0
-                          ? ` · ${row.topping_labels.join(", ")}`
-                          : " · no toppings"}
-                      </p>
-                      {row.notes ? (
-                        <p className="text-xs italic text-(--bearhacks-text-marketing)/70">
-                          “{row.notes}”
-                        </p>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
+        <ul className="mt-4 flex flex-col gap-5">
+          {grouped.map(([startIso, drinks]) => {
+            const start = new Date(startIso);
+            const end = new Date(start.getTime() + 30 * 60_000);
+            const rangeLabel = `${formatBatchTime(start)} – ${formatBatchTime(end)}`;
+            const batchTotal = drinks.reduce((sum, d) => sum + d.count, 0);
+            return (
+              <li
+                key={startIso}
+                className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) p-3"
+              >
+                <div className="mb-2 flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-semibold text-(--bearhacks-primary)">
+                    Batch {rangeLabel}
+                  </span>
+                  <span className="text-xs text-(--bearhacks-muted)">
+                    {batchTotal} drink{batchTotal === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <ul className="flex flex-col gap-3">
+                  {drinks.map((drink) => (
+                    <li
+                      key={drink.drink_id}
+                      className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) p-3"
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-semibold text-(--bearhacks-primary)">
+                          {drink.drink_label}
+                        </span>
+                        <span className="text-xs text-(--bearhacks-text-marketing)/80">
+                          {drink.count} hacker{drink.count === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <ul className="mt-2 flex flex-col divide-y divide-(--bearhacks-border)">
+                        {drink.rows.map((row) => (
+                          <li
+                            key={row.order_id}
+                            className="grid gap-1 py-2 sm:grid-cols-[1fr,auto]"
+                          >
+                            <div>
+                              <p className="text-sm font-semibold text-(--bearhacks-fg)">
+                                {row.name}
+                              </p>
+                              <p className="text-xs text-(--bearhacks-muted)">
+                                {SWEETNESS_LABELS[row.sweetness] ??
+                                  `${row.sweetness}%`}{" "}
+                                · {ICE_LABELS[row.ice] ?? row.ice}
+                                {row.topping_labels.length > 0
+                                  ? ` · ${row.topping_labels.join(", ")}`
+                                  : " · no toppings"}
+                              </p>
+                              {row.notes ? (
+                                <p className="text-xs italic text-(--bearhacks-text-marketing)/70">
+                                  &ldquo;{row.notes}&rdquo;
+                                </p>
+                              ) : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            );
+          })}
         </ul>
       )}
     </Card>
   );
 }
 
+// Stable per-id bucket index in [0, 8) so 30-min batches across a 4-hour
+// window spread roughly evenly. UUIDs aren't time-ordered, so we hash from
+// the first 8 hex chars.
+function bucketForId(id: string): number {
+  const hex = id.replace(/[^0-9a-f]/gi, "").slice(0, 8) || "0";
+  const n = Number.parseInt(hex, 16);
+  if (!Number.isFinite(n)) return 0;
+  return n % 8;
+}
+
+function formatBatchTime(d: Date): string {
+  return d.toLocaleTimeString("en-CA", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/Toronto",
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Orders table
+// ---------------------------------------------------------------------------
+
 type OrdersTableCardProps = {
   query: ReturnType<typeof useAdminOrdersQuery>;
   windows: AdminWindow[];
   search: string;
-  onFulfill: (order: AdminOrder) => Promise<void>;
+  onToggleStatus: (
+    row: AdminOrderRow,
+    nextStatus: "placed" | "fulfilled",
+  ) => Promise<void>;
+  onExportCsv: () => Promise<void> | void;
 };
 
 function OrdersTableCard({
   query,
   windows,
   search,
-  onFulfill,
+  onToggleStatus,
+  onExportCsv,
 }: OrdersTableCardProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "created_at", desc: true },
@@ -798,49 +865,86 @@ function OrdersTableCard({
 
   const data = query.data?.orders ?? [];
 
-  const columns = useMemo<ColumnDef<AdminOrder>[]>(
+  const columns = useMemo<ColumnDef<AdminOrderRow>[]>(
     () => [
       {
-        accessorKey: "display_name",
+        accessorKey: "hacker_name",
         header: "Hacker",
-        cell: (ctx) => (
-          <span className="text-sm font-semibold text-(--bearhacks-fg)">
-            {ctx.row.original.display_name?.trim() ||
-              `(no profile) ${ctx.row.original.user_id.slice(0, 8)}`}
-          </span>
-        ),
+        cell: (ctx) => {
+          const o = ctx.row.original;
+          return (
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-(--bearhacks-fg)">
+                {o.hacker_name}
+              </span>
+              {o.hacker_email ? (
+                <span className="text-xs text-(--bearhacks-muted)">
+                  {o.hacker_email}
+                </span>
+              ) : null}
+            </div>
+          );
+        },
         sortingFn: (a, b) =>
-          (a.original.display_name ?? "").localeCompare(
-            b.original.display_name ?? "",
+          a.original.hacker_name.localeCompare(
+            b.original.hacker_name,
             "en",
             { sensitivity: "base" },
           ),
       },
       {
-        accessorKey: "drink_id",
-        header: "Drink",
+        accessorKey: "kind",
+        header: "Kind",
+        cell: (ctx) => {
+          const k = ctx.row.original.kind;
+          const isMomo = k === "momo";
+          return (
+            <span
+              className={`inline-flex items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-xs font-semibold ${
+                isMomo
+                  ? "bg-amber-100 text-amber-900 border border-amber-200"
+                  : "bg-(--bearhacks-accent-soft) text-(--bearhacks-primary) border border-(--bearhacks-border)"
+              }`}
+            >
+              {isMomo ? "Momos" : "Drink"}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: "size_label",
+        header: "Size",
         cell: (ctx) => (
-          <span className="text-sm text-(--bearhacks-fg)">
-            {ctx.row.original.drink_id}
+          <span className="text-xs text-(--bearhacks-muted)">
+            {ctx.row.original.size_label ?? "—"}
           </span>
         ),
       },
       {
-        id: "customization",
-        header: "Customization",
-        cell: (ctx) => {
-          const o = ctx.row.original;
-          return (
-            <span className="text-xs text-(--bearhacks-muted)">
-              {SWEETNESS_LABELS[o.sweetness] ?? `${o.sweetness}%`} ·{" "}
-              {ICE_LABELS[o.ice] ?? o.ice}
-              {o.topping_ids.length > 0
-                ? ` · ${o.topping_ids.join(", ")}`
-                : " · no toppings"}
+        accessorKey: "detail",
+        header: "Detail",
+        cell: (ctx) => (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm text-(--bearhacks-fg)">
+              {ctx.row.original.detail}
             </span>
-          );
-        },
+            {ctx.row.original.notes ? (
+              <span className="text-xs italic text-(--bearhacks-text-marketing)/70">
+                &ldquo;{ctx.row.original.notes}&rdquo;
+              </span>
+            ) : null}
+          </div>
+        ),
         enableSorting: false,
+      },
+      {
+        accessorKey: "amount_cents",
+        header: "$",
+        cell: (ctx) => (
+          <span className="text-xs font-semibold text-(--bearhacks-fg)">
+            ${(ctx.row.original.amount_cents / 100).toFixed(2)}
+          </span>
+        ),
       },
       {
         accessorKey: "meal_window_id",
@@ -889,23 +993,28 @@ function OrdersTableCard({
         header: "",
         cell: (ctx) => {
           const o = ctx.row.original;
-          if (o.status !== "placed") {
-            return <span className="text-xs text-(--bearhacks-muted)">—</span>;
+          if (o.status === "cancelled") {
+            return (
+              <span className="text-xs text-(--bearhacks-muted)">—</span>
+            );
           }
+          const isFulfilled = o.status === "fulfilled";
           return (
             <Button
               type="button"
-              variant="pill"
-              onClick={() => void onFulfill(o)}
+              variant={isFulfilled ? "ghost" : "pill"}
+              onClick={() =>
+                void onToggleStatus(o, isFulfilled ? "placed" : "fulfilled")
+              }
             >
-              Fulfill
+              {isFulfilled ? "Unfulfill" : "Fulfill"}
             </Button>
           );
         },
         enableSorting: false,
       },
     ],
-    [windowLabelById, onFulfill],
+    [windowLabelById, onToggleStatus],
   );
 
   // TanStack Table returns identity-unstable functions that React Compiler
@@ -925,10 +1034,16 @@ function OrdersTableCard({
       if (!needle) return true;
       const o = row.original;
       const haystack = [
+        o.hacker_name,
+        o.hacker_email,
         o.display_name,
+        o.detail,
         o.notes,
         o.drink_id,
-        o.topping_ids.join(" "),
+        o.size_label,
+        ...(o.topping_ids ?? []),
+        o.filling,
+        o.sauce,
         o.user_id,
       ]
         .filter((v): v is string => Boolean(v))
@@ -941,12 +1056,23 @@ function OrdersTableCard({
   return (
     <Card className="p-0">
       <div className="flex flex-col gap-1 border-b border-(--bearhacks-border) px-4 py-3">
-        <CardTitle className="text-base">
-          All <span className="bg-(--bearhacks-cream) px-1 rounded-sm">orders</span>
-        </CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-base">
+            All <span className="bg-(--bearhacks-cream) px-1 rounded-sm">orders</span>
+          </CardTitle>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => void onExportCsv()}
+          >
+            Export CSV
+          </Button>
+        </div>
         <CardDescription>
-          Sortable, searchable, with per-row fulfill action.{" "}
-          {query.data ? `${table.getFilteredRowModel().rows.length} of ${data.length} shown.` : null}
+          Sortable, searchable, with per-row Fulfill / Unfulfill toggle.{" "}
+          {query.data
+            ? `${table.getFilteredRowModel().rows.length} of ${data.length} shown.`
+            : null}
         </CardDescription>
       </div>
 

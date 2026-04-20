@@ -16,13 +16,12 @@ import type { BobaStatus } from "@/lib/boba-schema";
  * React Query hooks for the admin boba domain.
  *
  * Mirrors `bearhacks-backend/routers/admin_boba.py` — all endpoints require
- * super-admin and are 403 otherwise. The query key factory (`adminBobaKeys`)
- * lets the page invalidate sibling caches (orders + windows + summaries) in
- * one call after a fulfill, so counts and table rows update together.
+ * super-admin and are 403 otherwise. Now covers drinks + momos as a single
+ * row union (``kind`` discriminator) so the table can render both side by
+ * side, with bidirectional fulfill/unfulfill toggles per row.
  *
  * Pagination/filtering uses `placeholderData: keepPreviousData` so the table
- * doesn't blank out while the user toggles filters — the row set just fades
- * into the new one.
+ * doesn't blank out while the user toggles filters.
  */
 
 type ApiClient = ReturnType<typeof createApiClient>;
@@ -46,26 +45,46 @@ export type WindowsResponse = {
   >;
 };
 
-export type AdminOrder = {
+/** Discriminated union row from ``GET /admin/boba/orders``. */
+export type AdminOrderRow = {
   id: string;
   user_id: string;
   meal_window_id: string;
-  drink_id: string;
-  topping_ids: string[];
-  sweetness: number;
-  ice: string;
-  notes: string | null;
+  /** "drink" or "momo". */
+  kind: "drink" | "momo";
+  /** Drink size id (e.g. ``"medium"``) — null for momo rows. */
+  size: string | null;
+  /** Drink size human label (e.g. ``"Medium (16 oz)"``) — null for momo rows. */
+  size_label: string | null;
+  /** Pre-rendered "Classic Milk Tea + Pearls · 50% sugar · regular ice" copy. */
+  detail: string;
+  /** Per-row CAD cents. */
+  amount_cents: number;
   status: BobaStatus;
+  notes: string | null;
   created_at: string;
   updated_at: string;
   display_name: string | null;
+  hacker_name: string;
+  hacker_email: string | null;
+
+  // Drink-only fields. Present (and possibly empty) when ``kind === "drink"``.
+  drink_id?: string;
+  topping_ids?: string[];
+  sweetness?: number;
+  ice?: string;
+
+  // Momo-only fields. Present when ``kind === "momo"``.
+  filling?: string;
+  sauce?: string;
 };
 
 export type OrdersResponse = {
   meal_window_id: string | null;
   status: BobaStatus | null;
+  include: "drinks" | "momos" | "both";
   count: number;
-  orders: AdminOrder[];
+  orders: AdminOrderRow[];
 };
 
 export type PrepVariant = {
@@ -124,6 +143,49 @@ export type DevWindowSettingPatch = Partial<
   Pick<DevWindowSetting, "enabled" | "max_orders">
 >;
 
+export type AdminPaymentItem = {
+  kind: "drink" | "momo";
+  id: string;
+  detail: string;
+  size: string | null;
+  amount_cents: number;
+  status: BobaStatus;
+};
+
+export type AdminPaymentRow = {
+  id: string;
+  user_id: string;
+  meal_window_id: string;
+  status: "unpaid" | "submitted" | "confirmed" | "refunded";
+  expected_cents: number;
+  received_cents: number | null;
+  reference: string | null;
+  notes: string | null;
+  submitted_at: string | null;
+  confirmed_at: string | null;
+  confirmed_by: string | null;
+  created_at: string;
+  updated_at: string;
+  hacker_name: string;
+  hacker_email: string | null;
+  display_name: string | null;
+  drink_count: number;
+  momo_count: number;
+  items: AdminPaymentItem[];
+};
+
+export type PaymentsResponse = {
+  meal_window_id: string | null;
+  status: AdminPaymentRow["status"] | null;
+  count: number;
+  payments: AdminPaymentRow[];
+  summary: {
+    total_expected_cents: number;
+    total_received_cents: number;
+    by_status: Record<AdminPaymentRow["status"], number>;
+  };
+};
+
 export const adminBobaKeys = {
   all: ["admin-boba"] as const,
   windows: () => [...adminBobaKeys.all, "windows"] as const,
@@ -135,6 +197,10 @@ export const adminBobaKeys = {
     [...adminBobaKeys.all, "pickup", mealWindowId] as const,
   devWindowSetting: () =>
     [...adminBobaKeys.all, "settings", "dev-window"] as const,
+  payments: (params: {
+    meal_window_id?: string;
+    status?: AdminPaymentRow["status"];
+  }) => [...adminBobaKeys.all, "payments", params] as const,
 };
 
 export function useAdminWindowsQuery(
@@ -244,8 +310,6 @@ export function useToggleDevWindowMutation(): UseMutationResult<
         },
       ),
     onMutate: async (patch) => {
-      // Optimistic flip — the switch should feel instantaneous.
-      // We snapshot the previous value so the catch handler can roll back.
       await qc.cancelQueries({ queryKey: adminBobaKeys.devWindowSetting() });
       const previous = qc.getQueryData<DevWindowSetting>(
         adminBobaKeys.devWindowSetting(),
@@ -270,25 +334,134 @@ export function useToggleDevWindowMutation(): UseMutationResult<
       }
     },
     onSettled: () => {
-      // Refresh windows / counts so the dropdown picks up (or drops) the
-      // dev entry after the toggle, and so the cap label stays in sync.
       void qc.invalidateQueries({ queryKey: adminBobaKeys.devWindowSetting() });
       void qc.invalidateQueries({ queryKey: adminBobaKeys.windows() });
     },
   });
 }
 
-export function useFulfillOrderMutation(): UseMutationResult<
-  AdminOrder,
+// ----------------------------------------------------------------------------
+// Fulfill / Unfulfill — drinks and momos, both directions
+// ----------------------------------------------------------------------------
+
+type StatusToggleVars = { row: AdminOrderRow; nextStatus: "placed" | "fulfilled" };
+
+export function useToggleOrderStatusMutation(): UseMutationResult<
+  AdminOrderRow,
   Error,
-  { orderId: string }
+  StatusToggleVars
 > {
   const client = useApiClient();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ orderId }) =>
-      (client as ApiClient).fetchJson<AdminOrder>(
-        `/admin/boba/orders/${orderId}/fulfill`,
+    mutationFn: ({ row, nextStatus }) => {
+      const path = pathForToggle(row, nextStatus);
+      return (client as ApiClient).fetchJson<AdminOrderRow>(path, {
+        method: "POST",
+      });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: adminBobaKeys.all });
+    },
+  });
+}
+
+function pathForToggle(
+  row: AdminOrderRow,
+  nextStatus: "placed" | "fulfilled",
+): string {
+  const action = nextStatus === "fulfilled" ? "fulfill" : "unfulfill";
+  return row.kind === "drink"
+    ? `/admin/boba/orders/${row.id}/${action}`
+    : `/admin/boba/momos/${row.id}/${action}`;
+}
+
+// ----------------------------------------------------------------------------
+// Payments — list + confirm / refund / unconfirm
+// ----------------------------------------------------------------------------
+
+export function useAdminPaymentsQuery(
+  params: { meal_window_id?: string; status?: AdminPaymentRow["status"] },
+  enabled: boolean,
+): UseQueryResult<PaymentsResponse> {
+  const client = useApiClient();
+  const search = new URLSearchParams();
+  if (params.meal_window_id)
+    search.set("meal_window_id", params.meal_window_id);
+  if (params.status) search.set("status", params.status);
+  const qs = search.toString();
+  return useQuery({
+    queryKey: adminBobaKeys.payments(params),
+    queryFn: () =>
+      (client as ApiClient).fetchJson<PaymentsResponse>(
+        qs ? `/admin/boba/payments?${qs}` : "/admin/boba/payments",
+      ),
+    enabled: enabled && Boolean(client),
+    placeholderData: keepPreviousData,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useConfirmPaymentMutation(): UseMutationResult<
+  AdminPaymentRow,
+  Error,
+  { paymentId: string; receivedCents?: number | null; notes?: string | null }
+> {
+  const client = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paymentId, receivedCents, notes }) =>
+      (client as ApiClient).fetchJson<AdminPaymentRow>(
+        `/admin/boba/payments/${paymentId}/confirm`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            received_cents: receivedCents ?? null,
+            notes: notes ?? null,
+          }),
+        },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: adminBobaKeys.all });
+    },
+  });
+}
+
+export function useRefundPaymentMutation(): UseMutationResult<
+  AdminPaymentRow,
+  Error,
+  { paymentId: string; notes?: string | null }
+> {
+  const client = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paymentId, notes }) =>
+      (client as ApiClient).fetchJson<AdminPaymentRow>(
+        `/admin/boba/payments/${paymentId}/refund`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notes: notes ?? null }),
+        },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: adminBobaKeys.all });
+    },
+  });
+}
+
+export function useUnconfirmPaymentMutation(): UseMutationResult<
+  AdminPaymentRow,
+  Error,
+  { paymentId: string }
+> {
+  const client = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paymentId }) =>
+      (client as ApiClient).fetchJson<AdminPaymentRow>(
+        `/admin/boba/payments/${paymentId}/unconfirm`,
         { method: "POST" },
       ),
     onSuccess: () => {

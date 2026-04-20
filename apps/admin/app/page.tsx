@@ -159,6 +159,22 @@ export default function AdminHome() {
             </Card>
           </Link>
         ) : null}
+        {isSuperAdminUser(user) ? (
+          <Link href="/boba-payments" className="no-underline">
+            <Card className="h-full transition-shadow hover:shadow-lg">
+              <CardTitle>
+                Boba <span className="bg-(--bearhacks-cream) px-1 rounded-sm">payments</span>
+              </CardTitle>
+              <CardDescription className="mt-1">
+                E-transfer ledger per hacker × meal window. Confirm, refund,
+                or undo confirmations.
+              </CardDescription>
+              <span className="mt-4 inline-flex min-h-(--bearhacks-touch-min) items-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+                Open boba payments →
+              </span>
+            </Card>
+          </Link>
+        ) : null}
       </div>
     </main>
   );
