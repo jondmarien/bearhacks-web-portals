@@ -969,12 +969,8 @@ function OrdersTableCard({
   }, [windows]);
 
   // Wrapped in useMemo so `??` doesn't synthesize a fresh [] each render and
-  // invalidate every downstream memo (allRowKeys, selectedItems, …).
+  // invalidate every downstream memo (selectedItems, column deps, …).
   const data = useMemo(() => query.data?.orders ?? [], [query.data]);
-
-  // Build the list of keys that *could* be selected (everything currently
-  // visible in the table). Used for the header "select all" checkbox.
-  const allRowKeys = useMemo(() => data.map(rowKey), [data]);
 
   const columns = useMemo<ColumnDef<AdminOrderRow>[]>(
     () => [
@@ -983,13 +979,22 @@ function OrdersTableCard({
             {
               id: "select",
               enableSorting: false,
-              header: () => {
+              // Derive the "all visible" key set from the table's *filtered*
+              // row model — not raw `data` — so that typing into search and
+              // clicking this checkbox only queues the currently-visible
+              // rows for deletion. Using `data` here would silently select
+              // every row hidden behind the filter, which could nuke an
+              // entire meal window when an admin meant to target one hacker.
+              header: ({ table }) => {
+                const filteredKeys = table
+                  .getFilteredRowModel()
+                  .rows.map((row) => rowKey(row.original));
                 const allSelected =
-                  allRowKeys.length > 0 &&
-                  allRowKeys.every((k) => selectedRowKeys.has(k));
+                  filteredKeys.length > 0 &&
+                  filteredKeys.every((k) => selectedRowKeys.has(k));
                 const someSelected =
                   !allSelected &&
-                  allRowKeys.some((k) => selectedRowKeys.has(k));
+                  filteredKeys.some((k) => selectedRowKeys.has(k));
                 return (
                   <input
                     type="checkbox"
@@ -1001,12 +1006,12 @@ function OrdersTableCard({
                     }}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        onSelectedRowKeysChange(new Set(allRowKeys));
+                        onSelectedRowKeysChange(new Set(filteredKeys));
                       } else {
                         onSelectedRowKeysChange(new Set());
                       }
                     }}
-                    disabled={allRowKeys.length === 0 || isBulkDeleting}
+                    disabled={filteredKeys.length === 0 || isBulkDeleting}
                   />
                 );
               },
@@ -1185,7 +1190,6 @@ function OrdersTableCard({
       windowLabelById,
       onToggleStatus,
       isBulkMode,
-      allRowKeys,
       selectedRowKeys,
       onSelectedRowKeysChange,
       isBulkDeleting,
@@ -1228,13 +1232,17 @@ function OrdersTableCard({
     },
   });
 
-  const selectedItems: BulkDeleteItem[] = useMemo(
-    () =>
-      data
-        .filter((row) => selectedRowKeys.has(rowKey(row)))
-        .map((row) => ({ kind: row.kind, id: row.id })),
-    [data, selectedRowKeys],
-  );
+  // Intersect the selection with the filtered row model so the Delete button's
+  // count and the confirmation dialog only ever reflect rows the admin can
+  // currently *see*. Prevents the "I searched for one hacker and select-all
+  // silently queued the whole window" class of accident described in the
+  // header comment above. Recomputed each render — O(filteredN) on a few
+  // hundred rows is trivially cheap, and memoizing it against the right deps
+  // is fiddly because `table.getFilteredRowModel()` isn't a stable reference.
+  const selectedItems: BulkDeleteItem[] = table
+    .getFilteredRowModel()
+    .rows.filter((row) => selectedRowKeys.has(rowKey(row.original)))
+    .map((row) => ({ kind: row.original.kind, id: row.original.id }));
 
   return (
     <Card className="p-0">

@@ -199,15 +199,17 @@ function DrinkSubForm({
   menu: BobaMenuResponse;
 }) {
   return (
-    <fieldset className="flex flex-col gap-4 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-4">
-      <legend className="px-2 text-sm font-semibold text-(--bearhacks-primary)">
-        Drink
-      </legend>
-
+    // `aria-label` keeps the fieldset semantically grouped for assistive tech
+    // without rendering a visible "Drink" legend — the section is already
+    // labelled by the SectionToggle above ("Drink · Tea + topping + size.").
+    <fieldset
+      aria-label="Drink selection"
+      className="flex flex-col gap-4 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-4"
+    >
       <form.Field name="drink.drink_id">
         {(field: TanField<string>) => (
           <FieldShell
-            label="Drink"
+            label="Tea"
             htmlFor={field.name}
             error={firstError(field.state.meta.errors)}
           >
@@ -219,7 +221,7 @@ function DrinkSubForm({
               className={selectClasses}
             >
               <option value="" disabled>
-                Select a drink…
+                Select a tea…
               </option>
               {menu.drinks.map((d) => (
                 <option key={d.id} value={d.id}>
