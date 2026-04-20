@@ -253,17 +253,21 @@ function StatusBody({
       );
 
     case "open-fulfilled":
-      // Multi-cap windows let the hacker queue another drink after pickup;
+      // Multi-cap windows let the hacker queue another item after pickup;
       // single-cap (real meal) windows are done — no edit CTA, no "place
       // another" prompt, just confirmation that the pickup happened.
+      //
+      // Copy stays kind-neutral ("order", "drink or momo") because the
+      // dev-test window mixes both; the quota line just below already
+      // reads "drinks/momos placed for this window."
       return (
         <div className="flex flex-col gap-3">
           <Pill tone="muted">Picked up</Pill>
           <p className="text-sm text-(--bearhacks-fg)">
-            Your drink for <strong>{status.window.label}</strong> was picked
+            Your order for <strong>{status.window.label}</strong> was picked
             up. Enjoy!
             {showQuota && canPlaceMore
-              ? " Window is still open — feel free to add another drink."
+              ? " Window is still open — feel free to add another drink or momo."
               : ""}
           </p>
           {quotaLine}
