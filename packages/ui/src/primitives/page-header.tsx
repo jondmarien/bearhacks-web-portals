@@ -26,7 +26,7 @@ export function PageHeader({
   const titleClass =
     tone === "marketing"
       ? "text-2xl font-extrabold uppercase tracking-[0.15rem] text-(--bearhacks-text-marketing) sm:text-3xl"
-      : "text-3xl font-bold tracking-tight text-(--bearhacks-primary)";
+      : "text-3xl font-bold tracking-tight text-(--bearhacks-title)";
   const subtitleClass =
     tone === "marketing"
       ? "mt-1 text-sm text-(--bearhacks-text-marketing)/70"

@@ -21,12 +21,12 @@ export function CardHeader({ className = "", ...rest }: HTMLAttributes<HTMLDivEl
 export function CardTitle({ className = "", ...rest }: HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h2
-      className={`text-lg font-semibold tracking-tight text-(--bearhacks-primary) ${className}`}
+      className={`text-lg font-semibold tracking-tight text-(--bearhacks-title) ${className}`}
       {...rest}
     />
   );
 }
 
 export function CardDescription({ className = "", ...rest }: HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={`text-sm text-(--bearhacks-muted) ${className}`} {...rest} />;
+  return <p className={`text-sm text-(--bearhacks-on-surface-muted) ${className}`} {...rest} />;
 }

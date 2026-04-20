@@ -51,10 +51,10 @@ export function AdminGateBanner() {
 
   if (!envResult.ok) {
     return (
-      <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+      <div className="border-b border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg) px-4 py-2 text-sm text-(--bearhacks-warning-fg)">
         Missing public environment configuration. Add the required
-        <code className="mx-1 rounded bg-white/60 px-1 dark:bg-black/30">NEXT_PUBLIC_*</code>
-        values to <code className="rounded bg-white/60 px-1 dark:bg-black/30">apps/admin/.env.local</code>.
+        <code className="mx-1 rounded bg-(--bearhacks-surface)/60 px-1">NEXT_PUBLIC_*</code>
+        values to <code className="rounded bg-(--bearhacks-surface)/60 px-1">apps/admin/.env.local</code>.
       </div>
     );
   }
@@ -122,8 +122,8 @@ export function AdminGateBanner() {
     <div
       className={`border-b px-4 py-3 text-sm ${
         isAdmin
-          ? "border-green-200 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950 dark:text-green-100"
-          : "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"
+          ? "border-(--bearhacks-success-border) bg-(--bearhacks-success-bg) text-(--bearhacks-success-fg)"
+          : "border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg) text-(--bearhacks-warning-fg)"
       }`}
     >
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

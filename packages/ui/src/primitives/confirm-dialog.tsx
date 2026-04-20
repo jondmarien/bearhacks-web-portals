@@ -102,10 +102,10 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
                 if (event.target === event.currentTarget) close(false);
               }}
             >
-              <div className="w-full max-w-md rounded-(--bearhacks-radius-lg) border border-(--bearhacks-border) bg-(--bearhacks-surface) p-5 shadow-xl">
+              <div className="w-full max-w-md rounded-(--bearhacks-radius-lg) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface-raised) p-5 shadow-xl">
                 <h2
                   id="confirm-dialog-title"
-                  className="text-lg font-semibold text-(--bearhacks-text-marketing)"
+                  className="text-lg font-semibold text-(--bearhacks-title)"
                 >
                   {dialog.title}
                 </h2>
@@ -126,7 +126,7 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
                     onClick={() => close(true)}
                     className={
                       dialog.tone === "danger"
-                        ? "bg-(--bearhacks-danger) text-(--bearhacks-on-primary) hover:bg-(--bearhacks-danger)/90 disabled:hover:bg-(--bearhacks-danger)"
+                        ? "bg-(--bearhacks-danger-fill) text-(--bearhacks-on-danger) hover:bg-(--bearhacks-danger-fill)/90 disabled:hover:bg-(--bearhacks-danger-fill)"
                         : ""
                     }
                   >

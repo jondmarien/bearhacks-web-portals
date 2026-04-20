@@ -10,6 +10,12 @@
 }
 
 @layer base {
+  /* WCAG 2.2 SC 2.4.11 Focus Not Obscured — keep focused elements clear of
+   * the sticky SiteHeader (~64px) when scrolled into view. */
+  html {
+    scroll-padding-block: 5rem 2rem;
+  }
+
   body {
     font-family: var(--font-sans);
     font-size: var(--bearhacks-text-base);
