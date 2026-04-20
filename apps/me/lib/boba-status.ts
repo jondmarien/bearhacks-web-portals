@@ -32,6 +32,12 @@ export type BobaStatus =
       kind: "open-cancelled";
       window: BobaWindowsResponse["windows"][number];
       closesInMs: number;
+    }
+  | {
+      kind: "open-fulfilled";
+      window: BobaWindowsResponse["windows"][number];
+      order: BobaOrder;
+      closesInMs: number;
     };
 
 export type StatusInputs = {
@@ -68,8 +74,15 @@ export function computeBobaStatus({
   if (active) {
     const closesInMs = new Date(active.closes_at).getTime() - moment.getTime();
     if (order && order.meal_window_id === active.id) {
+      // Terminal statuses get their own UI surfaces. Without these branches,
+      // a fulfilled drink would render as an active "Order placed" card with
+      // an "Edit your order →" CTA — misleading for a drink that's already
+      // been picked up.
       if (order.status === "cancelled") {
         return { kind: "open-cancelled", window: active, closesInMs };
+      }
+      if (order.status === "fulfilled") {
+        return { kind: "open-fulfilled", window: active, order, closesInMs };
       }
       return { kind: "open-has-order", window: active, order, closesInMs };
     }
