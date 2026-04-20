@@ -692,62 +692,193 @@ function PaymentsTableCard({
           No payment bundles match the current filters.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-3xl border-collapse text-left text-sm">
-            <thead className="border-b border-(--bearhacks-border) bg-(--bearhacks-surface-alt)">
-              {table.getHeaderGroups().map((hg) => (
-                <tr key={hg.id}>
-                  {hg.headers.map((header) => {
-                    const canSort = header.column.getCanSort();
-                    const sort = header.column.getIsSorted();
-                    return (
-                      <th
-                        key={header.id}
-                        scope="col"
-                        className="px-3 py-3 font-medium text-(--bearhacks-fg)"
-                      >
-                        {header.isPlaceholder ? null : canSort ? (
-                          <button
-                            type="button"
-                            onClick={header.column.getToggleSortingHandler()}
-                            className="inline-flex items-center gap-1 text-left font-medium hover:underline"
-                          >
-                            {flexRender(
+        <>
+          <div className="hidden overflow-x-auto sm:block">
+            <table className="w-full min-w-3xl border-collapse text-left text-sm">
+              <thead className="border-b border-(--bearhacks-border) bg-(--bearhacks-surface-alt)">
+                {table.getHeaderGroups().map((hg) => (
+                  <tr key={hg.id}>
+                    {hg.headers.map((header) => {
+                      const canSort = header.column.getCanSort();
+                      const sort = header.column.getIsSorted();
+                      return (
+                        <th
+                          key={header.id}
+                          scope="col"
+                          className="px-3 py-3 font-medium text-(--bearhacks-fg)"
+                        >
+                          {header.isPlaceholder ? null : canSort ? (
+                            <button
+                              type="button"
+                              onClick={header.column.getToggleSortingHandler()}
+                              className="inline-flex items-center gap-1 text-left font-medium hover:underline"
+                            >
+                              {flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                              <span aria-hidden className="text-xs">
+                                {sort === "asc" ? "▲" : sort === "desc" ? "▼" : ""}
+                              </span>
+                            </button>
+                          ) : (
+                            flexRender(
                               header.column.columnDef.header,
                               header.getContext(),
-                            )}
-                            <span aria-hidden className="text-xs">
-                              {sort === "asc" ? "▲" : sort === "desc" ? "▼" : ""}
-                            </span>
-                          </button>
-                        ) : (
-                          flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )
-                        )}
-                      </th>
-                    );
-                  })}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {table.getRowModel().rows.map((row) => (
-                <tr
+                            )
+                          )}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </thead>
+              <tbody>
+                {table.getRowModel().rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-(--bearhacks-border) last:border-0 align-top"
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-3 py-3">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <ul className="flex flex-col gap-3 p-3 sm:hidden">
+            {table.getRowModel().rows.map((row) => {
+              const o = row.original;
+              const expected = `$${(o.expected_cents / 100).toFixed(2)}`;
+              const received =
+                o.received_cents == null
+                  ? null
+                  : `$${(o.received_cents / 100).toFixed(2)}`;
+              return (
+                <li
                   key={row.id}
-                  className="border-b border-(--bearhacks-border) last:border-0 align-top"
+                  className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-3"
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-3 py-3">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="text-sm font-semibold text-(--bearhacks-fg) wrap-break-word">
+                        {o.hacker_name}
+                      </span>
+                      {o.hacker_email ? (
+                        <span className="text-xs text-(--bearhacks-muted) wrap-break-word">
+                          {o.hacker_email}
+                        </span>
+                      ) : null}
+                    </div>
+                    <span
+                      className={`inline-flex shrink-0 items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE_CLASSES[o.status]}`}
+                    >
+                      {STATUS_LABELS[o.status]}
+                    </span>
+                  </div>
+
+                  {o.items.length === 0 ? (
+                    <p className="mt-2 text-xs text-(--bearhacks-muted)">
+                      No placed items
+                    </p>
+                  ) : (
+                    <ul className="mt-2 flex flex-col gap-0.5 text-xs">
+                      {o.items.map((it) => (
+                        <li
+                          key={it.id}
+                          className={
+                            it.status === "placed"
+                              ? "text-(--bearhacks-fg) wrap-break-word"
+                              : "text-(--bearhacks-muted) line-through wrap-break-word"
+                          }
+                        >
+                          <span className="font-semibold">
+                            {it.kind === "drink" ? "Drink" : "Momos"}
+                          </span>{" "}
+                          · {it.detail} ·{" "}
+                          <span className="font-semibold">
+                            ${(it.amount_cents / 100).toFixed(2)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+                    <dt className="uppercase tracking-wide text-(--bearhacks-muted)">
+                      Expected
+                    </dt>
+                    <dd className="font-semibold text-(--bearhacks-fg)">
+                      {expected}
+                    </dd>
+                    <dt className="uppercase tracking-wide text-(--bearhacks-muted)">
+                      Received
+                    </dt>
+                    <dd className="text-(--bearhacks-fg)">{received ?? "—"}</dd>
+                    {o.reference ? (
+                      <>
+                        <dt className="uppercase tracking-wide text-(--bearhacks-muted)">
+                          Ref
+                        </dt>
+                        <dd className="text-(--bearhacks-fg) wrap-break-word">
+                          {o.reference}
+                        </dd>
+                      </>
+                    ) : null}
+                    <dt className="uppercase tracking-wide text-(--bearhacks-muted)">
+                      Updated
+                    </dt>
+                    <dd className="text-(--bearhacks-fg)">
+                      {new Date(o.updated_at).toLocaleString("en-CA", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        month: "short",
+                        day: "numeric",
+                        timeZone: "America/Toronto",
+                      })}
+                    </dd>
+                  </dl>
+
+                  {o.status === "confirmed" ? (
+                    <div className="mt-3 flex">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="w-full sm:w-auto"
+                        onClick={() => void onUnconfirm(o)}
+                      >
+                        Undo confirmation
+                      </Button>
+                    </div>
+                  ) : o.status === "refunded" ? null : (
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        type="button"
+                        variant="pill"
+                        className="w-full sm:w-auto"
+                        onClick={() => void onConfirm(o)}
+                      >
+                        Confirm
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="w-full sm:w-auto"
+                        onClick={() => void onRefund(o)}
+                      >
+                        Refund
+                      </Button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </Card>
   );

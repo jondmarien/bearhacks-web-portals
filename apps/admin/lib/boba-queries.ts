@@ -377,6 +377,44 @@ function pathForToggle(
 }
 
 // ----------------------------------------------------------------------------
+// Bulk delete — mixed drink + momo hard-delete, used by the "clear old orders"
+// flow. Mirrors the QR admin's ``Bulk delete`` ergonomics so the food team
+// can sweep a window clean without clicking through per-row confirms.
+// ----------------------------------------------------------------------------
+
+export type BulkDeleteItem = { kind: "drink" | "momo"; id: string };
+
+export type BulkDeleteResponse = {
+  deleted: BulkDeleteItem[];
+  failed: (BulkDeleteItem & { reason: string })[];
+};
+
+export function useBulkDeleteOrdersMutation(): UseMutationResult<
+  BulkDeleteResponse,
+  Error,
+  BulkDeleteItem[]
+> {
+  const client = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items) =>
+      (client as ApiClient).fetchJson<BulkDeleteResponse>(
+        "/admin/boba/orders/bulk-delete",
+        {
+          method: "POST",
+          body: JSON.stringify({ items }),
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    onSuccess: () => {
+      // Wholesale invalidate — orders/prep-summary/pickup-list/payments are
+      // all downstream of this delete and will refetch lazily.
+      void qc.invalidateQueries({ queryKey: adminBobaKeys.all });
+    },
+  });
+}
+
+// ----------------------------------------------------------------------------
 // Payments — list + confirm / refund / unconfirm
 // ----------------------------------------------------------------------------
 

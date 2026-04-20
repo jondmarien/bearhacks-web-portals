@@ -122,13 +122,13 @@ export function AllergenInfoModal({ triggerClassName = "" }: Props) {
               role="dialog"
               aria-modal="true"
               aria-labelledby="allergen-modal-title"
-              className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 p-4"
+              className="fixed inset-0 z-100 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
               onMouseDown={(event) => {
                 if (event.target === event.currentTarget) setOpen(false);
               }}
             >
-              <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-(--bearhacks-radius-lg) border border-(--bearhacks-border) bg-(--bearhacks-surface) shadow-xl">
-                <header className="flex items-start justify-between gap-4 border-b border-(--bearhacks-border) px-5 py-4">
+              <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-(--bearhacks-radius-lg) border border-(--bearhacks-border) bg-(--bearhacks-surface) shadow-xl sm:max-h-[85vh] sm:rounded-(--bearhacks-radius-lg)">
+                <header className="flex items-start justify-between gap-4 border-b border-(--bearhacks-border) px-4 py-3 sm:px-5 sm:py-4">
                   <div>
                     <h2
                       id="allergen-modal-title"
@@ -151,7 +151,7 @@ export function AllergenInfoModal({ triggerClassName = "" }: Props) {
                   </Button>
                 </header>
 
-                <div className="flex-1 overflow-y-auto px-5 py-4">
+                <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
                   <Section title="Cross-contact warning">
                     <p className="text-sm text-(--bearhacks-fg)">
                       All drinks are prepared on shared equipment. Trace amounts
@@ -244,58 +244,100 @@ function VeganBadge({ value }: { value: "yes" | "with-substitution" | "no" }) {
 
 function DrinkTable({ rows }: { rows: DrinkRow[] }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-(--bearhacks-border) text-xs uppercase tracking-[0.06em] text-(--bearhacks-muted)">
-            <th className="py-2 pr-2">Drink</th>
-            <th className="py-2 pr-2">Vegan</th>
-            <th className="py-2">Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.label} className="border-b border-(--bearhacks-border)/60 last:border-b-0">
-              <td className="py-2 pr-2 align-top font-medium text-(--bearhacks-fg)">
-                {row.label}
-              </td>
-              <td className="py-2 pr-2 align-top">
-                <VeganBadge value={row.vegan} />
-              </td>
-              <td className="py-2 align-top text-(--bearhacks-fg)">{row.notes}</td>
+    <>
+      <div className="hidden overflow-x-auto sm:block">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-(--bearhacks-border) text-xs uppercase tracking-[0.06em] text-(--bearhacks-muted)">
+              <th className="py-2 pr-2">Drink</th>
+              <th className="py-2 pr-2">Vegan</th>
+              <th className="py-2">Notes</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.label} className="border-b border-(--bearhacks-border)/60 last:border-b-0">
+                <td className="py-2 pr-2 align-top font-medium text-(--bearhacks-fg)">
+                  {row.label}
+                </td>
+                <td className="py-2 pr-2 align-top">
+                  <VeganBadge value={row.vegan} />
+                </td>
+                <td className="py-2 align-top text-(--bearhacks-fg)">{row.notes}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <ul className="flex flex-col gap-2 sm:hidden">
+        {rows.map((row) => (
+          <li
+            key={row.label}
+            className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-3 py-2"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-sm font-medium text-(--bearhacks-fg) wrap-break-word">
+                {row.label}
+              </span>
+              <VeganBadge value={row.vegan} />
+            </div>
+            <p className="mt-1 text-xs text-(--bearhacks-fg) wrap-break-word">
+              {row.notes}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
 function ToppingTable({ rows }: { rows: ToppingRow[] }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-(--bearhacks-border) text-xs uppercase tracking-[0.06em] text-(--bearhacks-muted)">
-            <th className="py-2 pr-2">Topping</th>
-            <th className="py-2 pr-2">Vegan</th>
-            <th className="py-2">Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.label} className="border-b border-(--bearhacks-border)/60 last:border-b-0">
-              <td className="py-2 pr-2 align-top font-medium text-(--bearhacks-fg)">
-                {row.label}
-              </td>
-              <td className="py-2 pr-2 align-top">
-                <VeganBadge value={row.vegan} />
-              </td>
-              <td className="py-2 align-top text-(--bearhacks-fg)">{row.notes}</td>
+    <>
+      <div className="hidden overflow-x-auto sm:block">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-(--bearhacks-border) text-xs uppercase tracking-[0.06em] text-(--bearhacks-muted)">
+              <th className="py-2 pr-2">Topping</th>
+              <th className="py-2 pr-2">Vegan</th>
+              <th className="py-2">Notes</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.label} className="border-b border-(--bearhacks-border)/60 last:border-b-0">
+                <td className="py-2 pr-2 align-top font-medium text-(--bearhacks-fg)">
+                  {row.label}
+                </td>
+                <td className="py-2 pr-2 align-top">
+                  <VeganBadge value={row.vegan} />
+                </td>
+                <td className="py-2 align-top text-(--bearhacks-fg)">{row.notes}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <ul className="flex flex-col gap-2 sm:hidden">
+        {rows.map((row) => (
+          <li
+            key={row.label}
+            className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-3 py-2"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-sm font-medium text-(--bearhacks-fg) wrap-break-word">
+                {row.label}
+              </span>
+              <VeganBadge value={row.vegan} />
+            </div>
+            <p className="mt-1 text-xs text-(--bearhacks-fg) wrap-break-word">
+              {row.notes}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

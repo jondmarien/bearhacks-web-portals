@@ -136,13 +136,14 @@ export function BobaPaymentCard({
             <p className="text-sm font-semibold text-(--bearhacks-fg)">
               {recipientName}
             </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <code className="select-all rounded-(--bearhacks-radius-md) bg-(--bearhacks-surface-alt) px-2 py-1 text-sm text-(--bearhacks-fg)">
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <code className="min-w-0 max-w-full break-all rounded-(--bearhacks-radius-md) bg-(--bearhacks-surface-alt) px-2 py-1 text-sm text-(--bearhacks-fg) select-all">
                 {etransferEmail}
               </code>
               <Button
                 type="button"
                 variant="ghost"
+                className="w-full sm:w-auto"
                 onClick={() => void copyEmail()}
               >
                 {emailCopied ? "Copied!" : "Copy email"}
@@ -174,6 +175,7 @@ export function BobaPaymentCard({
             <Button
               type="button"
               variant="primary"
+              className="w-full sm:w-auto"
               onClick={() => void onSubmit()}
               disabled={submit.isPending}
             >
@@ -196,6 +198,7 @@ export function BobaPaymentCard({
             <Button
               type="button"
               variant="ghost"
+              className="w-full sm:w-auto"
               onClick={() => void onUndo()}
               disabled={undo.isPending}
             >

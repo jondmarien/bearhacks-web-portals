@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { useSupabase } from "@/app/providers";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import {
   adminBobaKeys,
@@ -40,11 +41,13 @@ import {
   useAdminPickupListQuery,
   useAdminPrepSummaryQuery,
   useAdminWindowsQuery,
+  useBulkDeleteOrdersMutation,
   useDevWindowSettingQuery,
   useToggleDevWindowMutation,
   useToggleOrderStatusMutation,
   type AdminOrderRow,
   type AdminWindow,
+  type BulkDeleteItem,
   type WindowsResponse,
 } from "@/lib/boba-queries";
 import {
@@ -124,6 +127,87 @@ export default function AdminBobaOrdersPage() {
   const pickupQuery = useAdminPickupListQuery(focusedWindowId, isSuper);
 
   const toggleStatusMutation = useToggleOrderStatusMutation();
+  const bulkDeleteMutation = useBulkDeleteOrdersMutation();
+  const confirm = useConfirm();
+
+  // Composite key "kind:id" so we can select drinks and momos without
+  // risking id collisions (they're separate tables / uuid spaces).
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [isBulkMode, setIsBulkMode] = useState(false);
+
+  async function handleBulkDelete(items: BulkDeleteItem[]): Promise<void> {
+    if (items.length === 0) return;
+    const confirmed = await confirm({
+      title: `Delete ${items.length} order(s)?`,
+      description:
+        "This permanently removes the selected drink/momo rows from the database. Payment bundles will be recomputed so hackers aren't charged for deleted items.",
+      confirmLabel: `Delete ${items.length}`,
+      cancelLabel: "Cancel",
+      tone: "danger",
+    });
+    if (!confirmed) {
+      log("info", {
+        event: "admin_boba_bulk_delete",
+        actor,
+        resourceId: "/admin/boba/orders/bulk-delete",
+        result: "cancelled",
+        count: items.length,
+      });
+      return;
+    }
+
+    log("info", {
+      event: "admin_boba_bulk_delete",
+      actor,
+      resourceId: "/admin/boba/orders/bulk-delete",
+      result: "requested",
+      count: items.length,
+    });
+    try {
+      const result = await bulkDeleteMutation.mutateAsync(items);
+      const deletedKeys = new Set(
+        result.deleted.map((d) => `${d.kind}:${d.id}`),
+      );
+      setSelectedRowKeys((prev) => {
+        const next = new Set<string>();
+        for (const key of prev) if (!deletedKeys.has(key)) next.add(key);
+        return next;
+      });
+      log("info", {
+        event: "admin_boba_bulk_delete",
+        actor,
+        resourceId: "/admin/boba/orders/bulk-delete",
+        result: result.failed.length === 0 ? "success" : "partial",
+        deletedCount: result.deleted.length,
+        failedCount: result.failed.length,
+      });
+      if (result.failed.length === 0) {
+        toast.success(`Deleted ${result.deleted.length} order(s).`);
+        setIsBulkMode(false);
+      } else if (result.deleted.length === 0) {
+        toast.error(`Failed to delete ${result.failed.length} order(s).`);
+      } else {
+        toast.warning(
+          `Deleted ${result.deleted.length}/${
+            result.deleted.length + result.failed.length
+          }. ${result.failed.length} failed.`,
+        );
+      }
+    } catch (error) {
+      log("error", {
+        event: "admin_boba_bulk_delete",
+        actor,
+        resourceId: "/admin/boba/orders/bulk-delete",
+        result: "error",
+        error,
+      });
+      toast.error(
+        error instanceof ApiError ? error.message : "Bulk delete failed",
+      );
+    }
+  }
 
   async function handleExportCsv(): Promise<void> {
     if (!client) return;
@@ -255,6 +339,12 @@ export default function AdminBobaOrdersPage() {
             }
           }}
           onExportCsv={handleExportCsv}
+          isBulkMode={isBulkMode}
+          onSetBulkMode={setIsBulkMode}
+          selectedRowKeys={selectedRowKeys}
+          onSelectedRowKeysChange={setSelectedRowKeys}
+          onBulkDelete={handleBulkDelete}
+          isBulkDeleting={bulkDeleteMutation.isPending}
         />
       ) : null}
     </main>
@@ -844,7 +934,16 @@ type OrdersTableCardProps = {
     nextStatus: "placed" | "fulfilled",
   ) => Promise<void>;
   onExportCsv: () => Promise<void> | void;
+  isBulkMode: boolean;
+  onSetBulkMode: (next: boolean) => void;
+  selectedRowKeys: Set<string>;
+  onSelectedRowKeysChange: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onBulkDelete: (items: BulkDeleteItem[]) => Promise<void>;
+  isBulkDeleting: boolean;
 };
+
+const rowKey = (row: Pick<AdminOrderRow, "kind" | "id">): string =>
+  `${row.kind}:${row.id}`;
 
 function OrdersTableCard({
   query,
@@ -852,6 +951,12 @@ function OrdersTableCard({
   search,
   onToggleStatus,
   onExportCsv,
+  isBulkMode,
+  onSetBulkMode,
+  selectedRowKeys,
+  onSelectedRowKeysChange,
+  onBulkDelete,
+  isBulkDeleting,
 }: OrdersTableCardProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "created_at", desc: true },
@@ -863,10 +968,72 @@ function OrdersTableCard({
     return m;
   }, [windows]);
 
-  const data = query.data?.orders ?? [];
+  // Wrapped in useMemo so `??` doesn't synthesize a fresh [] each render and
+  // invalidate every downstream memo (allRowKeys, selectedItems, …).
+  const data = useMemo(() => query.data?.orders ?? [], [query.data]);
+
+  // Build the list of keys that *could* be selected (everything currently
+  // visible in the table). Used for the header "select all" checkbox.
+  const allRowKeys = useMemo(() => data.map(rowKey), [data]);
 
   const columns = useMemo<ColumnDef<AdminOrderRow>[]>(
     () => [
+      ...(isBulkMode
+        ? [
+            {
+              id: "select",
+              enableSorting: false,
+              header: () => {
+                const allSelected =
+                  allRowKeys.length > 0 &&
+                  allRowKeys.every((k) => selectedRowKeys.has(k));
+                const someSelected =
+                  !allSelected &&
+                  allRowKeys.some((k) => selectedRowKeys.has(k));
+                return (
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible orders"
+                    className="size-4 cursor-pointer accent-(--bearhacks-primary)"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected;
+                    }}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        onSelectedRowKeysChange(new Set(allRowKeys));
+                      } else {
+                        onSelectedRowKeysChange(new Set());
+                      }
+                    }}
+                    disabled={allRowKeys.length === 0 || isBulkDeleting}
+                  />
+                );
+              },
+              cell: (ctx: { row: { original: AdminOrderRow } }) => {
+                const key = rowKey(ctx.row.original);
+                const checked = selectedRowKeys.has(key);
+                return (
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${ctx.row.original.kind} ${ctx.row.original.id}`}
+                    className="size-4 cursor-pointer accent-(--bearhacks-primary)"
+                    checked={checked}
+                    onChange={(e) => {
+                      onSelectedRowKeysChange((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(key);
+                        else next.delete(key);
+                        return next;
+                      });
+                    }}
+                    disabled={isBulkDeleting}
+                  />
+                );
+              },
+            } satisfies ColumnDef<AdminOrderRow>,
+          ]
+        : []),
       {
         accessorKey: "hacker_name",
         header: "Hacker",
@@ -1014,7 +1181,15 @@ function OrdersTableCard({
         enableSorting: false,
       },
     ],
-    [windowLabelById, onToggleStatus],
+    [
+      windowLabelById,
+      onToggleStatus,
+      isBulkMode,
+      allRowKeys,
+      selectedRowKeys,
+      onSelectedRowKeysChange,
+      isBulkDeleting,
+    ],
   );
 
   // TanStack Table returns identity-unstable functions that React Compiler
@@ -1053,6 +1228,14 @@ function OrdersTableCard({
     },
   });
 
+  const selectedItems: BulkDeleteItem[] = useMemo(
+    () =>
+      data
+        .filter((row) => selectedRowKeys.has(rowKey(row)))
+        .map((row) => ({ kind: row.kind, id: row.id })),
+    [data, selectedRowKeys],
+  );
+
   return (
     <Card className="p-0">
       <div className="flex flex-col gap-1 border-b border-(--bearhacks-border) px-4 py-3">
@@ -1060,16 +1243,55 @@ function OrdersTableCard({
           <CardTitle className="text-base">
             All <span className="bg-(--bearhacks-cream) px-1 rounded-sm">orders</span>
           </CardTitle>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => void onExportCsv()}
-          >
-            Export CSV
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {isBulkMode ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-red-700"
+                  onClick={() => void onBulkDelete(selectedItems)}
+                  disabled={selectedItems.length === 0 || isBulkDeleting}
+                >
+                  {isBulkDeleting
+                    ? `Deleting ${selectedItems.length}…`
+                    : `Delete (${selectedItems.length})`}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    onSetBulkMode(false);
+                    onSelectedRowKeysChange(new Set());
+                  }}
+                  disabled={isBulkDeleting}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onSetBulkMode(true)}
+                disabled={data.length === 0}
+              >
+                Bulk delete
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void onExportCsv()}
+            >
+              Export CSV
+            </Button>
+          </div>
         </div>
         <CardDescription>
-          Sortable, searchable, with per-row Fulfill / Unfulfill toggle.{" "}
+          {isBulkMode
+            ? "Select the rows to permanently delete. Use the header checkbox to toggle all visible rows."
+            : "Sortable, searchable, with per-row Fulfill / Unfulfill toggle."}{" "}
           {query.data
             ? `${table.getFilteredRowModel().rows.length} of ${data.length} shown.`
             : null}
@@ -1089,62 +1311,186 @@ function OrdersTableCard({
           No orders match the current filters.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-3xl border-collapse text-left text-sm">
-            <thead className="border-b border-(--bearhacks-border) bg-(--bearhacks-surface-alt)">
-              {table.getHeaderGroups().map((hg) => (
-                <tr key={hg.id}>
-                  {hg.headers.map((header) => {
-                    const canSort = header.column.getCanSort();
-                    const sort = header.column.getIsSorted();
-                    return (
-                      <th
-                        key={header.id}
-                        scope="col"
-                        className="px-3 py-3 font-medium text-(--bearhacks-fg)"
-                      >
-                        {header.isPlaceholder ? null : canSort ? (
-                          <button
-                            type="button"
-                            onClick={header.column.getToggleSortingHandler()}
-                            className="inline-flex items-center gap-1 text-left font-medium hover:underline"
-                          >
-                            {flexRender(
+        <>
+          <div className="hidden overflow-x-auto sm:block">
+            <table className="w-full min-w-3xl border-collapse text-left text-sm">
+              <thead className="border-b border-(--bearhacks-border) bg-(--bearhacks-surface-alt)">
+                {table.getHeaderGroups().map((hg) => (
+                  <tr key={hg.id}>
+                    {hg.headers.map((header) => {
+                      const canSort = header.column.getCanSort();
+                      const sort = header.column.getIsSorted();
+                      return (
+                        <th
+                          key={header.id}
+                          scope="col"
+                          className="px-3 py-3 font-medium text-(--bearhacks-fg)"
+                        >
+                          {header.isPlaceholder ? null : canSort ? (
+                            <button
+                              type="button"
+                              onClick={header.column.getToggleSortingHandler()}
+                              className="inline-flex items-center gap-1 text-left font-medium hover:underline"
+                            >
+                              {flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                              <span aria-hidden className="text-xs">
+                                {sort === "asc" ? "▲" : sort === "desc" ? "▼" : ""}
+                              </span>
+                            </button>
+                          ) : (
+                            flexRender(
                               header.column.columnDef.header,
                               header.getContext(),
-                            )}
-                            <span aria-hidden className="text-xs">
-                              {sort === "asc" ? "▲" : sort === "desc" ? "▼" : ""}
-                            </span>
-                          </button>
-                        ) : (
-                          flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )
-                        )}
-                      </th>
-                    );
-                  })}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {table.getRowModel().rows.map((row) => (
-                <tr
+                            )
+                          )}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </thead>
+              <tbody>
+                {table.getRowModel().rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-(--bearhacks-border) last:border-0 align-top"
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-3 py-3">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <ul className="flex flex-col gap-3 p-3 sm:hidden">
+            {table.getRowModel().rows.map((row) => {
+              const o = row.original;
+              const key = rowKey(o);
+              const checked = selectedRowKeys.has(key);
+              const isFulfilled = o.status === "fulfilled";
+              const isCancelled = o.status === "cancelled";
+              const isMomo = o.kind === "momo";
+              return (
+                <li
                   key={row.id}
-                  className="border-b border-(--bearhacks-border) last:border-0 align-top"
+                  className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-3"
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-3 py-3">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      {isBulkMode ? (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${o.kind} ${o.id}`}
+                          className="mt-1 size-4 shrink-0 cursor-pointer accent-(--bearhacks-primary)"
+                          checked={checked}
+                          onChange={(e) => {
+                            onSelectedRowKeysChange((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(key);
+                              else next.delete(key);
+                              return next;
+                            });
+                          }}
+                          disabled={isBulkDeleting}
+                        />
+                      ) : null}
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="text-sm font-semibold text-(--bearhacks-fg) wrap-break-word">
+                          {o.hacker_name}
+                        </span>
+                        {o.hacker_email ? (
+                          <span className="text-xs text-(--bearhacks-muted) wrap-break-word">
+                            {o.hacker_email}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex shrink-0 items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE_CLASSES[o.status]}`}
+                    >
+                      {STATUS_LABELS[o.status]}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-xs font-semibold ${
+                        isMomo
+                          ? "bg-amber-100 text-amber-900 border border-amber-200"
+                          : "bg-(--bearhacks-accent-soft) text-(--bearhacks-primary) border border-(--bearhacks-border)"
+                      }`}
+                    >
+                      {isMomo ? "Momos" : "Drink"}
+                    </span>
+                    {o.size_label ? (
+                      <span className="text-xs text-(--bearhacks-muted)">
+                        {o.size_label}
+                      </span>
+                    ) : null}
+                    <span className="text-xs font-semibold text-(--bearhacks-fg)">
+                      ${(o.amount_cents / 100).toFixed(2)}
+                    </span>
+                  </div>
+
+                  <p className="mt-2 text-sm text-(--bearhacks-fg) wrap-break-word">
+                    {o.detail}
+                  </p>
+                  {o.notes ? (
+                    <p className="mt-1 text-xs italic text-(--bearhacks-text-marketing)/70 wrap-break-word">
+                      &ldquo;{o.notes}&rdquo;
+                    </p>
+                  ) : null}
+
+                  <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+                    <dt className="uppercase tracking-wide text-(--bearhacks-muted)">
+                      Window
+                    </dt>
+                    <dd className="text-(--bearhacks-fg) wrap-break-word">
+                      {windowLabelById.get(o.meal_window_id) ?? o.meal_window_id}
+                    </dd>
+                    <dt className="uppercase tracking-wide text-(--bearhacks-muted)">
+                      Placed
+                    </dt>
+                    <dd className="text-(--bearhacks-fg)">
+                      {new Date(o.created_at).toLocaleString("en-CA", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        month: "short",
+                        day: "numeric",
+                        timeZone: "America/Toronto",
+                      })}
+                    </dd>
+                  </dl>
+
+                  {!isCancelled && !isBulkMode ? (
+                    <div className="mt-3 flex">
+                      <Button
+                        type="button"
+                        variant={isFulfilled ? "ghost" : "pill"}
+                        className="w-full sm:w-auto"
+                        onClick={() =>
+                          void onToggleStatus(
+                            o,
+                            isFulfilled ? "placed" : "fulfilled",
+                          )
+                        }
+                      >
+                        {isFulfilled ? "Unfulfill" : "Fulfill"}
+                      </Button>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </Card>
   );
