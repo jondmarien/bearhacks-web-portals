@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ButtonHTMLAttributes,
+} from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 
@@ -98,11 +106,123 @@ type Props = {
   compact?: boolean;
 };
 
+/**
+ * Subscribe-free snapshot used by {@link useSyncExternalStore} so we can
+ * safely read a DOM-capability flag during render without tripping hydration.
+ * The capability never changes for the life of the page.
+ */
+function subscribeNoop(): () => void {
+  return () => {};
+}
+
+function getInterestSupportSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+  if (typeof HTMLButtonElement === "undefined") return false;
+  return "interestForElement" in HTMLButtonElement.prototype;
+}
+
+function getServerSnapshot(): boolean {
+  return false;
+}
+
+const HIDE_DELAY_MS = 120;
+
 export function AllergenInfoModal({
   triggerClassName = "",
   compact = false,
 }: Props) {
   const [open, setOpen] = useState(false);
+
+  // Hover tooltip machinery — only meaningful for the `compact` ⓘ variant,
+  // where the trigger has no visible text label. The non-compact pill
+  // already reads "Allergens & vegan info", so we skip the popover there.
+  //
+  // Pattern mirrors apps/admin/components/profile-name-tooltip.tsx:
+  //   - Chromium 142+ supports `interestfor=` (Interest Invokers), where the
+  //     browser handles hover/focus/long-press with spec-recommended delays
+  //     and restores focus on dismiss.
+  //   - Everywhere else we fall back to `popover="auto"` + manual
+  //     mouseenter/focus/mouseleave/blur handlers, which still gives us the
+  //     top-layer rendering and click-light-dismiss from the Popover API.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const hideTimerRef = useRef<number | null>(null);
+  const reactId = useId();
+  const tipId = `allergen-tip-${reactId.replace(/:/g, "")}`;
+
+  const supportsInterest = useSyncExternalStore(
+    subscribeNoop,
+    getInterestSupportSnapshot,
+    getServerSnapshot,
+  );
+
+  // Position the tooltip below the trigger in viewport space. Popovers
+  // render in the top layer with no default positioning, so we anchor
+  // manually. Clamp horizontally so the 8px viewport gutter is preserved
+  // even when the ⓘ sits in the top-right of the status card.
+  const positionTip = useCallback(() => {
+    const trigger = triggerRef.current;
+    const tip = tipRef.current;
+    if (!trigger || !tip) return;
+    const triggerRect = trigger.getBoundingClientRect();
+    const tipRect = tip.getBoundingClientRect();
+    const gutter = 8;
+    const preferredLeft = triggerRect.right - tipRect.width;
+    const maxLeft = window.innerWidth - tipRect.width - gutter;
+    const left = Math.max(gutter, Math.min(preferredLeft, maxLeft));
+    tip.style.position = "fixed";
+    tip.style.margin = "0";
+    tip.style.top = `${Math.round(triggerRect.bottom + 6)}px`;
+    tip.style.left = `${Math.round(left)}px`;
+  }, []);
+
+  // === Interest Invokers path =======================================
+  // Browser opens/closes the hint popover on its own — we only need to
+  // reposition on each `interest` event so the tooltip tracks the
+  // trigger after scroll/resize-driven layout shifts.
+  useEffect(() => {
+    if (!compact || !supportsInterest) return;
+    const tip = tipRef.current;
+    if (!tip) return;
+    const onInterest = () => positionTip();
+    tip.addEventListener("interest", onInterest);
+    return () => {
+      tip.removeEventListener("interest", onInterest);
+    };
+  }, [compact, supportsInterest, positionTip]);
+
+  const fallbackShow = useCallback(() => {
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    const tip = tipRef.current;
+    if (!tip || typeof tip.showPopover !== "function") return;
+    try {
+      // Show first, then measure + reposition; `getBoundingClientRect()`
+      // returns 0×0 for a display:none popover before `showPopover()`.
+      tip.showPopover();
+      positionTip();
+    } catch {
+      // already open or unsupported
+    }
+  }, [positionTip]);
+
+  const fallbackHide = useCallback(() => {
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+    }
+    hideTimerRef.current = window.setTimeout(() => {
+      hideTimerRef.current = null;
+      const tip = tipRef.current;
+      if (!tip || typeof tip.hidePopover !== "function") return;
+      try {
+        tip.hidePopover();
+      } catch {
+        /* not open */
+      }
+    }, HIDE_DELAY_MS);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -124,6 +244,20 @@ export function AllergenInfoModal({
     };
   }, [open]);
 
+  // Hide the hover tooltip the moment the modal opens — otherwise the
+  // browser may keep the hint visible behind the backdrop until the
+  // pointer moves.
+  useEffect(() => {
+    if (!open) return;
+    const tip = tipRef.current;
+    if (!tip || typeof tip.hidePopover !== "function") return;
+    try {
+      tip.hidePopover();
+    } catch {
+      /* not open */
+    }
+  }, [open]);
+
   // Compact trigger keeps the full 44×44 touch target mandated by
   // `--bearhacks-touch-min` (WCAG 2.5.5 / iOS HIG) — shrinking to h-9 here
   // would break thumb-reach on phones. `touch-manipulation` disables the
@@ -134,20 +268,64 @@ export function AllergenInfoModal({
     ? `inline-flex h-11 w-11 min-h-(--bearhacks-touch-min) min-w-(--bearhacks-touch-min) cursor-pointer items-center justify-center rounded-full border border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) text-lg font-semibold leading-none text-(--bearhacks-primary) touch-manipulation [-webkit-tap-highlight-color:transparent] hover:bg-(--bearhacks-accent) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--bearhacks-focus-ring) ${triggerClassName}`
     : `inline-flex w-fit min-h-(--bearhacks-touch-min) cursor-pointer items-center gap-2 rounded-(--bearhacks-radius-pill) border border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 text-sm font-semibold text-(--bearhacks-primary) touch-manipulation [-webkit-tap-highlight-color:transparent] hover:bg-(--bearhacks-accent) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--bearhacks-focus-ring) ${triggerClassName}`;
 
+  // `interestfor` is a brand-new HTML global attribute and isn't in React's
+  // HTMLButtonElement attribute types yet — cast through unknown to attach
+  // it declaratively only when the browser supports the API.
+  const hoverProps: ButtonHTMLAttributes<HTMLButtonElement> =
+    compact && supportsInterest
+      ? ({ interestfor: tipId } as unknown as ButtonHTMLAttributes<HTMLButtonElement>)
+      : compact
+        ? {
+            onMouseEnter: fallbackShow,
+            onFocus: fallbackShow,
+            onMouseLeave: fallbackHide,
+            onBlur: fallbackHide,
+          }
+        : {};
+
   return (
     <>
       <button
         type="button"
+        ref={triggerRef}
         onClick={() => setOpen(true)}
         className={triggerClasses}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={compact ? "Allergens & vegan info" : undefined}
-        title={compact ? "Allergens & vegan info" : undefined}
+        aria-describedby={compact ? tipId : undefined}
+        {...hoverProps}
       >
         <span aria-hidden="true">ⓘ</span>
         {compact ? null : "Allergens & vegan info"}
       </button>
+
+      {compact ? (
+        <div
+          ref={tipRef}
+          id={tipId}
+          // `hint` coexists with any open `auto` popovers (the allergen
+          // modal itself uses a custom portal + backdrop, not the Popover
+          // API, so there's no stacking conflict). `auto` on the fallback
+          // path gives free click-light-dismiss on touch.
+          popover={supportsInterest ? "hint" : "auto"}
+          role="tooltip"
+          onMouseEnter={
+            supportsInterest
+              ? undefined
+              : () => {
+                  if (hideTimerRef.current !== null) {
+                    window.clearTimeout(hideTimerRef.current);
+                    hideTimerRef.current = null;
+                  }
+                }
+          }
+          onMouseLeave={supportsInterest ? undefined : fallbackHide}
+          className="m-0 max-w-[16rem] rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-primary) px-3 py-2 text-xs font-medium text-(--bearhacks-on-primary) shadow-lg"
+        >
+          Allergens &amp; vegan info
+        </div>
+      ) : null}
 
       {open && typeof document !== "undefined"
         ? createPortal(
