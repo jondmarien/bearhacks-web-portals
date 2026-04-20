@@ -1,7 +1,7 @@
 "use client";
 
 import { revalidateLogic, useForm } from "@tanstack/react-form";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   BOBA_MAX_TOPPINGS,
   BOBA_NOTES_MAX_LEN,
@@ -186,6 +186,115 @@ type TanField<T> = {
   handleBlur: () => void;
 };
 
+/**
+ * Topping picker for the drink sub-form.
+ *
+ * Rules encoded here (in addition to the Zod schema):
+ *   1. No drink selected → every topping is locked. Without a drink we can't
+ *      validate any constraint, and silently allowing a pick that will later
+ *      be disabled is confusing (e.g. Oreo before picking Coffee Milk Tea).
+ *   2. Drink changed → drop any selected topping that is no longer allowed
+ *      for the new drink. Leaving a disabled-but-still-selected radio in
+ *      form state would ship an invalid order on submit.
+ */
+function ToppingsFieldUI({
+  field,
+  menu,
+  currentDrink,
+}: {
+  field: TanField<string[]>;
+  menu: BobaMenuResponse;
+  currentDrink: string;
+}) {
+  const noDrinkSelected = !currentDrink;
+  const selectedValues = field.state.value;
+
+  // Reconcile selections whenever the drink changes (or is cleared).
+  useEffect(() => {
+    if (selectedValues.length === 0) return;
+    const next = selectedValues.filter((id) => {
+      const allowed = menu.topping_constraints[id];
+      if (!allowed) return true;
+      if (!currentDrink) return false;
+      return allowed.includes(currentDrink);
+    });
+    if (next.length !== selectedValues.length) {
+      field.handleChange(next);
+    }
+    // field is stable enough across renders; listing it would cause spurious
+    // re-runs without changing behaviour.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDrink, selectedValues, menu.topping_constraints]);
+
+  const selected = new Set(selectedValues);
+  const toggle = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    // Hard 1-topping cap: clicking another topping replaces.
+    else {
+      next.clear();
+      next.add(id);
+    }
+    field.handleChange(
+      menu.toppings.filter((t) => next.has(t.id)).map((t) => t.id),
+    );
+  };
+
+  const hint = noDrinkSelected
+    ? "Pick a tea first to unlock toppings."
+    : `${selected.size}/${BOBA_MAX_TOPPINGS} selected`;
+
+  return (
+    <FieldShell
+      label={`Topping (max ${BOBA_MAX_TOPPINGS}, optional)`}
+      htmlFor={field.name}
+      error={firstError(field.state.meta.errors)}
+      hint={hint}
+    >
+      <ul
+        id={field.name}
+        className="flex flex-col gap-2"
+        role="group"
+        aria-label="Toppings"
+      >
+        {menu.toppings.map((t) => {
+          const allowed = menu.topping_constraints[t.id];
+          const lockedByDrink = Boolean(
+            allowed && currentDrink && !allowed.includes(currentDrink),
+          );
+          const disabled = noDrinkSelected || lockedByDrink;
+          const isOn = selected.has(t.id);
+          return (
+            <li key={t.id}>
+              <label
+                className={`flex min-h-(--bearhacks-touch-min) items-center gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) px-4 py-2 ${
+                  isOn
+                    ? "bg-(--bearhacks-accent-soft)"
+                    : "bg-(--bearhacks-surface)"
+                } ${
+                  disabled
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name={field.name}
+                  checked={isOn}
+                  disabled={disabled}
+                  onChange={() => toggle(t.id)}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm text-(--bearhacks-fg)">{t.label}</span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    </FieldShell>
+  );
+}
+
 function DrinkSubForm({
   form,
   menu,
@@ -266,67 +375,13 @@ function DrinkSubForm({
       >
         {(currentDrink: string) => (
           <form.Field name="drink.topping_ids">
-            {(field: TanField<string[]>) => {
-              const selected = new Set(field.state.value);
-              const toggle = (id: string) => {
-                const next = new Set(selected);
-                if (next.has(id)) next.delete(id);
-                // Hard 1-topping cap: clicking another topping replaces.
-                else {
-                  next.clear();
-                  next.add(id);
-                }
-                field.handleChange(
-                  menu.toppings.filter((t) => next.has(t.id)).map((t) => t.id),
-                );
-              };
-              return (
-                <FieldShell
-                  label={`Topping (max ${BOBA_MAX_TOPPINGS}, optional)`}
-                  htmlFor={field.name}
-                  error={firstError(field.state.meta.errors)}
-                  hint={`${selected.size}/${BOBA_MAX_TOPPINGS} selected`}
-                >
-                  <ul
-                    id={field.name}
-                    className="flex flex-col gap-2"
-                    role="group"
-                    aria-label="Toppings"
-                  >
-                    {menu.toppings.map((t) => {
-                      const allowed = menu.topping_constraints[t.id];
-                      const lockedByDrink =
-                        allowed && currentDrink && !allowed.includes(currentDrink);
-                      const isOn = selected.has(t.id);
-                      const disabled = Boolean(lockedByDrink);
-                      return (
-                        <li key={t.id}>
-                          <label
-                            className={`flex min-h-(--bearhacks-touch-min) cursor-pointer items-center gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) px-4 py-2 ${
-                              isOn
-                                ? "bg-(--bearhacks-accent-soft)"
-                                : "bg-(--bearhacks-surface)"
-                            } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
-                          >
-                            <input
-                              type="radio"
-                              name={field.name}
-                              checked={isOn}
-                              disabled={disabled}
-                              onChange={() => toggle(t.id)}
-                              className="h-4 w-4"
-                            />
-                            <span className="text-sm text-(--bearhacks-fg)">
-                              {t.label}
-                            </span>
-                          </label>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </FieldShell>
-              );
-            }}
+            {(field: TanField<string[]>) => (
+              <ToppingsFieldUI
+                field={field}
+                menu={menu}
+                currentDrink={currentDrink}
+              />
+            )}
           </form.Field>
         )}
       </form.Subscribe>
