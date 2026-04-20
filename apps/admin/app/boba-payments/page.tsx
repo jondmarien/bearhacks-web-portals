@@ -94,7 +94,7 @@ const KIND_PILL_CLASSES: Record<"drink" | "momo", string> = {
  * defaults — Tailwind v4 orders utilities deterministically in the compiled
  * stylesheet, so className string order is not enough on its own.
  */
-const ACTION_BUTTON_BASE = "px-4! py-2! text-xs border shadow-none!";
+const ACTION_BUTTON_BASE = "px-4! py-2! text-xs! border shadow-none!";
 
 const ACTION_BUTTON_CONFIRM =
   `${ACTION_BUTTON_BASE} bg-(--bearhacks-success-bg)! text-(--bearhacks-success-fg)! border-(--bearhacks-success-border) hover:bg-(--bearhacks-success-border)! disabled:hover:bg-(--bearhacks-success-bg)!`;
