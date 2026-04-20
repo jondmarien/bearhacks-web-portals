@@ -78,7 +78,7 @@ export const TextareaField = forwardRef<HTMLTextAreaElement, TextareaFieldProps>
           ref={ref}
           id={inputId}
           rows={rows}
-          className={`rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-primary) focus:outline-none ${className}`}
+          className={`min-h-20 resize-y rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-primary) focus:outline-none ${className}`}
           {...rest}
         />
       </FieldShell>

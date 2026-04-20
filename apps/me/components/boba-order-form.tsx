@@ -795,8 +795,11 @@ function priceHintForSize(menu: BobaMenuResponse, size: Size): string {
 const selectClasses =
   "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) focus:border-(--bearhacks-primary) focus:outline-none";
 
+// `resize-y` restricts the drag-handle to vertical only so the width stays
+// aligned with the form column, and `min-h-20` (5rem ≈ 2-row floor) prevents
+// users from shrinking the notes field to a useless single-line sliver.
 const textareaClasses =
-  "rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-primary) focus:outline-none";
+  "min-h-20 resize-y rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-primary) focus:outline-none";
 
 function pillClasses(isOn: boolean): string {
   return `min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-pill) border px-4 text-sm font-semibold transition-colors ${
