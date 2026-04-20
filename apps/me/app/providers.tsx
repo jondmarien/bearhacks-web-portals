@@ -9,6 +9,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { toast } from "sonner";
 import { DismissableToaster } from "@/components/dismissable-toaster";
 import { EmailClaimModal } from "@/components/email-claim-modal";
+import { AlertDialogProvider } from "@/components/ui/alert-dialog";
 import { ConfirmDialogProvider } from "@/components/ui/confirm-dialog";
 import {
   requestPortalClaimOtp,
@@ -255,7 +256,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
             signOut,
           }}
         >
-          <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
+          <ConfirmDialogProvider>
+            <AlertDialogProvider>{children}</AlertDialogProvider>
+          </ConfirmDialogProvider>
           <EmailClaimModal
             open={emailClaimOpen && !!user}
             oauthEmailHint={oauthEmailHint}

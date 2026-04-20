@@ -63,18 +63,37 @@ type CombinedFormProps = {
   menu: BobaMenuResponse;
   /** ``true`` after the user has already placed at least one drink/momo. */
   isAdditional: boolean;
+  /** ``false`` when the hacker already placed a drink for this window. */
+  canPlaceDrink?: boolean;
+  /** ``false`` when the hacker already placed a momo order for this window. */
+  canPlaceMomo?: boolean;
   onSubmit: (values: BobaOrderFormValues) => Promise<void>;
 };
 
 export function BobaCombinedOrderForm({
   menu,
   isAdditional,
+  canPlaceDrink = true,
+  canPlaceMomo = true,
   onSubmit,
 }: CombinedFormProps) {
   const schema = useMemo(() => buildBobaOrderSchema(buildSchemaInput(menu)), [menu]);
 
+  // Pre-toggle the section the hacker can still place. If both are open we
+  // leave the defaults alone; if only one kind is available we flip the
+  // toggles so the user doesn't have to tick a checkbox before the form
+  // lets them continue.
+  const initialValues = useMemo<BobaOrderFormValues>(() => {
+    if (canPlaceDrink && canPlaceMomo) return DEFAULT_BOBA_FORM;
+    return {
+      ...DEFAULT_BOBA_FORM,
+      includeDrink: canPlaceDrink,
+      includeMomo: canPlaceMomo,
+    };
+  }, [canPlaceDrink, canPlaceMomo]);
+
   const form = useForm({
-    defaultValues: DEFAULT_BOBA_FORM,
+    defaultValues: initialValues,
     validationLogic: revalidateLogic(),
     validators: { onDynamic: schema },
     onSubmit: async ({ value }) => {
@@ -96,17 +115,25 @@ export function BobaCombinedOrderForm({
         {(field: TanField<boolean>) => (
           <SectionToggle
             id={field.name}
-            checked={field.state.value}
-            onChange={field.handleChange}
+            checked={field.state.value && canPlaceDrink}
+            onChange={(next) => {
+              if (!canPlaceDrink) return;
+              field.handleChange(next);
+            }}
+            disabled={!canPlaceDrink}
             title="Drink"
-            subtitle="Tea + topping + size."
+            subtitle={
+              canPlaceDrink
+                ? "Tea + topping + size."
+                : "You already placed a drink for this window — edit or cancel it above."
+            }
           />
         )}
       </form.Field>
 
       <form.Subscribe selector={(state) => state.values.includeDrink}>
         {(include) =>
-          include ? (
+          include && canPlaceDrink ? (
             <DrinkSubForm form={form} menu={menu} />
           ) : null
         }
@@ -117,17 +144,27 @@ export function BobaCombinedOrderForm({
         {(field: TanField<boolean>) => (
           <SectionToggle
             id={field.name}
-            checked={field.state.value}
-            onChange={field.handleChange}
+            checked={field.state.value && canPlaceMomo}
+            onChange={(next) => {
+              if (!canPlaceMomo) return;
+              field.handleChange(next);
+            }}
+            disabled={!canPlaceMomo}
             title={`Momos — ${formatPriceCents(menu.momos.price_cents)}`}
-            subtitle={menu.momos.description}
+            subtitle={
+              canPlaceMomo
+                ? menu.momos.description
+                : "You already placed a momo order (5 momos) for this window — edit or cancel it above."
+            }
           />
         )}
       </form.Field>
 
       <form.Subscribe selector={(state) => state.values.includeMomo}>
         {(include) =>
-          include ? <MomoSubForm form={form} menu={menu} /> : null
+          include && canPlaceMomo ? (
+            <MomoSubForm form={form} menu={menu} />
+          ) : null
         }
       </form.Subscribe>
 
@@ -139,26 +176,34 @@ export function BobaCombinedOrderForm({
           includeMomo: state.values.includeMomo,
         })}
       >
-        {({ canSubmit, isSubmitting, includeDrink, includeMomo }) => (
-          <div className="flex flex-col gap-2">
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={!canSubmit || isSubmitting || (!includeDrink && !includeMomo)}
-            >
-              {isSubmitting
-                ? "Placing…"
-                : isAdditional
-                  ? "Place additional order"
-                  : "Place order"}
-            </Button>
-            {!includeDrink && !includeMomo ? (
-              <p className="text-xs text-(--bearhacks-danger)">
-                Pick a drink, momos, or both.
-              </p>
-            ) : null}
-          </div>
-        )}
+        {({ canSubmit, isSubmitting, includeDrink, includeMomo }) => {
+          const effectiveDrink = includeDrink && canPlaceDrink;
+          const effectiveMomo = includeMomo && canPlaceMomo;
+          return (
+            <div className="flex flex-col gap-2">
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={
+                  !canSubmit ||
+                  isSubmitting ||
+                  (!effectiveDrink && !effectiveMomo)
+                }
+              >
+                {isSubmitting
+                  ? "Placing…"
+                  : isAdditional
+                    ? "Place additional order"
+                    : "Place order"}
+              </Button>
+              {!effectiveDrink && !effectiveMomo ? (
+                <p className="text-xs text-(--bearhacks-danger)">
+                  Pick a drink, momos, or both.
+                </p>
+              ) : null}
+            </div>
+          );
+        }}
       </form.Subscribe>
     </form>
   );
@@ -807,22 +852,27 @@ function SectionToggle({
   onChange,
   title,
   subtitle,
+  disabled = false,
 }: {
   id: string;
   checked: boolean;
   onChange: (next: boolean) => void;
   title: string;
   subtitle?: string;
+  disabled?: boolean;
 }) {
   return (
     <label
       htmlFor={id}
-      className="flex cursor-pointer items-start gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-4 py-3"
+      className={`flex items-start gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-4 py-3 ${
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+      }`}
     >
       <input
         id={id}
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         className="mt-1 h-4 w-4"
       />

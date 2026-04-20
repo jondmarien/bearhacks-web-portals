@@ -137,6 +137,20 @@ export type MyOrderResponse = {
    * configurable by super-admins for the dev-test window.
    */
   max_orders: number;
+  /** Placed-drink count for the active window. */
+  placed_drinks: number;
+  /** Placed-momo-order count for the active window (each row = 5 momos). */
+  placed_momos: number;
+  /**
+   * Per-user drink cap for the active window. 1 for real meal windows;
+   * matches ``max_orders`` for the dev-test window.
+   */
+  max_drinks: number;
+  /**
+   * Per-user momo-order cap for the active window. 1 for real meal windows;
+   * matches ``max_orders`` for the dev-test window. One momo order == 5 momos.
+   */
+  max_momos: number;
   active_window_id: string | null;
   /** Bundled payment for the active window, or ``null`` if nothing placed. */
   payment: BobaPayment | null;

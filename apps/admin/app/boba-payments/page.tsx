@@ -89,38 +89,37 @@ type PaymentItem = AdminPaymentRow["items"][number];
  * have to re-learn a second visual grammar when they switch consoles. Cancelled
  * / fulfilled items fade + strike through, matching prior behaviour.
  */
+/**
+ * Renders as four grid cells (pill | size | detail | price) via
+ * `display: contents`, so every row in the parent grid shares the same
+ * column rail regardless of whether an item has a size. See the wrapping
+ * `<ul>` for the grid-template that defines the shared columns.
+ */
 function PaymentItemLine({ item }: { item: PaymentItem }) {
   const isPlaced = item.status === "placed";
   const label = item.kind === "drink" ? "Drink" : "Momos";
+  const dimmed = isPlaced ? "" : "opacity-60";
+  const detailTone = isPlaced
+    ? "text-(--bearhacks-fg)"
+    : "text-(--bearhacks-muted) line-through";
+  const priceTone = isPlaced
+    ? "text-(--bearhacks-fg)"
+    : "text-(--bearhacks-muted)";
   return (
-    <li
-      className={`flex flex-wrap items-baseline gap-x-2 gap-y-0.5 ${
-        isPlaced ? "" : "opacity-60"
-      }`}
-    >
+    <li className={`contents ${dimmed}`}>
       <span
-        className={`inline-flex shrink-0 items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-[11px] font-semibold ${KIND_PILL_CLASSES[item.kind]}`}
+        className={`inline-flex self-start items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-[11px] font-semibold ${KIND_PILL_CLASSES[item.kind]}`}
       >
         {label}
       </span>
-      {item.size ? (
-        <span className="shrink-0 text-xs text-(--bearhacks-muted)">
-          {item.size}
-        </span>
-      ) : null}
-      <span
-        className={`min-w-0 flex-1 text-xs wrap-break-word ${
-          isPlaced
-            ? "text-(--bearhacks-fg)"
-            : "text-(--bearhacks-muted) line-through"
-        }`}
-      >
+      <span className="self-start text-xs text-(--bearhacks-muted)">
+        {item.size ?? "—"}
+      </span>
+      <span className={`self-start text-xs wrap-break-word ${detailTone}`}>
         {item.detail}
       </span>
       <span
-        className={`ml-auto shrink-0 text-xs font-semibold ${
-          isPlaced ? "text-(--bearhacks-fg)" : "text-(--bearhacks-muted)"
-        }`}
+        className={`self-start text-xs font-semibold text-right tabular-nums ${priceTone}`}
       >
         ${(item.amount_cents / 100).toFixed(2)}
       </span>
@@ -602,7 +601,7 @@ function PaymentsTableCard({
             );
           }
           return (
-            <ul className="flex min-w-[18rem] flex-col gap-1.5">
+            <ul className="grid min-w-[18rem] grid-cols-[auto_auto_1fr_auto] gap-x-3 gap-y-1.5">
               {o.items.map((it) => (
                 <PaymentItemLine key={it.id} item={it} />
               ))}
@@ -684,7 +683,7 @@ function PaymentsTableCard({
           // disabled) against the same right edge.
           if (o.status === "confirmed") {
             return (
-              <div className="flex justify-end">
+              <div className="flex justify-end whitespace-nowrap">
                 <Button
                   type="button"
                   variant="ghost"
@@ -697,7 +696,7 @@ function PaymentsTableCard({
           }
           if (o.status === "refunded") {
             return (
-              <div className="flex justify-end">
+              <div className="flex justify-end whitespace-nowrap">
                 <Button
                   type="button"
                   variant="ghost"
@@ -709,7 +708,7 @@ function PaymentsTableCard({
             );
           }
           return (
-            <div className="flex items-center justify-end gap-1.5">
+            <div className="flex items-start justify-end gap-1.5 whitespace-nowrap">
               <Button
                 type="button"
                 variant="pill"
@@ -803,7 +802,7 @@ function PaymentsTableCard({
                         <th
                           key={header.id}
                           scope="col"
-                          className={`px-3 py-3 font-medium text-(--bearhacks-fg) ${
+                          className={`px-3 py-3 font-medium text-(--bearhacks-fg) align-top ${
                             isActions
                               ? "w-[200px] min-w-[200px] text-right"
                               : ""
@@ -848,7 +847,7 @@ function PaymentsTableCard({
                           key={cell.id}
                           className={`px-3 py-3 ${
                             isActions
-                              ? "w-[200px] min-w-[200px] text-right align-middle"
+                              ? "w-[200px] min-w-[200px] text-right align-top whitespace-nowrap"
                               : ""
                           }`}
                         >
@@ -901,7 +900,7 @@ function PaymentsTableCard({
                       No placed items
                     </p>
                   ) : (
-                    <ul className="mt-2 flex flex-col gap-1.5">
+                    <ul className="mt-2 grid grid-cols-[auto_auto_1fr_auto] gap-x-3 gap-y-1.5">
                       {o.items.map((it) => (
                         <PaymentItemLine key={it.id} item={it} />
                       ))}
@@ -944,7 +943,7 @@ function PaymentsTableCard({
                   </dl>
 
                   {o.status === "confirmed" ? (
-                    <div className="mt-3 flex">
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <Button
                         type="button"
                         variant="ghost"
@@ -955,7 +954,7 @@ function PaymentsTableCard({
                       </Button>
                     </div>
                   ) : o.status === "refunded" ? (
-                    <div className="mt-3 flex">
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <Button
                         type="button"
                         variant="ghost"

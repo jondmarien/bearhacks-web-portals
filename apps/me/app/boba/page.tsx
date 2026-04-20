@@ -16,6 +16,7 @@ import {
   drinkValuesFromOrder,
   momoValuesFromOrder,
 } from "@/components/boba-order-form";
+import { useAlert } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -37,6 +38,91 @@ import { useDocumentTitle } from "@/lib/use-document-title";
 
 const log = createLogger("me/boba-order");
 
+/** Codes returned by the backend when order-limit gates trip. */
+type CapErrorCode =
+  | "dev_window_limit_reached"
+  | "drink_limit_reached"
+  | "momo_limit_reached";
+
+type CapErrorDetail = {
+  code: CapErrorCode;
+  message: string;
+  max_orders?: number;
+  placed_count?: number;
+  max_drinks?: number;
+  placed_drinks?: number;
+  max_momos?: number;
+  placed_momos?: number;
+};
+
+function parseCapError(error: unknown): CapErrorDetail | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null;
+  const detail = error.detail;
+  if (!detail || typeof detail !== "object" || Array.isArray(detail)) return null;
+  const code = (detail as { code?: unknown }).code;
+  if (
+    code !== "dev_window_limit_reached" &&
+    code !== "drink_limit_reached" &&
+    code !== "momo_limit_reached"
+  ) {
+    return null;
+  }
+  return detail as CapErrorDetail;
+}
+
+async function maybeShowCapAlert(
+  error: unknown,
+  alertDialog: (opts: {
+    title: string;
+    description?: React.ReactNode;
+    actionLabel?: string;
+    tone?: "default" | "danger" | "warning";
+  }) => Promise<void>,
+): Promise<boolean> {
+  const cap = parseCapError(error);
+  if (!cap) return false;
+
+  if (cap.code === "dev_window_limit_reached") {
+    const placed = cap.placed_count ?? 0;
+    const max = cap.max_orders ?? 1;
+    await alertDialog({
+      title: "You're over the meal-window limit",
+      description: (
+        <>
+          You already have <strong>{placed}</strong> order{placed === 1 ? "" : "s"}{" "}
+          placed for this window and the cap is <strong>{max}</strong>. Place
+          drinks only <em>or</em> momos only — not both — to stay within the
+          limit, or cancel one of your existing orders to free a slot.
+        </>
+      ),
+      actionLabel: "Got it",
+      tone: "warning",
+    });
+    return true;
+  }
+
+  if (cap.code === "drink_limit_reached") {
+    await alertDialog({
+      title: "You've already placed a drink",
+      description:
+        cap.message ||
+        "Edit or cancel your existing drink before placing another one.",
+      tone: "warning",
+    });
+    return true;
+  }
+
+  // momo_limit_reached
+  await alertDialog({
+    title: "You've already placed a momo order",
+    description:
+      cap.message ||
+      "One momo order (5 momos) per hacker per meal window. Edit or cancel the existing one first.",
+    tone: "warning",
+  });
+  return true;
+}
+
 type EditTarget =
   | { kind: "drink"; id: string }
   | { kind: "momo"; id: string }
@@ -47,6 +133,7 @@ export default function BobaOrderPage() {
   const router = useRouter();
   const userId = auth?.user?.id ?? null;
   const confirm = useConfirm();
+  const alertDialog = useAlert();
 
   useDocumentTitle("Boba & Momo ordering");
 
@@ -91,7 +178,13 @@ export default function BobaOrderPage() {
 
   const placedCount = myOrderQuery.data?.placed_count ?? 0;
   const maxOrders = myOrderQuery.data?.max_orders ?? 1;
-  const canPlaceMore = placedCount < maxOrders;
+  const placedDrinksCount = myOrderQuery.data?.placed_drinks ?? 0;
+  const placedMomosCount = myOrderQuery.data?.placed_momos ?? 0;
+  const maxDrinks = myOrderQuery.data?.max_drinks ?? 1;
+  const maxMomos = myOrderQuery.data?.max_momos ?? 1;
+  const canPlaceDrink = placedDrinksCount < maxDrinks;
+  const canPlaceMomo = placedMomosCount < maxMomos;
+  const canPlaceAnything = canPlaceDrink || canPlaceMomo;
 
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
 
@@ -131,7 +224,7 @@ export default function BobaOrderPage() {
         subtitle={
           maxOrders > 1
             ? `Up to ${maxOrders} drinks/momos per hacker for this window. Edit or cancel until the window closes.`
-            : "One drink/momo per meal window. Edit or cancel until the window closes."
+            : "One drink and one momo order (5 momos) per hacker per meal window. Buy them separately or together. Edit or cancel until the window closes."
         }
         showBack
         backHref="/"
@@ -269,15 +362,18 @@ export default function BobaOrderPage() {
             />
           ) : null}
 
-          {canPlaceMore ? (
+          {canPlaceAnything ? (
             <Card>
               <CardHeader>
                 <CardTitle>
                   {hasAnyPlaced ? "Place additional order" : "Place your order"}
                 </CardTitle>
                 <CardDescription>
-                  Pick a drink, momos, or both. The food team will batch
-                  pickups in time for the meal window.
+                  {canPlaceDrink && canPlaceMomo
+                    ? "Pick a drink, momos, or both. The food team will batch pickups in time for the meal window."
+                    : canPlaceDrink
+                      ? "You've already placed momos — add a drink if you'd like."
+                      : "You've already placed a drink — add a momo order (5 momos) if you'd like."}
                 </CardDescription>
               </CardHeader>
 
@@ -285,15 +381,25 @@ export default function BobaOrderPage() {
                 key={`${activeWindow.id}-${placedCount}`}
                 menu={menuQuery.data}
                 isAdditional={hasAnyPlaced}
+                canPlaceDrink={canPlaceDrink}
+                canPlaceMomo={canPlaceMomo}
                 onSubmit={async (values) => {
                   try {
                     await createMutation.mutateAsync(values);
                     toast.success("Order placed");
                   } catch (error) {
                     log.error("Boba order create failed", { userId, error });
-                    const message =
-                      error instanceof ApiError ? error.message : "Failed to save order";
-                    toast.error(message);
+                    // Surface order-cap violations as an accessible alert dialog
+                    // instead of a toast so the copy is readable and the user
+                    // has to acknowledge it before retrying with fewer items.
+                    const handled = await maybeShowCapAlert(error, alertDialog);
+                    if (!handled) {
+                      const message =
+                        error instanceof ApiError
+                          ? error.message
+                          : "Failed to save order";
+                      toast.error(message);
+                    }
                     throw error;
                   }
                 }}
@@ -304,9 +410,9 @@ export default function BobaOrderPage() {
               <CardHeader>
                 <CardTitle>You&apos;re at the limit</CardTitle>
                 <CardDescription>
-                  You&apos;ve placed {placedCount} of {maxOrders} drinks/momos
-                  for this window. Cancel one above to free a slot, or use Edit
-                  to change an existing one.
+                  {maxOrders > 1
+                    ? `You've placed ${placedCount} of ${maxOrders} drinks/momos for this window. Cancel one above to free a slot, or use Edit to change an existing one.`
+                    : "You've already placed a drink and a momo order (5 momos) for this meal window. Cancel one above to free a slot, or use Edit to change an existing one."}
                 </CardDescription>
               </CardHeader>
             </Card>

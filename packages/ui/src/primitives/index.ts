@@ -1,3 +1,9 @@
+export {
+  AlertDialogProvider,
+  useAlert,
+  type AlertOptions,
+  type AlertTone,
+} from "./alert-dialog";
 export { Button, type ButtonVariant } from "./button";
 export {
   Card,
