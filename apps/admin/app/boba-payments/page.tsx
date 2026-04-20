@@ -37,6 +37,7 @@ import {
   useConfirmPaymentMutation,
   useRefundPaymentMutation,
   useUnconfirmPaymentMutation,
+  useUnrefundPaymentMutation,
   type AdminPaymentRow,
   type WindowsResponse,
 } from "@/lib/boba-queries";
@@ -122,6 +123,7 @@ export default function AdminBobaPaymentsPage() {
   const confirmMutation = useConfirmPaymentMutation();
   const refundMutation = useRefundPaymentMutation();
   const unconfirmMutation = useUnconfirmPaymentMutation();
+  const unrefundMutation = useUnrefundPaymentMutation();
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
@@ -270,6 +272,39 @@ export default function AdminBobaPaymentsPage() {
                 error instanceof ApiError
                   ? error.message
                   : "Failed to revert confirmation",
+              );
+            }
+          }}
+          onUnrefund={async (row) => {
+            const ok = await confirm({
+              title: `Undo refund for ${row.hacker_name}?`,
+              description:
+                "Reverses the refund and restores the bundle to its prior status (confirmed / submitted / unpaid). Use this if the refund was accidental.",
+              confirmLabel: "Undo refund",
+              tone: "danger",
+            });
+            if (!ok) return;
+            try {
+              await unrefundMutation.mutateAsync({ paymentId: row.id });
+              log("info", {
+                event: "admin_boba_payment_unrefund",
+                actor,
+                resourceId: row.id,
+                result: "success",
+              });
+              toast.success("Refund reverted.");
+            } catch (error) {
+              log("error", {
+                event: "admin_boba_payment_unrefund",
+                actor,
+                resourceId: row.id,
+                result: "error",
+                error,
+              });
+              toast.error(
+                error instanceof ApiError
+                  ? error.message
+                  : "Failed to revert refund",
               );
             }
           }}
@@ -450,6 +485,7 @@ type PaymentsTableCardProps = {
   onConfirm: (row: AdminPaymentRow) => Promise<void>;
   onRefund: (row: AdminPaymentRow) => Promise<void>;
   onUnconfirm: (row: AdminPaymentRow) => Promise<void>;
+  onUnrefund: (row: AdminPaymentRow) => Promise<void>;
 };
 
 function PaymentsTableCard({
@@ -458,6 +494,7 @@ function PaymentsTableCard({
   onConfirm,
   onRefund,
   onUnconfirm,
+  onUnrefund,
 }: PaymentsTableCardProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "updated_at", desc: true },
@@ -609,7 +646,13 @@ function PaymentsTableCard({
           }
           if (o.status === "refunded") {
             return (
-              <span className="text-xs text-(--bearhacks-muted)">—</span>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void onUnrefund(o)}
+              >
+                Undo
+              </Button>
             );
           }
           return (
@@ -634,7 +677,7 @@ function PaymentsTableCard({
         enableSorting: false,
       },
     ],
-    [onConfirm, onRefund, onUnconfirm],
+    [onConfirm, onRefund, onUnconfirm, onUnrefund],
   );
 
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -855,7 +898,18 @@ function PaymentsTableCard({
                         Undo confirmation
                       </Button>
                     </div>
-                  ) : o.status === "refunded" ? null : (
+                  ) : o.status === "refunded" ? (
+                    <div className="mt-3 flex">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="w-full sm:w-auto"
+                        onClick={() => void onUnrefund(o)}
+                      >
+                        Undo refund
+                      </Button>
+                    </div>
+                  ) : (
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <Button
                         type="button"

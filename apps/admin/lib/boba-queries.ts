@@ -508,6 +508,25 @@ export function useUnconfirmPaymentMutation(): UseMutationResult<
   });
 }
 
+export function useUnrefundPaymentMutation(): UseMutationResult<
+  AdminPaymentRow,
+  Error,
+  { paymentId: string }
+> {
+  const client = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paymentId }) =>
+      (client as ApiClient).fetchJson<AdminPaymentRow>(
+        `/admin/boba/payments/${paymentId}/unrefund`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: adminBobaKeys.all });
+    },
+  });
+}
+
 /** Build the CSV download URL with the current bearer token + filter. */
 export async function downloadOrdersCsv(
   client: ApiClient,
