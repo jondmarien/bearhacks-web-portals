@@ -896,10 +896,13 @@ const selectClasses =
   "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) focus:border-(--bearhacks-focus-ring) focus:outline-none";
 
 // `resize-y` restricts the drag-handle to vertical only so the width stays
-// aligned with the form column, and `min-h-20` (5rem ≈ 2-row floor) prevents
-// users from shrinking the notes field to a useless single-line sliver.
+// aligned with the form column, `min-h-20` (5rem ≈ 2-row floor) prevents
+// users from shrinking the notes field to a useless single-line sliver, and
+// `max-h-64` (16rem ≈ 12 rows) caps the upper drag so the notes area can't
+// swallow the viewport — these fields back ≤200-char allergy/special-ask
+// notes, not free-form prose.
 const textareaClasses =
-  "min-h-20 resize-y rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none";
+  "min-h-20 max-h-64 resize-y rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none";
 
 function pillClasses(isOn: boolean): string {
   return `min-h-(--bearhacks-touch-min) rounded-(--bearhacks-radius-pill) border px-4 text-sm font-semibold transition-colors ${

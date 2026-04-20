@@ -78,7 +78,11 @@ export const TextareaField = forwardRef<HTMLTextAreaElement, TextareaFieldProps>
           ref={ref}
           id={inputId}
           rows={rows}
-          className={`min-h-20 resize-y rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none ${className}`}
+          // `min-h-20` (5rem) keeps the field readable as ~2 lines; `max-h-64`
+          // (16rem ≈ 12 lines) caps the drag-handle so nobody can stretch the
+          // notes area past what short-answer input warrants. Textareas here
+          // back short notes (allergies, nicknames, special asks), not prose.
+          className={`min-h-20 max-h-64 resize-y rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none ${className}`}
           {...rest}
         />
       </FieldShell>
