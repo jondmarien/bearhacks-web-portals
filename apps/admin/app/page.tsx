@@ -123,9 +123,11 @@ export default function AdminHome() {
             <CardDescription className="mt-1">
               Generate, search, reprint, and inspect attendee QR codes.
             </CardDescription>
-            <span className="mt-auto flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
-              Open QR tools →
-            </span>
+            <div className="mt-auto pt-4">
+              <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+                Open QR tools →
+              </span>
+            </div>
           </Card>
         </Link>
         <Link href="/profiles" className="no-underline">
@@ -136,9 +138,11 @@ export default function AdminHome() {
             <CardDescription className="mt-1">
               Search and edit attendee profiles (super-admin only).
             </CardDescription>
-            <span className="mt-auto flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
-              Open profiles →
-            </span>
+            <div className="mt-auto pt-4">
+              <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+                Open profiles →
+              </span>
+            </div>
           </Card>
         </Link>
         <Link href="/super-admins" className="no-underline">
@@ -149,9 +153,11 @@ export default function AdminHome() {
             <CardDescription className="mt-1">
               Grant or revoke Super Admin access by Discord email.
             </CardDescription>
-            <span className="mt-auto flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
-              Open super-admin tools →
-            </span>
+            <div className="mt-auto pt-4">
+              <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+                Open super-admin tools →
+              </span>
+            </div>
           </Card>
         </Link>
         {isSuperAdminUser(user) ? (
@@ -164,9 +170,11 @@ export default function AdminHome() {
                 Live order list, prep summary, pickup list, and CSV export per
                 meal window.
               </CardDescription>
-              <span className="mt-auto flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
-                Open boba &amp; momo orders →
-              </span>
+              <div className="mt-auto pt-4">
+                <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+                  Open boba &amp; momo orders →
+                </span>
+              </div>
             </Card>
           </Link>
         ) : null}
@@ -180,9 +188,11 @@ export default function AdminHome() {
                 E-transfer ledger per hacker × meal window. Confirm, refund,
                 or undo confirmations.
               </CardDescription>
-              <span className="mt-auto flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
-                Open boba &amp; momo payments →
-              </span>
+              <div className="mt-auto pt-4">
+                <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+                  Open boba &amp; momo payments →
+                </span>
+              </div>
             </Card>
           </Link>
         ) : null}
