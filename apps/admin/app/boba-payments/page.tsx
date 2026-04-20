@@ -79,6 +79,32 @@ const KIND_PILL_CLASSES: Record<"drink" | "momo", string> = {
   momo: "bg-(--bearhacks-warning-bg) text-(--bearhacks-warning-fg) border border-(--bearhacks-warning-border)",
 };
 
+/**
+ * Table-scale action-button overrides. Every payment action in this file uses
+ * `variant="pill"` so the column reads as a single visual family (the user
+ * asked to stop mixing pill + rounded-box here). `px-4 py-2 text-xs` shrinks
+ * the big landing-CTA pill into something that fits a ~200px cell alongside
+ * a second button. Each tint maps to the action's outcome token trio:
+ *
+ *   - Confirm  → success (green-ish)
+ *   - Refund   → danger  (red-ish)
+ *   - Undo     → warning (amber)   reversing a terminal state is cautionary
+ *
+ * The `!` suffix forces our tint/padding to win against the pill variant's
+ * defaults — Tailwind v4 orders utilities deterministically in the compiled
+ * stylesheet, so className string order is not enough on its own.
+ */
+const ACTION_BUTTON_BASE = "px-4! py-2! text-xs border shadow-none!";
+
+const ACTION_BUTTON_CONFIRM =
+  `${ACTION_BUTTON_BASE} bg-(--bearhacks-success-bg)! text-(--bearhacks-success-fg)! border-(--bearhacks-success-border) hover:bg-(--bearhacks-success-border)! disabled:hover:bg-(--bearhacks-success-bg)!`;
+
+const ACTION_BUTTON_REFUND =
+  `${ACTION_BUTTON_BASE} bg-(--bearhacks-danger-soft)! text-(--bearhacks-danger)! border-(--bearhacks-danger-border) hover:bg-(--bearhacks-danger-border)! disabled:hover:bg-(--bearhacks-danger-soft)!`;
+
+const ACTION_BUTTON_UNDO =
+  `${ACTION_BUTTON_BASE} bg-(--bearhacks-warning-bg)! text-(--bearhacks-warning-fg)! border-(--bearhacks-warning-border) hover:bg-(--bearhacks-warning-border)! disabled:hover:bg-(--bearhacks-warning-bg)!`;
+
 type PaymentItem = AdminPaymentRow["items"][number];
 
 /**
@@ -239,7 +265,9 @@ export default function AdminBobaPaymentsPage() {
               title: `Confirm $${(row.expected_cents / 100).toFixed(2)} from ${row.hacker_name}?`,
               description:
                 row.status === "submitted"
-                  ? `Hacker submitted ref “${row.reference ?? ""}”. Marks the bundle paid in full.`
+                  ? (row.reference ?? "").trim().length > 0
+                    ? `Hacker submitted ref “${row.reference}”. Marks the bundle paid in full.`
+                    : "Hacker submitted nothing for reference. Confirm they added a reference to their e-transfer in person. CONFIRM PAYMENT marks the bundle paid in full."
                   : "Marks the bundle paid in full (received_cents = expected_cents).",
               confirmLabel: "Confirm payment",
             });
@@ -686,7 +714,8 @@ function PaymentsTableCard({
               <div className="flex justify-end whitespace-nowrap">
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="pill"
+                  className={ACTION_BUTTON_UNDO}
                   onClick={() => void onUnconfirm(o)}
                 >
                   Undo
@@ -699,7 +728,8 @@ function PaymentsTableCard({
               <div className="flex justify-end whitespace-nowrap">
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="pill"
+                  className={ACTION_BUTTON_UNDO}
                   onClick={() => void onUnrefund(o)}
                 >
                   Undo
@@ -712,13 +742,15 @@ function PaymentsTableCard({
               <Button
                 type="button"
                 variant="pill"
+                className={ACTION_BUTTON_CONFIRM}
                 onClick={() => void onConfirm(o)}
               >
                 Confirm
               </Button>
               <Button
                 type="button"
-                variant="ghost"
+                variant="pill"
+                className={ACTION_BUTTON_REFUND}
                 onClick={() => void onRefund(o)}
               >
                 Refund
@@ -946,8 +978,8 @@ function PaymentsTableCard({
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <Button
                         type="button"
-                        variant="ghost"
-                        className="w-full sm:w-auto"
+                        variant="pill"
+                        className={`w-full sm:w-auto ${ACTION_BUTTON_UNDO}`}
                         onClick={() => void onUnconfirm(o)}
                       >
                         Undo confirmation
@@ -957,8 +989,8 @@ function PaymentsTableCard({
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <Button
                         type="button"
-                        variant="ghost"
-                        className="w-full sm:w-auto"
+                        variant="pill"
+                        className={`w-full sm:w-auto ${ACTION_BUTTON_UNDO}`}
                         onClick={() => void onUnrefund(o)}
                       >
                         Undo refund
@@ -969,15 +1001,15 @@ function PaymentsTableCard({
                       <Button
                         type="button"
                         variant="pill"
-                        className="w-full sm:w-auto"
+                        className={`w-full sm:w-auto ${ACTION_BUTTON_CONFIRM}`}
                         onClick={() => void onConfirm(o)}
                       >
                         Confirm
                       </Button>
                       <Button
                         type="button"
-                        variant="ghost"
-                        className="w-full sm:w-auto"
+                        variant="pill"
+                        className={`w-full sm:w-auto ${ACTION_BUTTON_REFUND}`}
                         onClick={() => void onRefund(o)}
                       >
                         Refund
