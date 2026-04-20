@@ -6,9 +6,9 @@ import { useEffect, useState, type SVGProps } from "react";
 type Mode = "light" | "system" | "dark";
 
 const MODES: ReadonlyArray<{ id: Mode; label: string }> = [
-  { id: "light", label: "Light" },
-  { id: "system", label: "System" },
-  { id: "dark", label: "Dark" },
+  { id: "light", label: "Light theme" },
+  { id: "system", label: "System theme" },
+  { id: "dark", label: "Dark theme" },
 ];
 
 type Props = {
@@ -39,7 +39,7 @@ export function ThemeToggle({ className = "" }: Props) {
     <div
       role="group"
       aria-label="Theme"
-      className={`inline-flex items-center rounded-(--bearhacks-radius-pill) border border-(--bearhacks-on-primary)/30 bg-(--bearhacks-on-primary)/10 p-0.5 text-(--bearhacks-on-primary) ${className}`}
+      className={`inline-flex items-center gap-0.5 text-(--bearhacks-on-primary) ${className}`}
     >
       {MODES.map(({ id, label }) => {
         const isActive = mounted && active === id;
@@ -47,21 +47,21 @@ export function ThemeToggle({ className = "" }: Props) {
           <button
             key={id}
             type="button"
-            aria-label={`${label} theme`}
+            title={label}
+            aria-label={label}
             aria-pressed={isActive}
             disabled={!mounted}
             onClick={() => setTheme(id)}
             className={[
-              "inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-colors",
+              "inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 transition-colors",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--bearhacks-focus-ring)",
               "disabled:cursor-not-allowed",
               isActive
-                ? "bg-(--bearhacks-accent) text-(--bearhacks-primary)"
-                : "text-(--bearhacks-on-primary) hover:bg-(--bearhacks-on-primary)/15",
+                ? "text-(--bearhacks-accent)"
+                : "text-(--bearhacks-on-primary)/70 hover:text-(--bearhacks-on-primary)",
             ].join(" ")}
           >
-            <Icon mode={id} className="h-4 w-4" aria-hidden="true" />
-            <span className="sr-only">{label}</span>
+            <Icon mode={id} className="h-4 w-4" aria-hidden="true" focusable="false" />
           </button>
         );
       })}

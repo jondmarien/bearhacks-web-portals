@@ -1,6 +1,8 @@
 @import "@bearhacks/ui/tokens.css";
 @import "tailwindcss";
 
+@source "../../../packages/ui/src/**/*.{ts,tsx}";
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
