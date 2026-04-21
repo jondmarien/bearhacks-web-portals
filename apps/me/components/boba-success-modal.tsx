@@ -35,9 +35,11 @@ type Props = {
   mealWindowId: string | null;
   /**
    * Closes the modal. Caller is responsible for the post-close behaviour
-   * (scrolling to / highlighting the payment card on the underlying page).
+   * for plain dismissal paths (x button, Escape, overlay click, Close button).
    */
   onClose: () => void;
+  /** Closes the modal and jumps to the payment section. */
+  onGoToPayment: () => void;
 };
 
 // Keeps SSR happy: `createPortal` must not run during the server render
@@ -63,6 +65,7 @@ export function BobaSuccessModal({
   menu,
   mealWindowId,
   onClose,
+  onGoToPayment,
 }: Props) {
   const submit = useSubmitBobaPaymentMutation();
   const [reference, setReference] = useState("");
@@ -283,7 +286,7 @@ export function BobaSuccessModal({
           >
             Close
           </Button>
-          <Button type="button" variant="primary" onClick={onClose}>
+          <Button type="button" variant="primary" onClick={onGoToPayment}>
             Take me to payment ↓
           </Button>
         </footer>
