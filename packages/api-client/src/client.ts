@@ -77,24 +77,43 @@ export function createApiClient(options: CreateApiClientOptions) {
 
   async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await request(path, init);
+
+    // Read the body ONCE as text. `res.json()` followed by `res.text()` on the
+    // same Response is a runtime error (the stream can only be consumed once),
+    // which is how callers used to get "Could not …" toasts on successful
+    // 204 DELETEs — `res.json()` threw on an empty body and the fallback
+    // message won.
+    const bodyText = await res.text();
+    const isEmpty = res.status === 204 || bodyText.length === 0;
+
     if (!res.ok) {
       let detail: FastApiDetail | undefined;
-      try {
-        const body: unknown = await res.json();
-        if (
-          body &&
-          typeof body === "object" &&
-          "detail" in body &&
-          body.detail !== undefined
-        ) {
-          detail = body.detail as FastApiDetail;
+      if (!isEmpty) {
+        try {
+          const body: unknown = JSON.parse(bodyText);
+          if (
+            body &&
+            typeof body === "object" &&
+            "detail" in body &&
+            body.detail !== undefined
+          ) {
+            detail = body.detail as FastApiDetail;
+          } else {
+            detail = bodyText;
+          }
+        } catch {
+          detail = bodyText;
         }
-      } catch {
-        detail = await res.text();
       }
       throw new ApiError(`HTTP ${res.status}`, res.status, detail);
     }
-    return res.json() as Promise<T>;
+
+    // Successful response with no body (typical of 204 No Content). The
+    // generic caller has signalled they don't expect a value by using
+    // `<void>` / `<undefined>`; anything else is on the caller.
+    if (isEmpty) return undefined as T;
+
+    return JSON.parse(bodyText) as T;
   }
 
   return { request, fetchJson };
