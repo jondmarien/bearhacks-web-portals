@@ -13,11 +13,11 @@ import { BobaStatusCard } from "@/components/boba-status-card";
 import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { InputField, SelectField, TextareaField } from "@/components/ui/field";
+import { InputField, TextareaField } from "@/components/ui/field";
 import { QrPreview } from "@/components/ui/qr-preview";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
-import { MAX_DISPLAY_NAME_LENGTH, PROFILE_ROLE_OPTIONS } from "@/lib/profile-roles";
+import { MAX_DISPLAY_NAME_LENGTH } from "@/lib/profile-roles";
 
 const log = createLogger("me/home");
 
@@ -125,7 +125,10 @@ export default function HomePage() {
       if (effective.personal_url !== (current?.personal_url ?? "")) {
         body.personal_url = effective.personal_url;
       }
-      if (effective.role !== (current?.role ?? "")) body.role = effective.role;
+      // `role` is intentionally never sent from this form. Self-service role
+      // changes are blocked server-side (see routers/profiles.py) and the
+      // UI shows it read-only; a super-admin manages promotions from the
+      // admin portal.
       return client!.fetchJson<MyProfile>("/profiles/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -274,15 +277,18 @@ export default function HomePage() {
               maxLength={MAX_DISPLAY_NAME_LENGTH}
               hint={`Up to ${MAX_DISPLAY_NAME_LENGTH} characters.`}
             />
-            <SelectField
-              label="Role"
-              value={draft.role}
-              onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
-                setProfileDraft({ ...draft, role: event.target.value })
-              }
-              options={PROFILE_ROLE_OPTIONS}
-              placeholder="— Select a role —"
-            />
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-(--bearhacks-title)">
+                Role
+              </span>
+              <div className="flex min-h-(--bearhacks-touch-min) w-full items-center rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-3 text-base text-(--bearhacks-fg)">
+                {draft.role?.trim() || "Hacker"}
+              </div>
+              <p className="text-xs text-(--bearhacks-muted)">
+                Only the BearHacks team can change your role — ping an
+                organizer if this looks wrong.
+              </p>
+            </div>
             <TextareaField
               label="Bio"
               value={draft.bio}

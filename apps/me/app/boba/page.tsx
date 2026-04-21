@@ -536,7 +536,16 @@ export default function BobaOrderPage() {
             />
           </div>
 
+          {/* `key` forces a fresh mount (and therefore fresh `useState`
+              initial values) each time a new order is placed, which
+              replaces the old `useEffect` reset inside the modal and
+              keeps us clear of React 19's set-state-in-effect lint. */}
           <BobaSuccessModal
+            key={
+              successState
+                ? `${successState.drink?.id ?? "none"}-${successState.momo?.id ?? "none"}`
+                : "closed"
+            }
             open={successState !== null}
             drink={successState?.drink ?? null}
             momo={successState?.momo ?? null}

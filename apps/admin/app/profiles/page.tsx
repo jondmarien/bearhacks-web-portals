@@ -9,18 +9,20 @@
 import { ApiError } from "@bearhacks/api-client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { useSupabase } from "@/app/providers";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { InputField } from "@/components/ui/field";
+import { InputField, SelectField } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { resolveMeBaseUrl } from "@/lib/me-base-url";
+import { PROFILE_ROLES, PROFILE_ROLE_OPTIONS } from "@/lib/profile-roles";
 import { isStaffUser, isSuperAdminUser } from "@/lib/supabase-role";
 
 export type AdminProfileListRow = {
@@ -97,6 +99,42 @@ export default function AdminProfilesPage() {
       }
     },
   });
+
+  // Inline "Change role" flow — a single dialog instance that any row's
+  // Actions button can open. Keeping the dialog mounted at the page root
+  // (rather than per-row) lets us share one mutation and avoids a dozen
+  // portals in the DOM at once.
+  const [roleEditTarget, setRoleEditTarget] = useState<AdminProfileListRow | null>(null);
+  const [roleDraft, setRoleDraft] = useState<string>("Hacker");
+
+  const roleMutation = useMutation({
+    mutationFn: ({ id, role }: { id: string; role: string }) =>
+      client!.fetchJson<AdminProfileListRow>(`/profiles/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      }),
+    onSuccess: (_data, variables) => {
+      toast.success(`Role updated to ${variables.role}`);
+      setRoleEditTarget(null);
+      void query.refetch();
+    },
+    onError: (err) => {
+      if (err instanceof ApiError) {
+        toast.error(err.status === 403 ? "Super-admin access required." : err.message);
+      } else {
+        toast.error("Failed to update role");
+      }
+    },
+  });
+
+  const openRoleEditor = (row: AdminProfileListRow) => {
+    setRoleEditTarget(row);
+    const current = row.role?.trim() ?? "";
+    setRoleDraft(
+      (PROFILE_ROLES as readonly string[]).includes(current) ? current : "Hacker",
+    );
+  };
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
@@ -213,6 +251,16 @@ export default function AdminProfilesPage() {
                                   View profile
                                 </a>
                                 <Button
+                                  variant="secondary"
+                                  onClick={() => openRoleEditor(row)}
+                                  disabled={
+                                    roleMutation.isPending &&
+                                    roleEditTarget?.id === row.id
+                                  }
+                                >
+                                  Change role
+                                </Button>
+                                <Button
                                   variant="ghost"
                                   className="text-(--bearhacks-danger)"
                                   onClick={() => {
@@ -288,6 +336,16 @@ export default function AdminProfilesPage() {
                             View
                           </a>
                           <Button
+                            variant="secondary"
+                            onClick={() => openRoleEditor(row)}
+                            disabled={
+                              roleMutation.isPending &&
+                              roleEditTarget?.id === row.id
+                            }
+                          >
+                            Change role
+                          </Button>
+                          <Button
                             variant="ghost"
                             className="text-(--bearhacks-danger)"
                             onClick={() => {
@@ -320,6 +378,133 @@ export default function AdminProfilesPage() {
           )}
         </>
       )}
+
+      <ChangeRoleModal
+        target={roleEditTarget}
+        value={roleDraft}
+        onValueChange={setRoleDraft}
+        submitting={roleMutation.isPending}
+        onCancel={() => {
+          if (roleMutation.isPending) return;
+          setRoleEditTarget(null);
+        }}
+        onSubmit={() => {
+          if (!roleEditTarget) return;
+          const nextRole = roleDraft.trim();
+          if (!(PROFILE_ROLES as readonly string[]).includes(nextRole)) {
+            toast.error("Pick a valid role");
+            return;
+          }
+          if (nextRole === (roleEditTarget.role?.trim() ?? "")) {
+            toast.info("Role is unchanged");
+            setRoleEditTarget(null);
+            return;
+          }
+          roleMutation.mutate({ id: roleEditTarget.id, role: nextRole });
+        }}
+      />
     </main>
+  );
+}
+
+/**
+ * Small portal-based dialog for changing a profile's role.
+ *
+ * Inlined here because this is its only caller and the shape is trivial:
+ * title + role picker + Cancel/Save. We use a plain portal (not the
+ * existing `useConfirm` primitive) because `useConfirm` only supports
+ * static confirm/cancel text, not arbitrary form fields.
+ */
+function ChangeRoleModal({
+  target,
+  value,
+  onValueChange,
+  submitting,
+  onCancel,
+  onSubmit,
+}: {
+  target: AdminProfileListRow | null;
+  value: string;
+  onValueChange: (next: string) => void;
+  submitting: boolean;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  const formRef = useRef<HTMLFormElement | null>(null);
+
+  useEffect(() => {
+    if (!target) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !submitting) onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [target, submitting, onCancel]);
+
+  if (!target) return null;
+  if (typeof document === "undefined") return null;
+
+  const label = target.display_name?.trim() || "this profile";
+  const currentRole = target.role?.trim() || "—";
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="change-role-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !submitting) onCancel();
+      }}
+    >
+      <form
+        ref={formRef}
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit();
+        }}
+        className="flex w-full max-w-md flex-col gap-4 rounded-(--bearhacks-radius-lg) border border-(--bearhacks-border) bg-(--bearhacks-surface) p-5 shadow-(--bearhacks-shadow-card)"
+      >
+        <div className="flex flex-col gap-1">
+          <h2
+            id="change-role-title"
+            className="text-lg font-semibold text-(--bearhacks-title)"
+          >
+            Change role
+          </h2>
+          <p className="text-sm text-(--bearhacks-muted)">
+            Assign a new role for <span className="font-medium">{label}</span>.
+            Current role: <span className="font-medium">{currentRole}</span>.
+          </p>
+        </div>
+
+        <SelectField
+          label="Role"
+          id="change-role-select"
+          name="role"
+          value={value}
+          options={PROFILE_ROLE_OPTIONS}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+            onValueChange(e.target.value)
+          }
+          disabled={submitting}
+        />
+
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onCancel}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={submitting}>
+            {submitting ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </form>
+    </div>,
+    document.body,
   );
 }

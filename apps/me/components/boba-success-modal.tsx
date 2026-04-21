@@ -76,14 +76,11 @@ export function BobaSuccessModal({
     getMountedServerSnapshot,
   );
 
-  // Reset any "I sent it" state every time a new modal opens so a second
-  // order doesn't appear pre-confirmed from the previous one.
-  useEffect(() => {
-    if (open) {
-      setReference("");
-      setSubmittedHere(false);
-    }
-  }, [open]);
+  // Per-open state (reference / submittedHere) is reset automatically by
+  // remounting this component — the caller in /boba/page.tsx passes a
+  // `key` prop tied to the current order's identity, so each new success
+  // dialog gets fresh `useState` initial values. This keeps us compliant
+  // with React 19's `react-hooks/set-state-in-effect` rule.
 
   useEffect(() => {
     if (!open) return;
