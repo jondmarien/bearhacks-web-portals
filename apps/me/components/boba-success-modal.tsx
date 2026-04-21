@@ -34,10 +34,16 @@ type Props = {
   /** Active meal-window id used for the self-submit body. */
   mealWindowId: string | null;
   /**
-   * Closes the modal. Caller is responsible for the post-close behaviour
-   * (scrolling to / highlighting the payment card on the underlying page).
+   * Plain dismissal (x button, Escape, overlay click, "Close" footer
+   * button). Caller should NOT scroll the payment section into view for
+   * this path — users clicking "Close" don't expect a scroll side-effect.
    */
   onClose: () => void;
+  /**
+   * Explicit "Take me to payment ↓" action. Caller is expected to close
+   * the modal and scroll/highlight the payment card on the underlying page.
+   */
+  onGoToPayment: () => void;
 };
 
 // Keeps SSR happy: `createPortal` must not run during the server render
@@ -63,6 +69,7 @@ export function BobaSuccessModal({
   menu,
   mealWindowId,
   onClose,
+  onGoToPayment,
 }: Props) {
   const submit = useSubmitBobaPaymentMutation();
   const [reference, setReference] = useState("");
@@ -102,11 +109,18 @@ export function BobaSuccessModal({
 
   const expectedDollars =
     payment != null ? (payment.expected_cents / 100).toFixed(2) : null;
-  const isUnpaid = payment?.status === "unpaid";
-  // ``submittedHere`` covers the optimistic moment between clicking "I
-  // sent it" and the server's `submitted` status reaching the client; the
-  // payment-status arm covers reopens after the cache caught up.
-  const showSubmittedAck = submittedHere || payment?.status === "submitted";
+
+  const receivedCents = payment?.received_cents ?? 0;
+  const expectedCents = payment?.expected_cents ?? 0;
+  const isFullyPaid =
+    payment?.status === "confirmed" && receivedCents >= expectedCents;
+  const outstandingCents = Math.max(expectedCents - receivedCents, 0);
+  const outstandingDollars = (outstandingCents / 100).toFixed(2);
+  const isUnpaid = payment?.status === "unpaid" || outstandingCents > 0;
+
+  const showSubmittedAck =
+    !isFullyPaid &&
+    (submittedHere || payment?.status === "submitted");
 
   const copyEmail = async () => {
     try {
@@ -158,7 +172,9 @@ export function BobaSuccessModal({
               id="boba-success-title"
               className="mt-1 text-xl font-semibold text-(--bearhacks-title)"
             >
-              You&apos;re in. Now finish payment.
+              {isFullyPaid
+                ? "You're in. Payment already settled."
+                : "You're in. Now finish payment."}
             </h2>
           </div>
           <button
@@ -195,83 +211,108 @@ export function BobaSuccessModal({
 
         {/* Payment block --------------------------------------------------- */}
         {payment != null && expectedDollars != null && mealWindowId ? (
-          <section
-            aria-label="Payment instructions"
-            className="flex flex-col gap-3 rounded-(--bearhacks-radius-md) border-2 border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 py-4"
-          >
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="text-xs uppercase tracking-[0.08em] text-(--bearhacks-muted)">
-                Total to send
+          isFullyPaid ? (
+            // Fully-paid bundle + this placed item fits under the received
+            // amount (e.g. admin confirmed with a buffer). Nothing to
+            // collect — just reassure the hacker instead of showing a
+            // misleading "pay now" block.
+            <section
+              aria-label="Payment status"
+              className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-success-border) bg-(--bearhacks-success-bg) px-4 py-3"
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-(--bearhacks-success-fg)">
+                Already paid
               </p>
-              <p className="text-2xl font-semibold text-(--bearhacks-fg)">
-                ${expectedDollars}{" "}
-                <span className="text-sm font-medium">CAD</span>
+              <p className="text-sm text-(--bearhacks-success-fg)">
+                Your payment bundle for this meal window is confirmed —
+                nothing more to send.
               </p>
-            </div>
-            <p className="text-xs text-(--bearhacks-muted)">
-              {menu.payment.discount_note}. Bundle covers every drink + momo
-              for this meal window.
-            </p>
-
-            <div className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2">
-              <p className="text-xs uppercase tracking-[0.08em] text-(--bearhacks-muted)">
-                E-transfer to
-              </p>
-              <p className="text-sm font-semibold text-(--bearhacks-fg)">
-                {menu.payment.etransfer_recipient_name}
-              </p>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                <code className="min-w-0 max-w-full break-all rounded-(--bearhacks-radius-md) bg-(--bearhacks-surface-alt) px-2 py-1 text-sm text-(--bearhacks-fg) select-all">
-                  {menu.payment.etransfer_email}
-                </code>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full sm:w-auto"
-                  onClick={() => void copyEmail()}
-                >
-                  {emailCopied ? "Copied!" : "Copy email"}
-                </Button>
+            </section>
+          ) : (
+            // Navy text on yellow works in both light and dark modes
+            // (--bearhacks-primary is #1d3264 in both themes). The default
+            // `text-(--bearhacks-fg)` / `text-(--bearhacks-muted)` tokens
+            // flip to near-white in dark mode, which is unreadable on the
+            // yellow accent-soft surface.
+            <section
+              aria-label="Payment instructions"
+              className="flex flex-col gap-3 rounded-(--bearhacks-radius-md) border-2 border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 py-4 text-(--bearhacks-primary)"
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-(--bearhacks-primary)/80">
+                  {receivedCents > 0 ? "Additional to send" : "Total to send"}
+                </p>
+                <p className="text-2xl font-semibold text-(--bearhacks-primary)">
+                  ${outstandingCents > 0 ? outstandingDollars : expectedDollars}{" "}
+                  <span className="text-sm font-medium">CAD</span>
+                </p>
               </div>
-              <p className="mt-2 text-xs text-(--bearhacks-muted)">
-                Tip: include your name in the e-transfer message so we can
-                match it quickly.
+              <p className="text-xs text-(--bearhacks-primary)/80">
+                {receivedCents > 0
+                  ? `Previously received $${(receivedCents / 100).toFixed(2)} — this covers the new items you just added.`
+                  : `${menu.payment.discount_note}. Bundle covers every drink + momo for this meal window.`}
               </p>
-            </div>
 
-            {isUnpaid && !submittedHere ? (
-              <div className="flex flex-col gap-2">
-                <label
-                  htmlFor="boba-success-reference"
-                  className="text-sm font-medium text-(--bearhacks-title)"
-                >
-                  E-transfer reference (optional)
-                </label>
-                <input
-                  id="boba-success-reference"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  maxLength={120}
-                  placeholder='e.g. "Sam — Sat dinner"'
-                  className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none"
-                />
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={() => void onSubmitPayment()}
-                  disabled={submit.isPending}
-                >
-                  {submit.isPending ? "Marking…" : "I sent the e-transfer"}
-                </Button>
+              <div className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2">
+                <p className="text-xs uppercase tracking-[0.08em] text-(--bearhacks-muted)">
+                  E-transfer to
+                </p>
+                <p className="text-sm font-semibold text-(--bearhacks-fg)">
+                  {menu.payment.etransfer_recipient_name}
+                </p>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                  <code className="min-w-0 max-w-full break-all rounded-(--bearhacks-radius-md) bg-(--bearhacks-surface-alt) px-2 py-1 text-sm text-(--bearhacks-fg) select-all">
+                    {menu.payment.etransfer_email}
+                  </code>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full sm:w-auto"
+                    onClick={() => void copyEmail()}
+                  >
+                    {emailCopied ? "Copied!" : "Copy email"}
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs text-(--bearhacks-muted)">
+                  Tip: include your name in the e-transfer message so we can
+                  match it quickly.
+                </p>
               </div>
-            ) : null}
 
-            {showSubmittedAck ? (
-              <p className="rounded-(--bearhacks-radius-md) bg-(--bearhacks-surface) px-3 py-2 text-sm text-(--bearhacks-fg)">
-                Thanks — marked as sent. The food team will confirm shortly.
-              </p>
-            ) : null}
-          </section>
+              {isUnpaid && !submittedHere ? (
+                <div className="flex flex-col gap-2">
+                  <label
+                    htmlFor="boba-success-reference"
+                    className="text-sm font-medium text-(--bearhacks-primary)"
+                  >
+                    E-transfer reference (optional)
+                  </label>
+                  <input
+                    id="boba-success-reference"
+                    value={reference}
+                    onChange={(e) => setReference(e.target.value)}
+                    maxLength={120}
+                    placeholder='e.g. "Sam — Sat dinner"'
+                    className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none"
+                  />
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={() => void onSubmitPayment()}
+                    disabled={submit.isPending}
+                  >
+                    {submit.isPending ? "Marking…" : "I sent the e-transfer"}
+                  </Button>
+                </div>
+              ) : null}
+
+              {showSubmittedAck ? (
+                <p className="rounded-(--bearhacks-radius-md) bg-(--bearhacks-surface) px-3 py-2 text-sm text-(--bearhacks-fg)">
+                  Thanks — marked as sent. The food team will confirm shortly.
+                </p>
+              ) : null}
+            </section>
+          )
         ) : null}
 
         <footer className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -283,9 +324,11 @@ export function BobaSuccessModal({
           >
             Close
           </Button>
-          <Button type="button" variant="primary" onClick={onClose}>
-            Take me to payment ↓
-          </Button>
+          {!isFullyPaid ? (
+            <Button type="button" variant="primary" onClick={onGoToPayment}>
+              Take me to payment ↓
+            </Button>
+          ) : null}
         </footer>
       </div>
     </div>,

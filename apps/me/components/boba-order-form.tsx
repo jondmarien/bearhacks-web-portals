@@ -193,23 +193,26 @@ export function BobaCombinedOrderForm({
         selector={(state) => ({
           canSubmit: state.canSubmit,
           isSubmitting: state.isSubmitting,
-          includeDrink: state.values.includeDrink,
-          includeMomo: state.values.includeMomo,
+          values: state.values,
         })}
       >
-        {({ canSubmit, isSubmitting, includeDrink, includeMomo }) => {
-          const effectiveDrink = includeDrink && canPlaceDrink;
-          const effectiveMomo = includeMomo && canPlaceMomo;
+        {({ canSubmit, isSubmitting, values }) => {
+          const effectiveDrink = values.includeDrink && canPlaceDrink;
+          const effectiveMomo = values.includeMomo && canPlaceMomo;
+
+          const hasDrinkContent =
+            effectiveDrink && values.drink.drink_id !== "";
+          const hasMomoContent =
+            effectiveMomo &&
+            values.momo.filling !== "" &&
+            values.momo.sauce !== "";
+          const hasContent = hasDrinkContent || hasMomoContent;
           return (
             <div className="flex flex-col gap-2">
               <Button
                 type="submit"
                 variant="primary"
-                disabled={
-                  !canSubmit ||
-                  isSubmitting ||
-                  (!effectiveDrink && !effectiveMomo)
-                }
+                disabled={!canSubmit || isSubmitting || !hasContent}
               >
                 {isSubmitting
                   ? "Placing…"
@@ -220,6 +223,12 @@ export function BobaCombinedOrderForm({
               {!effectiveDrink && !effectiveMomo ? (
                 <p className="text-xs text-(--bearhacks-danger)">
                   Pick a drink, momos, or both.
+                </p>
+              ) : !hasContent ? (
+                <p className="text-xs text-(--bearhacks-muted)">
+                  {effectiveDrink && !hasDrinkContent
+                    ? "Pick a tea to enable Place order."
+                    : "Pick a momo filling and sauce to enable Place order."}
                 </p>
               ) : null}
             </div>

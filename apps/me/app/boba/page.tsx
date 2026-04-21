@@ -209,7 +209,18 @@ export default function BobaOrderPage() {
     });
   }, []);
 
-  const closeSuccessModal = useCallback(() => {
+  // Plain dismissal path — "Close" button, Escape, overlay click, "×".
+  // Intentionally does NOT scroll the payment card into view: the hacker
+  // dismissed the modal without asking for payment, so surprising them
+  // with a scroll feels like a bug. (Distinct from
+  // ``goToPaymentFromSuccessModal`` below.)
+  const dismissSuccessModal = useCallback(() => {
+    setSuccessState(null);
+  }, []);
+
+  // Explicit "Take me to payment ↓" action — closes the modal AND scrolls
+  // the payment card into view with the highlight ring.
+  const goToPaymentFromSuccessModal = useCallback(() => {
     setSuccessState(null);
     scrollAndHighlightPayment();
   }, [scrollAndHighlightPayment]);
@@ -552,7 +563,8 @@ export default function BobaOrderPage() {
             payment={successState?.payment ?? null}
             menu={menuQuery.data}
             mealWindowId={activeWindow.id}
-            onClose={closeSuccessModal}
+            onClose={dismissSuccessModal}
+            onGoToPayment={goToPaymentFromSuccessModal}
           />
         </>
       )}

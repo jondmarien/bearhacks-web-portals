@@ -54,10 +54,25 @@ export function BobaPaymentCard({
   }
 
   const expectedDollars = (payment.expected_cents / 100).toFixed(2);
+  const receivedCents = payment.received_cents ?? 0;
   const receivedDollars =
     payment.received_cents != null
       ? (payment.received_cents / 100).toFixed(2)
       : null;
+
+  // "PAID" should only render when the received amount actually covers
+  // the expected total. A bundle whose status sits at ``confirmed`` but
+  // whose ``expected_cents`` has since outgrown ``received_cents`` (the
+  // hacker placed new orders after the initial admin confirmation) is
+  // really "additional due". The backend's ``recompute_boba_payment``
+  // transitions this case back to ``unpaid``, but UI-side drift
+  // detection keeps any cache-stale row from misreporting as fully paid.
+  const outstandingCents = Math.max(payment.expected_cents - receivedCents, 0);
+  const outstandingDollars = (outstandingCents / 100).toFixed(2);
+  const isFullyPaidConfirmed =
+    payment.status === "confirmed" && outstandingCents === 0;
+  const hasDriftOnConfirmed =
+    payment.status === "confirmed" && outstandingCents > 0;
 
   const copyEmail = async () => {
     try {
@@ -106,11 +121,18 @@ export function BobaPaymentCard({
   };
 
   return (
-    <Card className={paymentToneClass(payment.status)}>
+    <Card
+      className={paymentToneClass(payment.status, {
+        drift: hasDriftOnConfirmed,
+      })}
+    >
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-3">
           <span>Payment</span>
-          <PaymentStatusPill status={payment.status} />
+          <PaymentStatusPill
+            status={payment.status}
+            hasDrift={hasDriftOnConfirmed}
+          />
         </CardTitle>
         <CardDescription>
           Bundle covers every drink + momo you placed for this meal window.
@@ -120,15 +142,23 @@ export function BobaPaymentCard({
       <div className="flex flex-col gap-3">
         <div className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-3">
           <p className="text-xs uppercase tracking-[0.08em] text-(--bearhacks-muted)">
-            Total to send
+            {hasDriftOnConfirmed ? "Additional to send" : "Total to send"}
           </p>
           <p className="text-2xl font-semibold text-(--bearhacks-fg)">
-            ${expectedDollars} <span className="text-sm font-medium">CAD</span>
+            $
+            {hasDriftOnConfirmed ? outstandingDollars : expectedDollars}{" "}
+            <span className="text-sm font-medium">CAD</span>
           </p>
-          <p className="mt-1 text-xs text-(--bearhacks-muted)">{discountNote}</p>
+          <p className="mt-1 text-xs text-(--bearhacks-muted)">
+            {hasDriftOnConfirmed
+              ? `You've previously sent $${(receivedCents / 100).toFixed(2)} of the $${expectedDollars} total — this covers the new items you just added.`
+              : discountNote}
+          </p>
         </div>
 
-        {payment.status === "unpaid" || payment.status === "submitted" ? (
+        {payment.status === "unpaid" ||
+        payment.status === "submitted" ||
+        hasDriftOnConfirmed ? (
           <div className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-4 py-3">
             <p className="text-xs uppercase tracking-[0.08em] text-(--bearhacks-muted)">
               E-transfer to
@@ -207,12 +237,24 @@ export function BobaPaymentCard({
           </div>
         ) : null}
 
-        {payment.status === "confirmed" ? (
+        {isFullyPaidConfirmed ? (
           <p className="text-sm text-(--bearhacks-fg)">
             Confirmed by the food team
             {receivedDollars != null ? ` — $${receivedDollars} received.` : "."}{" "}
             You&apos;re all set.
           </p>
+        ) : null}
+
+        {hasDriftOnConfirmed ? (
+          <div className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg) px-4 py-3">
+            <p className="text-sm text-(--bearhacks-warning-fg)">
+              Your bundle was confirmed for $
+              {(receivedCents / 100).toFixed(2)}, but you&apos;ve since added
+              items that bring the total to ${expectedDollars}. Please send
+              the $&#x200b;{outstandingDollars} difference by e-transfer and
+              ping the food team so they can reconcile.
+            </p>
+          </div>
         ) : null}
 
         {payment.status === "refunded" ? (
@@ -227,7 +269,15 @@ export function BobaPaymentCard({
   );
 }
 
-function paymentToneClass(status: BobaPayment["status"]): string {
+function paymentToneClass(
+  status: BobaPayment["status"],
+  { drift }: { drift: boolean } = { drift: false },
+): string {
+  if (drift) {
+    // Drift is payment-owed, not success — match the unpaid accent ring
+    // so the card visually asks for the hacker's attention.
+    return "border-(--bearhacks-accent) ring-2 ring-(--bearhacks-accent)/40";
+  }
   switch (status) {
     case "confirmed":
       return "border-(--bearhacks-success-border) ring-1 ring-(--bearhacks-success-border)/60";
@@ -241,7 +291,13 @@ function paymentToneClass(status: BobaPayment["status"]): string {
   }
 }
 
-function PaymentStatusPill({ status }: { status: BobaPayment["status"] }) {
+function PaymentStatusPill({
+  status,
+  hasDrift,
+}: {
+  status: BobaPayment["status"];
+  hasDrift: boolean;
+}) {
   const map: Record<BobaPayment["status"], { label: string; cls: string }> = {
     unpaid: {
       label: "Action needed",
@@ -260,12 +316,17 @@ function PaymentStatusPill({ status }: { status: BobaPayment["status"] }) {
       cls: "bg-(--bearhacks-surface-alt) text-(--bearhacks-muted) border border-(--bearhacks-border)",
     },
   };
-  const { label, cls } = map[status];
+  const resolved = hasDrift
+    ? {
+        label: "Additional due",
+        cls: "bg-(--bearhacks-accent) text-(--bearhacks-primary)",
+      }
+    : map[status];
   return (
     <span
-      className={`inline-flex items-center rounded-(--bearhacks-radius-pill) px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] ${cls}`}
+      className={`inline-flex items-center rounded-(--bearhacks-radius-pill) px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] ${resolved.cls}`}
     >
-      {label}
+      {resolved.label}
     </span>
   );
 }
