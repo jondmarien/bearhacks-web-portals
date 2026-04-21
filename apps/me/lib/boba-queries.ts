@@ -85,6 +85,9 @@ export type BobaOrder = {
   status: "placed" | "cancelled" | "fulfilled";
   created_at: string;
   updated_at: string;
+  /** Contact snapshot at create time so logistics has the value used for this order. */
+  contact_discord_username?: string | null;
+  contact_phone_number?: string | null;
 };
 
 export type BobaMomoOrder = {
@@ -97,6 +100,9 @@ export type BobaMomoOrder = {
   status: "placed" | "cancelled" | "fulfilled";
   created_at: string;
   updated_at: string;
+  /** Contact snapshot at create time so logistics has the value used for this order. */
+  contact_discord_username?: string | null;
+  contact_phone_number?: string | null;
 };
 
 export type BobaPaymentStatus =

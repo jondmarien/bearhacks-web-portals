@@ -5,6 +5,8 @@ import { useEffect, useMemo } from "react";
 import {
   BOBA_MAX_TOPPINGS,
   BOBA_NOTES_MAX_LEN,
+  CONTACT_DISCORD_MAX_LEN,
+  CONTACT_PHONE_MAX_LEN,
   buildBobaOrderSchema,
   DEFAULT_BOBA_FORM,
   ICE_VALUES,
@@ -12,6 +14,7 @@ import {
   drinkValuesFromOrder,
   momoValuesFromOrder,
   type BobaOrderFormValues,
+  type ContactFormValues,
   type DrinkFormValues,
   type Ice,
   type MomoFormValues,
@@ -67,6 +70,12 @@ type CombinedFormProps = {
   canPlaceDrink?: boolean;
   /** ``false`` when the hacker already placed a momo order for this window. */
   canPlaceMomo?: boolean;
+  /**
+   * Contact info already saved on the hacker's profile (if any). Pre-fills
+   * the contact section so a returning hacker doesn't re-enter what we
+   * already have. ``null`` / undefined == treat as empty.
+   */
+  defaultContact?: ContactFormValues | null;
   onSubmit: (values: BobaOrderFormValues) => Promise<void>;
 };
 
@@ -75,6 +84,7 @@ export function BobaCombinedOrderForm({
   isAdditional,
   canPlaceDrink = true,
   canPlaceMomo = true,
+  defaultContact,
   onSubmit,
 }: CombinedFormProps) {
   const schema = useMemo(() => buildBobaOrderSchema(buildSchemaInput(menu)), [menu]);
@@ -82,15 +92,23 @@ export function BobaCombinedOrderForm({
   // Pre-toggle the section the hacker can still place. If both are open we
   // leave the defaults alone; if only one kind is available we flip the
   // toggles so the user doesn't have to tick a checkbox before the form
-  // lets them continue.
+  // lets them continue. Contact defaults flow in from the profile so
+  // returning hackers see their saved Discord/phone pre-populated.
   const initialValues = useMemo<BobaOrderFormValues>(() => {
-    if (canPlaceDrink && canPlaceMomo) return DEFAULT_BOBA_FORM;
-    return {
+    const base: BobaOrderFormValues = {
       ...DEFAULT_BOBA_FORM,
+      contact: {
+        discord_username: defaultContact?.discord_username ?? "",
+        phone_number: defaultContact?.phone_number ?? "",
+      },
+    };
+    if (canPlaceDrink && canPlaceMomo) return base;
+    return {
+      ...base,
       includeDrink: canPlaceDrink,
       includeMomo: canPlaceMomo,
     };
-  }, [canPlaceDrink, canPlaceMomo]);
+  }, [canPlaceDrink, canPlaceMomo, defaultContact]);
 
   const form = useForm({
     defaultValues: initialValues,
@@ -167,6 +185,9 @@ export function BobaCombinedOrderForm({
           ) : null
         }
       </form.Subscribe>
+
+      {/* CONTACT SECTION ---------------------------------------------------- */}
+      <ContactSubForm form={form} hasSavedContact={Boolean(defaultContact)} />
 
       <form.Subscribe
         selector={(state) => ({
@@ -623,6 +644,82 @@ function MomoSubForm({
 }
 
 // ---------------------------------------------------------------------------
+// Contact sub-form — Discord username + phone number, at least one required
+// ---------------------------------------------------------------------------
+
+function ContactSubForm({
+  form,
+  hasSavedContact,
+}: {
+  form: AnyForm;
+  hasSavedContact: boolean;
+}) {
+  return (
+    <fieldset
+      aria-label="Contact info for logistics"
+      className="flex flex-col gap-4 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-4"
+    >
+      <div className="flex flex-col gap-1">
+        <legend className="text-sm font-semibold text-(--bearhacks-title)">
+          How can we reach you?
+        </legend>
+        <p className="text-xs text-(--bearhacks-muted)">
+          {hasSavedContact
+            ? "Saved on your profile — edit if it's changed. Used by the food team to find you at pickup."
+            : "We'll save this to your profile so you don't need to re-enter it. At least one is required."}
+        </p>
+      </div>
+
+      <form.Field name="contact.discord_username">
+        {(field: TanField<string>) => (
+          <FieldShell
+            label="Discord username"
+            htmlFor={field.name}
+            error={firstError(field.state.meta.errors)}
+            hint={`${field.state.value.length}/${CONTACT_DISCORD_MAX_LEN}`}
+          >
+            <input
+              id={field.name}
+              type="text"
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+              maxLength={CONTACT_DISCORD_MAX_LEN}
+              autoComplete="username"
+              placeholder="e.g. yourname"
+              className={inputClasses}
+            />
+          </FieldShell>
+        )}
+      </form.Field>
+
+      <form.Field name="contact.phone_number">
+        {(field: TanField<string>) => (
+          <FieldShell
+            label="Mobile number"
+            htmlFor={field.name}
+            error={firstError(field.state.meta.errors)}
+          >
+            <input
+              id={field.name}
+              type="tel"
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+              maxLength={CONTACT_PHONE_MAX_LEN}
+              autoComplete="tel"
+              inputMode="tel"
+              placeholder="e.g. +1 555 123 4567"
+              className={inputClasses}
+            />
+          </FieldShell>
+        )}
+      </form.Field>
+    </fieldset>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Edit forms (single drink or single momo)
 // ---------------------------------------------------------------------------
 
@@ -646,12 +743,18 @@ export function BobaDrinkEditForm({
 }: EditDrinkFormProps) {
   // Wrap the drink-only edit values in the combined shape so we can reuse
   // the same Zod schema + DrinkSubForm without duplicating a single-shape
-  // schema variant.
+  // schema variant. The contact section is intentionally absent from the
+  // edit form (contact lives on the profile, not per-order); we seed the
+  // schema with the order's snapshot so validation still passes.
   const wrappedInitial: BobaOrderFormValues = {
     includeDrink: true,
     includeMomo: false,
     drink: initial,
     momo: { filling: "", sauce: "", notes: "" },
+    contact: {
+      discord_username: "edit-mode-bypass",
+      phone_number: "",
+    },
   };
   const schema = useMemo(() => buildBobaOrderSchema(buildSchemaInput(menu)), [menu]);
 
@@ -741,6 +844,10 @@ export function BobaMomoEditForm({
     includeMomo: true,
     drink: { ...DEFAULT_BOBA_FORM.drink },
     momo: initial,
+    contact: {
+      discord_username: "edit-mode-bypass",
+      phone_number: "",
+    },
   };
   const schema = useMemo(() => buildBobaOrderSchema(buildSchemaInput(menu)), [menu]);
 
@@ -894,6 +1001,9 @@ function priceHintForSize(menu: BobaMenuResponse, size: Size): string {
 
 const selectClasses =
   "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) focus:border-(--bearhacks-focus-ring) focus:outline-none";
+
+const inputClasses =
+  "min-h-(--bearhacks-touch-min) w-full rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none";
 
 // `resize-y` restricts the drag-handle to vertical only so the width stays
 // aligned with the form column, `min-h-20` (5rem ≈ 2-row floor) prevents

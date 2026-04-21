@@ -2,7 +2,8 @@
 
 import { ApiError } from "@bearhacks/api-client";
 import { createLogger } from "@bearhacks/logger";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
@@ -16,11 +17,13 @@ import {
   drinkValuesFromOrder,
   momoValuesFromOrder,
 } from "@/components/boba-order-form";
+import { BobaSuccessModal } from "@/components/boba-success-modal";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PageHeader } from "@/components/ui/page-header";
+import { useApiClient } from "@/lib/use-api-client";
 import {
   useBobaMenuQuery,
   useBobaWindowsQuery,
@@ -33,8 +36,23 @@ import {
   type BobaMenuResponse,
   type BobaMomoOrder,
   type BobaOrder,
+  type BobaPayment,
 } from "@/lib/boba-queries";
 import { useDocumentTitle } from "@/lib/use-document-title";
+
+/** Subset of the profile we read here for pre-filling the contact form. */
+type ContactProfile = {
+  id: string;
+  discord_username?: string | null;
+  phone_number?: string | null;
+};
+
+/** State driving the post-order success modal. */
+type SuccessState = {
+  drink: BobaOrder | null;
+  momo: BobaMomoOrder | null;
+  payment: BobaPayment | null;
+};
 
 const log = createLogger("me/boba-order");
 
@@ -134,6 +152,7 @@ export default function BobaOrderPage() {
   const userId = auth?.user?.id ?? null;
   const confirm = useConfirm();
   const alertDialog = useAlert();
+  const apiClient = useApiClient();
 
   useDocumentTitle("Boba & Momo ordering");
 
@@ -141,11 +160,70 @@ export default function BobaOrderPage() {
   const windowsQuery = useBobaWindowsQuery();
   const myOrderQuery = useMyBobaOrderQuery(userId);
 
+  // Lightweight profile read just for the contact pre-fill. Mirrors the
+  // pattern in `app/page.tsx` (no dedicated hook yet) — `enabled` gates
+  // on both the auth client and a known userId so we never fire an
+  // anonymous request.
+  const profileQuery = useQuery({
+    queryKey: ["me-profile-contact", userId],
+    queryFn: async () => {
+      try {
+        return await apiClient!.fetchJson<ContactProfile>(
+          `/profiles/${userId}`,
+        );
+      } catch (error) {
+        // 404 just means the profile row hasn't been bootstrapped yet
+        // (new account); the contact section will start empty and the
+        // create endpoint will upsert the values for us.
+        if (error instanceof ApiError && error.status === 404) {
+          return null;
+        }
+        throw error;
+      }
+    },
+    enabled: Boolean(apiClient && userId),
+    staleTime: 60_000,
+  });
+
   const createMutation = useCreateBobaOrderMutation();
   const updateDrinkMutation = useUpdateBobaDrinkMutation();
   const cancelDrinkMutation = useCancelBobaDrinkMutation();
   const updateMomoMutation = useUpdateBobaMomoMutation();
   const cancelMomoMutation = useCancelBobaMomoMutation();
+
+  const [successState, setSuccessState] = useState<SuccessState | null>(null);
+  const paymentSectionRef = useRef<HTMLDivElement | null>(null);
+  const [paymentHighlighted, setPaymentHighlighted] = useState(false);
+
+  const scrollAndHighlightPayment = useCallback(() => {
+    // Defer to the next tick so React has applied the modal-close render
+    // before we measure scroll offsets — otherwise the hidden modal can
+    // still occupy layout on iOS Safari for a frame and skew the scroll.
+    window.requestAnimationFrame(() => {
+      paymentSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      setPaymentHighlighted(true);
+      window.setTimeout(() => setPaymentHighlighted(false), 2000);
+    });
+  }, []);
+
+  const closeSuccessModal = useCallback(() => {
+    setSuccessState(null);
+    scrollAndHighlightPayment();
+  }, [scrollAndHighlightPayment]);
+
+  const defaultContact = useMemo(
+    () =>
+      profileQuery.data
+        ? {
+            discord_username: profileQuery.data.discord_username ?? "",
+            phone_number: profileQuery.data.phone_number ?? "",
+          }
+        : null,
+    [profileQuery.data],
+  );
 
   const activeWindowId = windowsQuery.data?.active_window_id ?? null;
   const activeWindow = useMemo(() => {
@@ -391,10 +469,20 @@ export default function BobaOrderPage() {
                 isAdditional={hasAnyPlaced}
                 canPlaceDrink={canPlaceDrink}
                 canPlaceMomo={canPlaceMomo}
+                defaultContact={defaultContact}
                 onSubmit={async (values) => {
                   try {
-                    await createMutation.mutateAsync(values);
+                    const response = await createMutation.mutateAsync(values);
                     toast.success("Order placed");
+                    // Refresh the profile cache so the next order's
+                    // pre-fill reflects any contact updates the user
+                    // made on this submission.
+                    void profileQuery.refetch();
+                    setSuccessState({
+                      drink: response.drink ?? null,
+                      momo: response.momo ?? null,
+                      payment: response.payment ?? null,
+                    });
                   } catch (error) {
                     log.error("Boba order create failed", { userId, error });
                     // Surface order-cap violations as an accessible alert dialog
@@ -426,12 +514,36 @@ export default function BobaOrderPage() {
             </Card>
           )}
 
-          <BobaPaymentCard
-            payment={myOrderQuery.data?.payment ?? null}
+          <div
+            ref={paymentSectionRef}
+            // `scroll-mt` keeps the heading clear of the sticky-ish header
+            // when we programmatically scroll the section into view after
+            // closing the success modal. The transient ring is the same
+            // accent we use for "action needed" so the cue is calm but
+            // unmistakable on dismiss.
+            className={`scroll-mt-6 transition-shadow duration-500 ${
+              paymentHighlighted
+                ? "rounded-(--bearhacks-radius-lg) ring-4 ring-(--bearhacks-accent)/70"
+                : ""
+            }`}
+          >
+            <BobaPaymentCard
+              payment={myOrderQuery.data?.payment ?? null}
+              mealWindowId={activeWindow.id}
+              recipientName={menuQuery.data.payment.etransfer_recipient_name}
+              etransferEmail={menuQuery.data.payment.etransfer_email}
+              discountNote={menuQuery.data.payment.discount_note}
+            />
+          </div>
+
+          <BobaSuccessModal
+            open={successState !== null}
+            drink={successState?.drink ?? null}
+            momo={successState?.momo ?? null}
+            payment={successState?.payment ?? null}
+            menu={menuQuery.data}
             mealWindowId={activeWindow.id}
-            recipientName={menuQuery.data.payment.etransfer_recipient_name}
-            etransferEmail={menuQuery.data.payment.etransfer_email}
-            discountNote={menuQuery.data.payment.discount_note}
+            onClose={closeSuccessModal}
           />
         </>
       )}

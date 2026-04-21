@@ -26,6 +26,12 @@ export type Size = (typeof SIZE_VALUES)[number];
 export const BOBA_MAX_TOPPINGS = 1;
 export const BOBA_NOTES_MAX_LEN = 200;
 
+// Mirrors the backend bounds in `routers/profiles.py` and the contact
+// validators in `routers/boba.py`. Kept here so the form can show a
+// consistent character counter / maxLength without round-tripping.
+export const CONTACT_DISCORD_MAX_LEN = 50;
+export const CONTACT_PHONE_MAX_LEN = 30;
+
 export const sweetnessSchema = z.union([
   z.literal(0),
   z.literal(25),
@@ -58,11 +64,23 @@ export type MomoFormValues = {
  * sends the included sections to the backend; the backend rejects empty
  * submissions with HTTP 422.
  */
+/**
+ * Logistics contact info collected at order time. Either field can be
+ * empty in the form, but the Zod schema (and the backend) enforce that
+ * at least one is non-empty so the food team can always reach the hacker
+ * about a paid order.
+ */
+export type ContactFormValues = {
+  discord_username: string;
+  phone_number: string;
+};
+
 export type BobaOrderFormValues = {
   includeDrink: boolean;
   includeMomo: boolean;
   drink: DrinkFormValues;
   momo: MomoFormValues;
+  contact: ContactFormValues;
 };
 
 export const DEFAULT_DRINK_FORM: DrinkFormValues = {
@@ -80,11 +98,17 @@ export const DEFAULT_MOMO_FORM: MomoFormValues = {
   notes: "",
 };
 
+export const DEFAULT_CONTACT_FORM: ContactFormValues = {
+  discord_username: "",
+  phone_number: "",
+};
+
 export const DEFAULT_BOBA_FORM: BobaOrderFormValues = {
   includeDrink: true,
   includeMomo: false,
   drink: DEFAULT_DRINK_FORM,
   momo: DEFAULT_MOMO_FORM,
+  contact: DEFAULT_CONTACT_FORM,
 };
 
 /**
@@ -155,12 +179,28 @@ export function buildBobaOrderSchema(menu: {
       .max(BOBA_NOTES_MAX_LEN, `Notes must be ≤ ${BOBA_NOTES_MAX_LEN} characters`),
   });
 
+  const contactSchema = z.object({
+    discord_username: z
+      .string()
+      .max(
+        CONTACT_DISCORD_MAX_LEN,
+        `Discord username must be ≤ ${CONTACT_DISCORD_MAX_LEN} characters`,
+      ),
+    phone_number: z
+      .string()
+      .max(
+        CONTACT_PHONE_MAX_LEN,
+        `Phone number must be ≤ ${CONTACT_PHONE_MAX_LEN} characters`,
+      ),
+  });
+
   return z
     .object({
       includeDrink: z.boolean(),
       includeMomo: z.boolean(),
       drink: drinkSchema,
       momo: momoSchema,
+      contact: contactSchema,
     })
     .superRefine((value, ctx) => {
       if (!value.includeDrink && !value.includeMomo) {
@@ -168,6 +208,17 @@ export function buildBobaOrderSchema(menu: {
           code: "custom",
           path: ["includeDrink"],
           message: "Pick a drink, momos, or both.",
+        });
+      }
+      // At-least-one contact field is required so the food team can
+      // reach the hacker. Mirrored on the backend as HTTP 422.
+      const discord = value.contact.discord_username.trim();
+      const phone = value.contact.phone_number.trim();
+      if (!discord && !phone) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["contact", "discord_username"],
+          message: "Add a Discord username or phone number so we can reach you.",
         });
       }
     });
@@ -195,6 +246,8 @@ export function toApiBody(values: BobaOrderFormValues): {
     sauce: string;
     notes: string | null;
   } | null;
+  contact_discord_username: string | null;
+  contact_phone_number: string | null;
 } {
   return {
     drink: values.includeDrink
@@ -214,6 +267,8 @@ export function toApiBody(values: BobaOrderFormValues): {
           notes: trimmedOrNull(values.momo.notes),
         }
       : null,
+    contact_discord_username: trimmedOrNull(values.contact.discord_username),
+    contact_phone_number: trimmedOrNull(values.contact.phone_number),
   };
 }
 
