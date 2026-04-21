@@ -209,11 +209,7 @@ export default function BobaOrderPage() {
     });
   }, []);
 
-  const dismissSuccessModal = useCallback(() => {
-    setSuccessState(null);
-  }, []);
-
-  const goToPaymentFromSuccessModal = useCallback(() => {
+  const closeSuccessModal = useCallback(() => {
     setSuccessState(null);
     scrollAndHighlightPayment();
   }, [scrollAndHighlightPayment]);
@@ -556,8 +552,7 @@ export default function BobaOrderPage() {
             payment={successState?.payment ?? null}
             menu={menuQuery.data}
             mealWindowId={activeWindow.id}
-            onClose={dismissSuccessModal}
-            onGoToPayment={goToPaymentFromSuccessModal}
+            onClose={closeSuccessModal}
           />
         </>
       )}
