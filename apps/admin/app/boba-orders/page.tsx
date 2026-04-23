@@ -21,9 +21,11 @@ import {
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
+  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type PaginationState,
   type SortingState,
 } from "@tanstack/react-table";
 import type { User } from "@supabase/supabase-js";
@@ -286,15 +288,6 @@ export default function AdminBobaOrdersPage() {
 
       {isSuper ? <DevWindowsPanel enabled={isSuper} actor={actor} /> : null}
 
-      {isSuper && windowsQuery.data ? (
-        <FilterBar
-          windows={windowsQuery.data}
-          values={filters}
-          fallbackWindowId={fallbackWindowId}
-          onChange={setFilters}
-        />
-      ) : null}
-
       {isSuper ? (
         <PrepSummaryCard
           query={prepQuery}
@@ -307,6 +300,24 @@ export default function AdminBobaOrdersPage() {
           query={pickupQuery}
           windowLabel={focusedWindow.label}
           windowOpensAt={focusedWindow.opens_at}
+        />
+      ) : null}
+
+      {/*
+        Filters live directly above the All orders card because status
+        + search only drive that card's contents — the meal window picker
+        also feeds prep summary and pickup list above, but anchoring the
+        whole bar here keeps the status + search controls next to the
+        only surface they affect and matches the "filters sit with the
+        table they filter" layout the profile directory and payments
+        consoles use.
+      */}
+      {isSuper && windowsQuery.data ? (
+        <FilterBar
+          windows={windowsQuery.data}
+          values={filters}
+          fallbackWindowId={fallbackWindowId}
+          onChange={setFilters}
         />
       ) : null}
 
@@ -1272,6 +1283,17 @@ function OrdersTableCard({
     { id: "created_at", desc: true },
   ]);
 
+  // Client-side pagination — the `/admin/boba/orders` endpoint is already
+  // scoped to a single meal window, so the dataset is small enough to slice
+  // on the client. Mirrors the "Page N of M · X total" footer shape used in
+  // the profile directory and boba-payments consoles so the three admin
+  // tables read as a single product. Defaulting to 25 rows matches
+  // ``PAGE_SIZE`` in ``boba-payments/page.tsx``.
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
+  });
+
   const windowLabelById = useMemo(() => {
     const m = new Map<string, string>();
     for (const w of windows) m.set(w.id, w.label);
@@ -1289,39 +1311,45 @@ function OrdersTableCard({
             {
               id: "select",
               enableSorting: false,
-              // Derive the "all visible" key set from the table's *filtered*
-              // row model — not raw `data` — so that typing into search and
-              // clicking this checkbox only queues the currently-visible
-              // rows for deletion. Using `data` here would silently select
-              // every row hidden behind the filter, which could nuke an
-              // entire meal window when an admin meant to target one hacker.
+              // Derive the "all visible" key set from the table's post-
+              // pagination row model so clicking this checkbox only toggles
+              // the rows the admin can actually *see right now* — not every
+              // row matching the filter across unseen pages (a whole-window
+              // foot-gun) and not raw `data` (includes rows hidden by
+              // search). Off-page selections made earlier are preserved
+              // because we union/diff against `selectedRowKeys` instead of
+              // replacing it wholesale.
               header: ({ table }) => {
-                const filteredKeys = table
-                  .getFilteredRowModel()
+                const pageKeys = table
+                  .getRowModel()
                   .rows.map((row) => rowKey(row.original));
                 const allSelected =
-                  filteredKeys.length > 0 &&
-                  filteredKeys.every((k) => selectedRowKeys.has(k));
+                  pageKeys.length > 0 &&
+                  pageKeys.every((k) => selectedRowKeys.has(k));
                 const someSelected =
                   !allSelected &&
-                  filteredKeys.some((k) => selectedRowKeys.has(k));
+                  pageKeys.some((k) => selectedRowKeys.has(k));
                 return (
                   <input
                     type="checkbox"
-                    aria-label="Select all visible orders"
+                    aria-label="Select all visible orders on this page"
                     className="size-4 cursor-pointer accent-(--bearhacks-primary)"
                     checked={allSelected}
                     ref={(el) => {
                       if (el) el.indeterminate = someSelected;
                     }}
                     onChange={(e) => {
-                      if (e.target.checked) {
-                        onSelectedRowKeysChange(new Set(filteredKeys));
-                      } else {
-                        onSelectedRowKeysChange(new Set());
-                      }
+                      onSelectedRowKeysChange((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) {
+                          for (const k of pageKeys) next.add(k);
+                        } else {
+                          for (const k of pageKeys) next.delete(k);
+                        }
+                        return next;
+                      });
                     }}
-                    disabled={filteredKeys.length === 0 || isBulkDeleting}
+                    disabled={pageKeys.length === 0 || isBulkDeleting}
                   />
                 );
               },
@@ -1513,11 +1541,16 @@ function OrdersTableCard({
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter: search },
+    state: { sorting, globalFilter: search, pagination },
     onSortingChange: setSorting,
+    onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    // Default auto-reset is ON for data/filter changes which matches what
+    // we want — flipping meal window / status / search drops the admin
+    // back to page 1 so they don't land on a stale empty page.
     globalFilterFn: (row, _columnId, filterValue: string) => {
       const needle = filterValue.trim().toLowerCase();
       if (!needle) return true;
@@ -1543,16 +1576,45 @@ function OrdersTableCard({
   });
 
   // Intersect the selection with the filtered row model so the Delete button's
-  // count and the confirmation dialog only ever reflect rows the admin can
-  // currently *see*. Prevents the "I searched for one hacker and select-all
+  // count and the confirmation dialog only ever reflect rows matching the
+  // current filter. Prevents the "I searched for one hacker and select-all
   // silently queued the whole window" class of accident described in the
-  // header comment above. Recomputed each render — O(filteredN) on a few
-  // hundred rows is trivially cheap, and memoizing it against the right deps
-  // is fiddly because `table.getFilteredRowModel()` isn't a stable reference.
+  // header comment above. We scope to *filtered* (not paginated) rows so an
+  // admin can tick keys across pages and have them all survive into the
+  // delete call — switching pages is not a deselect. Recomputed each render
+  // — O(filteredN) on a few hundred rows is trivially cheap, and memoizing
+  // it against the right deps is fiddly because `table.getFilteredRowModel()`
+  // isn't a stable reference.
   const selectedItems: BulkDeleteItem[] = table
     .getFilteredRowModel()
     .rows.filter((row) => selectedRowKeys.has(rowKey(row.original)))
     .map((row) => ({ kind: row.original.kind, id: row.original.id }));
+
+  // Pre-compute paging-aware "Showing X–Y of Z" counts for the card
+  // description. Pulled out of the JSX so the description reads as a
+  // single template string instead of an inline IIFE. Matches the
+  // ``pageStart`` / ``pageEnd`` pattern in ``boba-payments/page.tsx``.
+  const filteredCount = table.getFilteredRowModel().rows.length;
+  const pageRowCount = table.getRowModel().rows.length;
+  const pageIndexForLabel = table.getState().pagination.pageIndex;
+  const pageSizeForLabel = table.getState().pagination.pageSize;
+  const rangeStart =
+    filteredCount === 0 ? 0 : pageIndexForLabel * pageSizeForLabel + 1;
+  const rangeEnd = pageIndexForLabel * pageSizeForLabel + pageRowCount;
+  let countLabel: string;
+  if (!query.data) {
+    countLabel = "";
+  } else if (filteredCount === data.length) {
+    countLabel =
+      filteredCount === 0
+        ? "No rows."
+        : `Showing ${rangeStart}–${rangeEnd} of ${filteredCount}.`;
+  } else {
+    countLabel =
+      filteredCount === 0
+        ? `0 of ${data.length} shown (filtered).`
+        : `Showing ${rangeStart}–${rangeEnd} of ${filteredCount} filtered (${data.length} total).`;
+  }
 
   return (
     <Card className="p-0">
@@ -1608,11 +1670,9 @@ function OrdersTableCard({
         </div>
         <CardDescription>
           {isBulkMode
-            ? "Select the rows to permanently delete. Use the header checkbox to toggle all visible rows."
+            ? "Select the rows to permanently delete. Use the header checkbox to toggle all visible rows on this page."
             : "Sortable, searchable, with per-row Fulfill / Unfulfill toggle."}{" "}
-          {query.data
-            ? `${table.getFilteredRowModel().rows.length} of ${data.length} shown.`
-            : null}
+          {countLabel}
         </CardDescription>
       </div>
 
@@ -1808,9 +1868,94 @@ function OrdersTableCard({
               );
             })}
           </ul>
+
+          <OrdersPaginationFooter
+            pageIndex={pagination.pageIndex}
+            pageSize={pagination.pageSize}
+            pageCount={table.getPageCount()}
+            total={table.getFilteredRowModel().rows.length}
+            canPrev={table.getCanPreviousPage()}
+            canNext={table.getCanNextPage()}
+            onPrev={() => table.previousPage()}
+            onNext={() => table.nextPage()}
+            isFetching={query.isFetching}
+          />
         </>
       )}
     </Card>
+  );
+}
+
+/**
+ * Pagination footer for the All orders card. Visual + labelling shape
+ * mirrors ``PaginationControls`` in ``boba-payments/page.tsx`` and the
+ * profile directory footer — "Page N of M · X total" on the left, Prev
+ * / Next buttons on the right — so the three admin consoles feel like
+ * one product. Unlike the payments footer this one is client-side
+ * (pagination state lives inside TanStack Table because the orders
+ * endpoint is already scoped per meal window, so the dataset is small
+ * enough to slice locally).
+ */
+function OrdersPaginationFooter({
+  pageIndex,
+  pageSize,
+  pageCount,
+  total,
+  canPrev,
+  canNext,
+  onPrev,
+  onNext,
+  isFetching,
+}: {
+  pageIndex: number;
+  pageSize: number;
+  pageCount: number;
+  total: number;
+  canPrev: boolean;
+  canNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+  isFetching: boolean;
+}) {
+  // ``pageCount`` is 0 when TanStack has no rows after filtering — clamp
+  // to 1 so "Page 1 of 1 · 0 total" reads sensibly instead of "Page 1
+  // of 0". Same trick ``PaginationControls`` uses in boba-payments.
+  const safePageCount = Math.max(1, pageCount);
+  const current = Math.min(pageIndex + 1, safePageCount);
+  // Hide the footer entirely when the filtered set fits on a single page
+  // AND there is at least one row — there is literally nothing to
+  // paginate so the control would just be visual noise. Keep it rendered
+  // on an empty state so the "0 total" signal stays present for admins
+  // who just cleared their filter to an empty result.
+  if (safePageCount === 1 && total > 0 && !isFetching) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-(--bearhacks-border) px-4 py-3 text-sm text-(--bearhacks-muted)">
+      <span aria-live="polite">
+        Page {current} of {safePageCount} · {total} total
+        {isFetching ? " · refreshing…" : ""}
+        {total > 0 ? ` · ${pageSize}/page` : ""}
+      </span>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onPrev}
+          disabled={!canPrev}
+          aria-label="Previous page"
+        >
+          Prev
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onNext}
+          disabled={!canNext}
+          aria-label="Next page"
+        >
+          Next
+        </Button>
+      </div>
+    </div>
   );
 }
 
