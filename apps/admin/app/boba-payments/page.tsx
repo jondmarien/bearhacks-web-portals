@@ -341,6 +341,29 @@ export default function AdminBobaPaymentsPage() {
     isSuper,
   );
 
+  // Snap `page` back to the last valid index whenever the server's
+  // `total` drops below the current offset. This happens naturally on
+  // the 30s background refetch: a hacker's status flips, a bundle
+  // gets filtered out, and the page the admin is parked on falls off
+  // the end of the result set. Without this, the offset stays stale
+  // forever (the next refetch still asks for a page that doesn't
+  // exist) and the card description reads nonsense like
+  // "Showing 51–40 of 40" until the admin touches a filter.
+  //
+  // Uses the prev-tracker pattern so the conditional setState happens
+  // during render (only on transitions in `total`) instead of in a
+  // useEffect, sidestepping React 19's `set-state-in-effect` rule —
+  // same trick we use for the portal deep-link and the directory
+  // page resets.
+  const paymentsTotal = paymentsQuery.data?.total ?? 0;
+  const [prevPaymentsTotal, setPrevPaymentsTotal] = useState(paymentsTotal);
+  if (paymentsTotal !== prevPaymentsTotal) {
+    setPrevPaymentsTotal(paymentsTotal);
+    const lastValidPage =
+      paymentsTotal > 0 ? Math.ceil(paymentsTotal / PAGE_SIZE) - 1 : 0;
+    if (page > lastValidPage) setPage(lastValidPage);
+  }
+
   const confirmMutation = useConfirmPaymentMutation();
   const refundMutation = useRefundPaymentMutation();
   const unconfirmMutation = useUnconfirmPaymentMutation();
@@ -968,8 +991,18 @@ function PaymentsTableCard({
   });
 
   const total = query.data?.total ?? 0;
-  const pageStart = total === 0 ? 0 : page * pageSize + 1;
-  const pageEnd = Math.min(total, page * pageSize + data.length);
+  // Range is only well-defined when we actually have rows in hand.
+  // The parent snaps `page` back on the next render when `total`
+  // shrinks below the current offset, but there's a one-render gap
+  // where `data` is still the empty slice the server returned for
+  // the stale offset. Computing `pageStart`/`pageEnd` in that frame
+  // used to produce nonsense like "Showing 51–40 of 40"; now we fall
+  // back to the "N total." string used when there are no rows at
+  // all, and the real range reappears once the refetch at the
+  // clamped offset lands.
+  const hasRange = total > 0 && data.length > 0;
+  const pageStart = hasRange ? page * pageSize + 1 : 0;
+  const pageEnd = hasRange ? Math.min(total, page * pageSize + data.length) : 0;
 
   return (
     <Card className="p-0">
@@ -980,9 +1013,9 @@ function PaymentsTableCard({
         <CardDescription>
           Per-hacker payment bundles for the focused window.{" "}
           {query.data
-            ? total === 0
-              ? "0 total."
-              : `Showing ${pageStart}–${pageEnd} of ${total}.`
+            ? hasRange
+              ? `Showing ${pageStart}–${pageEnd} of ${total}.`
+              : `${total} total.`
             : null}
         </CardDescription>
       </div>
