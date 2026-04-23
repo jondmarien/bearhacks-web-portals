@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
 import { BobaPortalCard } from "@/components/boba-portal-card";
 import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
+import { FavouritesModal } from "@/components/favourites-modal";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputField, TextareaField } from "@/components/ui/field";
@@ -316,7 +317,14 @@ function HomePageContent() {
 
       <Card>
         <CardHeader>
-          <CardTitle>My profile</CardTitle>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <CardTitle>My profile</CardTitle>
+            <FavouritesModal
+              favourites={favouritesQuery.data}
+              isLoading={favouritesQuery.isLoading}
+              error={favouritesQuery.error}
+            />
+          </div>
           <CardDescription>
             This is what other attendees see when they scan your QR.
           </CardDescription>
@@ -428,54 +436,6 @@ function HomePageContent() {
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Favourited <span className="bg-(--bearhacks-cream) px-1 rounded-sm">contacts</span>
-          </CardTitle>
-          <CardDescription>
-            Profiles you&apos;ve hearted. Tap one to revisit it.
-          </CardDescription>
-        </CardHeader>
-        {favouritesQuery.isLoading ? (
-          <p className="text-sm text-(--bearhacks-muted)">Loading favourites…</p>
-        ) : favouritesQuery.isError ? (
-          <p className="text-sm text-(--bearhacks-danger)">
-            {favouritesQuery.error instanceof ApiError
-              ? favouritesQuery.error.message
-              : "Failed to load favourites"}
-          </p>
-        ) : (favouritesQuery.data?.length ?? 0) === 0 ? (
-          <p className="text-sm text-(--bearhacks-muted)">
-            No favourites yet — scan or open a profile and tap the heart to save it here.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {favouritesQuery.data?.map((fav) => (
-              <li key={fav.id}>
-                <Link
-                  href={`/contacts/${fav.id}`}
-                  className="flex min-h-(--bearhacks-touch-min) items-center justify-between gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-3 no-underline hover:bg-(--bearhacks-surface-raised)"
-                >
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-semibold text-(--bearhacks-title)">
-                      {fav.display_name?.trim() || "Unnamed attendee"}
-                    </span>
-                    {fav.role?.trim() ? (
-                      <span className="truncate text-xs text-(--bearhacks-on-surface-muted)">
-                        {fav.role}
-                      </span>
-                    ) : null}
-                  </div>
-                  <span aria-hidden="true" className="text-(--bearhacks-fg)">
-                    →
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
     </main>
   );
 }
