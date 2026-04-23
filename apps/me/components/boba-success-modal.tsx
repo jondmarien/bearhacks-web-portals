@@ -1,10 +1,7 @@
 "use client";
 
-import { ApiError } from "@bearhacks/api-client";
-import { createLogger } from "@bearhacks/logger";
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -12,15 +9,12 @@ import {
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  useSubmitBobaPaymentMutation,
-  type BobaMenuResponse,
-  type BobaMomoOrder,
-  type BobaOrder,
-  type BobaPayment,
+import type {
+  BobaMenuResponse,
+  BobaMomoOrder,
+  BobaOrder,
+  BobaPayment,
 } from "@/lib/boba-queries";
-
-const log = createLogger("me/boba-success-modal");
 
 type Props = {
   open: boolean;
@@ -38,16 +32,11 @@ type Props = {
   /**
    * Explicit "Take me to payment ↓" action. Caller is expected to close
    * the modal and scroll/highlight the payment card on the underlying page.
+   * This is the intended happy-path exit from the modal: users actually
+   * confirm they sent the e-transfer on the dashboard payment card, not
+   * inside this modal.
    */
   onGoToPayment: () => void;
-};
-
-type SubmittableRow = {
-  key: string;
-  kind: "drink" | "momo";
-  orderId: string;
-  title: string;
-  payment: BobaPayment;
 };
 
 // Keeps SSR happy: `createPortal` must not run during the server render
@@ -59,12 +48,11 @@ const getMountedServerSnapshot = () => false;
 /**
  * Post-order success dialog.
  *
- * Per-order model: shows exactly what the hacker just placed (drink,
- * momo, or both) with each item's own price and per-row "I sent the
- * e-transfer" button. There's no cross-order total bleed-in from
- * earlier orders in the window — each placed order stands alone here,
- * which is the bug this modal used to have and the whole reason for
- * the per-order payments migration.
+ * Intentionally slim: shows *where* to send the e-transfer and *how much*
+ * for what was just placed, then hands off to the dashboard payment card
+ * via `onGoToPayment`. The hacker confirms "I sent the e-transfer" on the
+ * dashboard, not here — this modal is purely the "order received, now
+ * pay" acknowledgement.
  */
 export function BobaSuccessModal({
   open,
@@ -74,13 +62,9 @@ export function BobaSuccessModal({
   onClose,
   onGoToPayment,
 }: Props) {
-  const submit = useSubmitBobaPaymentMutation();
-  const [submittedKeys, setSubmittedKeys] = useState<Record<string, boolean>>(
-    {},
-  );
   const [emailCopied, setEmailCopied] = useState(false);
-  const [pendingKey, setPendingKey] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const goToPaymentRef = useRef<HTMLButtonElement | null>(null);
 
   const mounted = useSyncExternalStore(
     subscribeNoop,
@@ -90,7 +74,9 @@ export function BobaSuccessModal({
 
   useEffect(() => {
     if (!open) return;
-    closeButtonRef.current?.focus();
+    // Focus the primary CTA so keyboard users land on the intended next
+    // step rather than on Close.
+    goToPaymentRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -101,37 +87,15 @@ export function BobaSuccessModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const rows = useMemo<SubmittableRow[]>(() => {
-    const out: SubmittableRow[] = [];
-    if (drink && drink.payment) {
-      out.push({
-        key: `drink:${drink.id}`,
-        kind: "drink",
-        orderId: drink.id,
-        title: describeDrink(drink, menu) ?? "Drink",
-        payment: drink.payment,
-      });
-    }
-    if (momo && momo.payment) {
-      out.push({
-        key: `momo:${momo.id}`,
-        kind: "momo",
-        orderId: momo.id,
-        title: describeMomo(momo, menu) ?? "Momos",
-        payment: momo.payment,
-      });
-    }
-    return out;
-  }, [drink, momo, menu]);
-
   if (!open || !mounted) return null;
 
-  const totalExpected = rows.reduce(
-    (sum, r) => sum + r.payment.expected_cents,
-    0,
-  );
-  const totalReceived = rows.reduce(
-    (sum, r) => sum + (r.payment.received_cents ?? 0),
+  const payments: BobaPayment[] = [];
+  if (drink?.payment) payments.push(drink.payment);
+  if (momo?.payment) payments.push(momo.payment);
+
+  const totalExpected = payments.reduce((sum, p) => sum + p.expected_cents, 0);
+  const totalReceived = payments.reduce(
+    (sum, p) => sum + (p.received_cents ?? 0),
     0,
   );
   const outstanding = Math.max(totalExpected - totalReceived, 0);
@@ -139,11 +103,11 @@ export function BobaSuccessModal({
   const totalExpectedDollars = (totalExpected / 100).toFixed(2);
 
   const allFullyPaid =
-    rows.length > 0 &&
-    rows.every(
-      (r) =>
-        r.payment.status === "confirmed" &&
-        (r.payment.received_cents ?? 0) >= r.payment.expected_cents,
+    payments.length > 0 &&
+    payments.every(
+      (p) =>
+        p.status === "confirmed" &&
+        (p.received_cents ?? 0) >= p.expected_cents,
     );
 
   const copyEmail = async () => {
@@ -157,26 +121,7 @@ export function BobaSuccessModal({
     }
   };
 
-  const onSubmitRow = async (row: SubmittableRow) => {
-    setPendingKey(row.key);
-    try {
-      await submit.mutateAsync({
-        kind: row.kind,
-        order_id: row.orderId,
-      });
-      setSubmittedKeys((prev) => ({ ...prev, [row.key]: true }));
-      toast.success("Marked as sent — admins will confirm shortly.");
-    } catch (error) {
-      log.error("Boba payment self-submit failed (modal)", { error });
-      toast.error(
-        error instanceof ApiError
-          ? error.message
-          : "Couldn't mark payment as sent.",
-      );
-    } finally {
-      setPendingKey(null);
-    }
-  };
+  const showPaymentBlock = payments.length > 0 && !allFullyPaid;
 
   return createPortal(
     <div
@@ -213,15 +158,14 @@ export function BobaSuccessModal({
           </button>
         </header>
 
-        {/* Payment block --------------------------------------------------- */}
-        {rows.length > 0 && !allFullyPaid ? (
+        {showPaymentBlock ? (
           <section
             aria-label="Payment instructions"
-            className="flex flex-col gap-3 rounded-(--bearhacks-radius-md) border-2 border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 py-4 text-(--bearhacks-primary)"
+            className="flex flex-col gap-4 rounded-(--bearhacks-radius-md) border-2 border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 py-4 text-(--bearhacks-primary)"
           >
             <div className="flex items-baseline justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-(--bearhacks-primary)/80">
-                {rows.length === 1 ? "To send" : "Total to send"}
+                {payments.length === 1 ? "To send" : "Total to send"}
               </p>
               <p className="text-2xl font-semibold text-(--bearhacks-primary)">
                 ${outstanding > 0 ? outstandingDollars : totalExpectedDollars}{" "}
@@ -258,21 +202,30 @@ export function BobaSuccessModal({
               </p>
             </div>
 
-            <ul className="flex flex-col gap-3">
-              {rows.map((row) => (
-                <SuccessRow
-                  key={row.key}
-                  row={row}
-                  submittedHere={Boolean(submittedKeys[row.key])}
-                  pending={pendingKey === row.key && submit.isPending}
-                  onSubmit={() => void onSubmitRow(row)}
-                />
-              ))}
-            </ul>
+            {/*
+             * Primary CTA. Lives inside the payment block (not in the
+             * footer) so it reads as "this is the next step" — the hacker
+             * goes to the dashboard payment card to actually mark the
+             * e-transfer as sent.
+             */}
+            <div className="flex flex-col gap-1">
+              <Button
+                ref={goToPaymentRef}
+                type="button"
+                variant="primary"
+                onClick={onGoToPayment}
+                className="w-full"
+              >
+                Take me to payment ↓
+              </Button>
+              <p className="text-center text-xs text-(--bearhacks-primary)/80">
+                Confirm you sent the e-transfer on your dashboard.
+              </p>
+            </div>
           </section>
         ) : null}
 
-        {rows.length > 0 && allFullyPaid ? (
+        {payments.length > 0 && allFullyPaid ? (
           <section
             aria-label="Payment status"
             className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-success-border) bg-(--bearhacks-success-bg) px-4 py-3"
@@ -286,7 +239,7 @@ export function BobaSuccessModal({
           </section>
         ) : null}
 
-        <footer className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <footer className="flex justify-end">
           <Button
             ref={closeButtonRef}
             type="button"
@@ -295,100 +248,9 @@ export function BobaSuccessModal({
           >
             Close
           </Button>
-          {!allFullyPaid ? (
-            <Button type="button" variant="primary" onClick={onGoToPayment}>
-              Take me to payment ↓
-            </Button>
-          ) : null}
         </footer>
       </div>
     </div>,
     document.body,
   );
-}
-
-function SuccessRow({
-  row,
-  submittedHere,
-  pending,
-  onSubmit,
-}: {
-  row: SubmittableRow;
-  submittedHere: boolean;
-  pending: boolean;
-  onSubmit: () => void;
-}) {
-  const { payment } = row;
-  const expected = (payment.expected_cents / 100).toFixed(2);
-  const received = payment.received_cents ?? 0;
-  const fullyPaid =
-    payment.status === "confirmed" && received >= payment.expected_cents;
-  const showSubmittedAck =
-    !fullyPaid && (submittedHere || payment.status === "submitted");
-  const canSubmit =
-    !fullyPaid && !submittedHere && payment.status === "unpaid";
-
-  return (
-    <li className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-3 text-(--bearhacks-fg)">
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="text-sm font-semibold">{row.title}</p>
-        <p className="text-sm font-semibold">${expected} CAD</p>
-      </div>
-
-      {canSubmit ? (
-        <Button
-          type="button"
-          variant="primary"
-          onClick={onSubmit}
-          disabled={pending}
-        >
-          {pending ? "Marking…" : "I sent the e-transfer"}
-        </Button>
-      ) : null}
-
-      {showSubmittedAck ? (
-        <p className="rounded-(--bearhacks-radius-md) bg-(--bearhacks-surface-alt) px-3 py-2 text-xs">
-          Thanks — marked as sent. The food team will confirm shortly.
-        </p>
-      ) : null}
-
-      {fullyPaid ? (
-        <p className="rounded-(--bearhacks-radius-md) bg-(--bearhacks-success-bg) px-3 py-2 text-xs text-(--bearhacks-success-fg)">
-          Already paid.
-        </p>
-      ) : null}
-    </li>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Summarizers — keep the modal copy identical to the placed-list cards so
-// the hacker recognises what they just submitted at a glance.
-// ---------------------------------------------------------------------------
-
-function describeDrink(
-  drink: BobaOrder | null,
-  menu: BobaMenuResponse,
-): string | null {
-  if (!drink) return null;
-  const name = menu.drinks.find((d) => d.id === drink.drink_id)?.label ?? drink.drink_id;
-  const size = menu.sizes.find((s) => s.id === drink.size)?.label ?? drink.size;
-  const toppings = drink.topping_ids
-    .map((tid) => menu.toppings.find((t) => t.id === tid)?.label ?? tid)
-    .join(", ");
-  const toppingPart = toppings ? ` · ${toppings}` : " · no toppings";
-  return `${name} · ${size} · ${drink.sweetness}% sweet · ${drink.ice} ice${toppingPart}`;
-}
-
-function describeMomo(
-  momo: BobaMomoOrder | null,
-  menu: BobaMenuResponse,
-): string | null {
-  if (!momo) return null;
-  const filling =
-    menu.momos.fillings.find((f) => f.id === momo.filling)?.label ??
-    momo.filling;
-  const sauce =
-    menu.momos.sauces.find((s) => s.id === momo.sauce)?.label ?? momo.sauce;
-  return `${filling} · sauce: ${sauce}`;
 }
