@@ -342,10 +342,10 @@ function ToppingsFieldUI({
           return (
             <li key={t.id}>
               <label
-                className={`flex min-h-(--bearhacks-touch-min) items-center gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) px-4 py-2 ${
+                className={`flex min-h-(--bearhacks-touch-min) items-center gap-3 rounded-(--bearhacks-radius-md) border px-4 py-2 ${
                   isOn
-                    ? "bg-(--bearhacks-accent-soft)"
-                    : "bg-(--bearhacks-surface)"
+                    ? "border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) text-(--bearhacks-primary)"
+                    : "border-(--bearhacks-border) bg-(--bearhacks-surface) text-(--bearhacks-fg)"
                 } ${
                   disabled
                     ? "cursor-not-allowed opacity-60"
@@ -360,7 +360,7 @@ function ToppingsFieldUI({
                   onChange={() => toggle(t.id)}
                   className="h-4 w-4"
                 />
-                <span className="text-sm text-(--bearhacks-fg)">{t.label}</span>
+                <span className="text-sm">{t.label}</span>
               </label>
             </li>
           );

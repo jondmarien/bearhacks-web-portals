@@ -115,7 +115,7 @@ export function FavouritesModal({
         {count > 0 ? (
           <span
             aria-label={`${count} saved`}
-            className="inline-flex min-w-6 items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent-soft) px-1.5 text-xs font-semibold text-(--bearhacks-text-marketing)"
+            className="inline-flex min-w-6 items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-1.5 text-xs font-semibold text-(--bearhacks-primary)"
           >
             {count}
           </span>
