@@ -109,13 +109,14 @@ type PaymentItem = AdminPaymentRow["items"][number];
 
 /**
  * One line in the payments "Items" column, laid out like a mini-row:
- *   [Kind pill] [size]  detail                                    $X.XX
+ *   [Kind pill] [size]  [status?] detail                           $X.XX
  *
  * Mirrors the orders table's Kind / Size / Detail / $ columns so admins don't
- * have to re-learn a second visual grammar when they switch consoles. Cancelled
- * / fulfilled items fade + strike through, matching prior behaviour.
- */
-/**
+ * have to re-learn a second visual grammar when they switch consoles. Past
+ * items (cancelled / fulfilled) fade, strike through the detail text, and
+ * carry an inline status badge so ``Cancelled`` vs ``Picked up`` stays
+ * scannable inside the collapsed "past items" drawer.
+ *
  * Renders as four grid cells (pill | size | detail | price) via
  * `display: contents`, so every row in the parent grid shares the same
  * column rail regardless of whether an item has a size. See the wrapping
@@ -124,10 +125,7 @@ type PaymentItem = AdminPaymentRow["items"][number];
 function PaymentItemLine({ item }: { item: PaymentItem }) {
   const isPlaced = item.status === "placed";
   const label = item.kind === "drink" ? "Drink" : "Momos";
-  const dimmed = isPlaced ? "" : "opacity-60";
-  const detailTone = isPlaced
-    ? "text-(--bearhacks-fg)"
-    : "text-(--bearhacks-muted) line-through";
+  const dimmed = isPlaced ? "" : "opacity-70";
   const priceTone = isPlaced
     ? "text-(--bearhacks-fg)"
     : "text-(--bearhacks-muted)";
@@ -141,8 +139,17 @@ function PaymentItemLine({ item }: { item: PaymentItem }) {
       <span className="self-start text-xs text-(--bearhacks-muted)">
         {item.size ?? "—"}
       </span>
-      <span className={`self-start text-xs wrap-break-word ${detailTone}`}>
-        {item.detail}
+      <span className="self-start text-xs wrap-break-word">
+        {!isPlaced ? <ItemStatusBadge status={item.status} /> : null}
+        <span
+          className={
+            isPlaced
+              ? "text-(--bearhacks-fg)"
+              : "text-(--bearhacks-muted) line-through"
+          }
+        >
+          {item.detail}
+        </span>
       </span>
       <span
         className={`self-start text-xs font-semibold text-right tabular-nums ${priceTone}`}
@@ -150,6 +157,104 @@ function PaymentItemLine({ item }: { item: PaymentItem }) {
         ${(item.amount_cents / 100).toFixed(2)}
       </span>
     </li>
+  );
+}
+
+/**
+ * Tiny inline status chip used on past items inside the ``<details>``
+ * drawer. Kept visually lighter than the top-level payment status pill so
+ * it reads as line-level context, not a competing call-to-action.
+ */
+function ItemStatusBadge({ status }: { status: PaymentItem["status"] }) {
+  if (status === "placed") return null;
+  const cls =
+    status === "cancelled"
+      ? "bg-(--bearhacks-danger-soft) text-(--bearhacks-danger) border border-(--bearhacks-danger-border)"
+      : "bg-(--bearhacks-success-bg) text-(--bearhacks-success-fg) border border-(--bearhacks-success-border)";
+  const label = status === "cancelled" ? "Cancelled" : "Picked up";
+  return (
+    <span
+      className={`mr-1.5 inline-flex items-center rounded px-1.5 py-0 text-[10px] font-semibold uppercase tracking-[0.04em] align-middle ${cls}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Renders a payment bundle's items, split into "live" (what the food
+ * team still has to make / hand off) and "past" (cancelled or already
+ * picked up — audit context, but not the pickup queue).
+ *
+ * Past items live inside a collapsed ``<details>`` so they don't compete
+ * with the live pickup list — the user's explicit ask after the food
+ * team kept confusing crossed-out lines with outstanding work. The
+ * drawer opens by default only when there's nothing live to look at,
+ * so "everything cancelled" bundles still expose their audit trail
+ * without an extra click.
+ */
+function PaymentItemsCell({ items }: { items: readonly PaymentItem[] }) {
+  if (items.length === 0) {
+    return (
+      <span className="text-xs text-(--bearhacks-muted)">No placed items</span>
+    );
+  }
+
+  const liveItems = items.filter((it) => it.status === "placed");
+  const pastItems = items.filter((it) => it.status !== "placed");
+  const cancelledCount = pastItems.filter(
+    (it) => it.status === "cancelled",
+  ).length;
+  const fulfilledCount = pastItems.filter(
+    (it) => it.status === "fulfilled",
+  ).length;
+
+  const summaryParts: string[] = [];
+  if (cancelledCount > 0) summaryParts.push(`${cancelledCount} cancelled`);
+  if (fulfilledCount > 0) summaryParts.push(`${fulfilledCount} picked up`);
+  const totalPast = pastItems.length;
+  const summaryLine =
+    totalPast === 0
+      ? ""
+      : `${totalPast} past item${totalPast === 1 ? "" : "s"}${
+          summaryParts.length > 0 ? ` · ${summaryParts.join(" · ")}` : ""
+        }`;
+
+  return (
+    <div className="flex min-w-[18rem] flex-col gap-2">
+      {liveItems.length > 0 ? (
+        <ul className="grid grid-cols-[auto_auto_1fr_auto] gap-x-3 gap-y-1.5">
+          {liveItems.map((it) => (
+            <PaymentItemLine key={it.id} item={it} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs italic text-(--bearhacks-muted)">
+          No live items — everything cancelled or already picked up.
+        </p>
+      )}
+
+      {pastItems.length > 0 ? (
+        <details
+          // Open by default only when there are no live items; otherwise
+          // the drawer stays collapsed so the pickup view isn't cluttered.
+          {...(liveItems.length === 0 ? { open: true } : {})}
+          className="rounded-(--bearhacks-radius-md) border border-dashed border-(--bearhacks-border) bg-(--bearhacks-surface-alt)/40"
+        >
+          <summary className="cursor-pointer list-none select-none px-2 py-1.5 text-xs font-medium text-(--bearhacks-muted) hover:text-(--bearhacks-fg) [&::-webkit-details-marker]:hidden">
+            <span aria-hidden="true" className="mr-1.5 inline-block">
+              ▸
+            </span>
+            {summaryLine}
+          </summary>
+          <ul className="grid grid-cols-[auto_auto_1fr_auto] gap-x-3 gap-y-1.5 border-t border-dashed border-(--bearhacks-border) px-2 pb-2 pt-2">
+            {pastItems.map((it) => (
+              <PaymentItemLine key={it.id} item={it} />
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </div>
   );
 }
 
@@ -619,23 +724,7 @@ function PaymentsTableCard({
       {
         id: "items",
         header: "Items",
-        cell: (ctx) => {
-          const o = ctx.row.original;
-          if (o.items.length === 0) {
-            return (
-              <span className="text-xs text-(--bearhacks-muted)">
-                No placed items
-              </span>
-            );
-          }
-          return (
-            <ul className="grid min-w-[18rem] grid-cols-[auto_auto_1fr_auto] gap-x-3 gap-y-1.5">
-              {o.items.map((it) => (
-                <PaymentItemLine key={it.id} item={it} />
-              ))}
-            </ul>
-          );
-        },
+        cell: (ctx) => <PaymentItemsCell items={ctx.row.original.items} />,
         enableSorting: false,
       },
       {
@@ -927,17 +1016,9 @@ function PaymentsTableCard({
                     </span>
                   </div>
 
-                  {o.items.length === 0 ? (
-                    <p className="mt-2 text-xs text-(--bearhacks-muted)">
-                      No placed items
-                    </p>
-                  ) : (
-                    <ul className="mt-2 grid grid-cols-[auto_auto_1fr_auto] gap-x-3 gap-y-1.5">
-                      {o.items.map((it) => (
-                        <PaymentItemLine key={it.id} item={it} />
-                      ))}
-                    </ul>
-                  )}
+                  <div className="mt-2">
+                    <PaymentItemsCell items={o.items} />
+                  </div>
 
                   <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
                     <dt className="uppercase tracking-wide text-(--bearhacks-muted)">
