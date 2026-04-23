@@ -7,9 +7,9 @@
  */
 
 import { ApiError } from "@bearhacks/api-client";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
@@ -22,7 +22,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { resolveMeBaseUrl } from "@/lib/me-base-url";
-import { PROFILE_ROLES, PROFILE_ROLE_OPTIONS } from "@/lib/profile-roles";
+import {
+  PROFILE_ROLES,
+  PROFILE_ROLE_OPTIONS,
+  type ProfileRole,
+} from "@/lib/profile-roles";
 import { isStaffUser, isSuperAdminUser } from "@/lib/supabase-role";
 
 export type AdminProfileListRow = {
@@ -33,6 +37,15 @@ export type AdminProfileListRow = {
   qr_id: string | null;
 };
 
+export type AdminProfileListResponse = {
+  items: AdminProfileListRow[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+const PAGE_SIZE = 25;
+
 export default function AdminProfilesPage() {
   const supabase = useSupabase();
   const client = useApiClient();
@@ -41,6 +54,17 @@ export default function AdminProfilesPage() {
   const [user, setUser] = useState<User | null>(null);
   const [appliedSearch, setAppliedSearch] = useState("");
   const [draftSearch, setDraftSearch] = useState("");
+  const [selectedRoles, setSelectedRoles] = useState<ReadonlySet<ProfileRole>>(
+    () => new Set<ProfileRole>(),
+  );
+  const [page, setPage] = useState(0);
+
+  // Stable array for the query key + URLSearchParams so the query stays
+  // cacheable: sets don't have value equality, but a sorted array does.
+  const selectedRolesKey = useMemo(
+    () => [...selectedRoles].sort(),
+    [selectedRoles],
+  );
 
   useEffect(() => {
     if (!supabase) return;
@@ -57,15 +81,39 @@ export default function AdminProfilesPage() {
   const staff = isStaffUser(user);
 
   const query = useQuery({
-    queryKey: ["admin-profiles", appliedSearch],
+    queryKey: ["admin-profiles", appliedSearch, selectedRolesKey, page],
     queryFn: async () => {
       const params = new URLSearchParams();
-      params.set("limit", "50");
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String(page * PAGE_SIZE));
       if (appliedSearch.trim()) params.set("search", appliedSearch.trim());
-      return client!.fetchJson<AdminProfileListRow[]>(`/admin/profiles?${params.toString()}`);
+      for (const r of selectedRolesKey) params.append("role", r);
+      return client!.fetchJson<AdminProfileListResponse>(
+        `/admin/profiles?${params.toString()}`,
+      );
     },
     enabled: Boolean(client && isSuper),
+    placeholderData: keepPreviousData,
   });
+
+  // Whenever the user changes filters, we snap back to page 0 at the
+  // event-handler level (see the search form's `onSubmit` and the role
+  // chip handlers below). Doing this in a `useEffect` would cascade a
+  // second render and trips React 19's `react-hooks/set-state-in-effect`
+  // rule — so resets live with the interactions that cause them.
+  const toggleRole = (role: ProfileRole) => {
+    setSelectedRoles((prev) => {
+      const next = new Set(prev);
+      if (next.has(role)) next.delete(role);
+      else next.add(role);
+      return next;
+    });
+    setPage(0);
+  };
+  const clearRoles = () => {
+    setSelectedRoles(new Set());
+    setPage(0);
+  };
 
   useEffect(() => {
     if (!query.error) return;
@@ -167,12 +215,46 @@ export default function AdminProfilesPage() {
 
       {isSuper && (
         <>
-          <Card>
+          <Card className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <span
+                id="profile-role-filter-label"
+                className="text-sm font-medium text-(--bearhacks-title)"
+              >
+                Filter by role
+              </span>
+              <div
+                role="group"
+                aria-labelledby="profile-role-filter-label"
+                className="flex flex-wrap gap-2"
+              >
+                {PROFILE_ROLES.map((role) => {
+                  const active = selectedRoles.has(role);
+                  return (
+                    <Button
+                      key={role}
+                      type="button"
+                      variant={active ? "primary" : "ghost"}
+                      aria-pressed={active}
+                      onClick={() => toggleRole(role)}
+                    >
+                      {role}
+                    </Button>
+                  );
+                })}
+                {selectedRoles.size > 0 ? (
+                  <Button type="button" variant="ghost" onClick={clearRoles}>
+                    Clear roles
+                  </Button>
+                ) : null}
+              </div>
+            </div>
             <form
               className="flex flex-col gap-3 sm:flex-row sm:items-end"
               onSubmit={(e) => {
                 e.preventDefault();
                 setAppliedSearch(draftSearch);
+                setPage(0);
               }}
             >
               <div className="min-w-0 flex-1">
@@ -192,11 +274,13 @@ export default function AdminProfilesPage() {
             </form>
           </Card>
 
-          {query.isLoading && <p className="text-sm text-(--bearhacks-muted)">Loading…</p>}
-          {query.data && query.data.length === 0 && (
+          {query.isLoading && !query.data && (
+            <p className="text-sm text-(--bearhacks-muted)">Loading…</p>
+          )}
+          {query.data && query.data.items.length === 0 && (
             <p className="text-sm text-(--bearhacks-muted)">No profiles match.</p>
           )}
-          {query.data && query.data.length > 0 && (
+          {query.data && query.data.items.length > 0 && (
             <>
               <Card className="hidden p-0 sm:block">
                 <div className="overflow-x-auto">
@@ -221,7 +305,7 @@ export default function AdminProfilesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {query.data.map((row) => {
+                      {query.data.items.map((row) => {
                         const isDeleting =
                           deleteMutation.isPending && deleteMutation.variables === row.id;
                         return (
@@ -294,7 +378,7 @@ export default function AdminProfilesPage() {
               </Card>
 
               <ul className="flex flex-col gap-3 sm:hidden">
-                {query.data.map((row) => {
+                {query.data.items.map((row) => {
                   const isDeleting =
                     deleteMutation.isPending && deleteMutation.variables === row.id;
                   return (
@@ -374,6 +458,15 @@ export default function AdminProfilesPage() {
                   );
                 })}
               </ul>
+
+              <PaginationControls
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={query.data.total}
+                onPrev={() => setPage((p) => Math.max(0, p - 1))}
+                onNext={() => setPage((p) => p + 1)}
+                isFetching={query.isFetching}
+              />
             </>
           )}
         </>
@@ -404,6 +497,62 @@ export default function AdminProfilesPage() {
         }}
       />
     </main>
+  );
+}
+
+/**
+ * Server pagination footer. Shows "Page N of M · X total" plus Prev/Next.
+ *
+ * `isFetching` is passed so we can keep the controls clickable while a
+ * page transition is in flight (React Query is showing the previous page
+ * thanks to `keepPreviousData`) without flashing a disabled state.
+ */
+function PaginationControls({
+  page,
+  pageSize,
+  total,
+  onPrev,
+  onNext,
+  isFetching,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPrev: () => void;
+  onNext: () => void;
+  isFetching: boolean;
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const current = Math.min(page + 1, pageCount);
+  const atStart = page <= 0;
+  const atEnd = page >= pageCount - 1;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-(--bearhacks-muted)">
+      <span aria-live="polite">
+        Page {current} of {pageCount} · {total} total
+        {isFetching ? " · refreshing…" : ""}
+      </span>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onPrev}
+          disabled={atStart}
+          aria-label="Previous page"
+        >
+          Prev
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onNext}
+          disabled={atEnd}
+          aria-label="Next page"
+        >
+          Next
+        </Button>
+      </div>
+    </div>
   );
 }
 

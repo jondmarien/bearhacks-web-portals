@@ -5,16 +5,22 @@ import { createLogger } from "@bearhacks/logger";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
+import { BobaPaymentCard } from "@/components/boba-payment-card";
 import { BobaStatusCard } from "@/components/boba-status-card";
 import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputField, TextareaField } from "@/components/ui/field";
 import { QrPreview } from "@/components/ui/qr-preview";
+import {
+  useBobaMenuQuery,
+  useBobaWindowsQuery,
+  useMyBobaOrderQuery,
+} from "@/lib/boba-queries";
 import { getOAuthDisplayName } from "@/lib/oauth-display-name";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
@@ -69,6 +75,7 @@ function draftFromProfile(
 export default function HomePage() {
   const auth = useMeAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const client = useApiClient();
   const [profileDraft, setProfileDraft] = useState<ProfileDraft | null>(null);
   useDocumentTitle(auth?.user ? "Welcome back" : "Sign in");
@@ -91,6 +98,47 @@ export default function HomePage() {
     queryFn: () => client!.fetchJson<FavouriteProfile[]>("/social/favourites"),
     enabled: Boolean(client && userId),
   });
+
+  const menuQuery = useBobaMenuQuery();
+  const windowsQuery = useBobaWindowsQuery();
+  const myOrderQuery = useMyBobaOrderQuery(userId);
+
+  const activeWindowId = windowsQuery.data?.active_window_id ?? null;
+  const activeWindow = useMemo(() => {
+    if (!activeWindowId || !windowsQuery.data) return null;
+    return (
+      windowsQuery.data.windows.find((w) => w.id === activeWindowId) ?? null
+    );
+  }, [activeWindowId, windowsQuery.data]);
+
+  // Deep-link highlight: /?payment=highlight scrolls the payment card into
+  // view and flashes a transient ring. Same pattern as the old
+  // `scrollAndHighlightPayment` on /boba; we then strip the query param so
+  // a browser refresh doesn't re-trigger it.
+  const paymentSectionRef = useRef<HTMLDivElement | null>(null);
+  const [paymentHighlighted, setPaymentHighlighted] = useState(false);
+  const paymentHighlightRequested = searchParams.get("payment") === "highlight";
+
+  useEffect(() => {
+    if (!paymentHighlightRequested) return;
+    const raf = window.requestAnimationFrame(() => {
+      paymentSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      setPaymentHighlighted(true);
+    });
+    const fadeTimer = window.setTimeout(
+      () => setPaymentHighlighted(false),
+      2000,
+    );
+    const clearTimer = window.setTimeout(() => router.replace("/"), 2000);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(fadeTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [paymentHighlightRequested, router]);
 
   const profileQuery = useQuery({
     queryKey: ["me-profile", userId],
@@ -249,6 +297,23 @@ export default function HomePage() {
       </div>
 
       <BobaStatusCard isAuthReady={Boolean(auth?.isAuthReady)} userId={userId} />
+
+      <div
+        ref={paymentSectionRef}
+        className={`scroll-mt-6 transition-shadow duration-500 ${
+          paymentHighlighted
+            ? "rounded-(--bearhacks-radius-lg) ring-4 ring-(--bearhacks-accent)/70"
+            : ""
+        }`}
+      >
+        <BobaPaymentCard
+          payment={myOrderQuery.data?.payment ?? null}
+          mealWindowId={activeWindow?.id ?? null}
+          recipientName={menuQuery.data?.payment.etransfer_recipient_name ?? ""}
+          etransferEmail={menuQuery.data?.payment.etransfer_email ?? ""}
+          discountNote={menuQuery.data?.payment.discount_note ?? ""}
+        />
+      </div>
 
       <Card>
         <CardHeader>

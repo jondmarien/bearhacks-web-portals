@@ -2,14 +2,13 @@
 
 import { ApiError } from "@bearhacks/api-client";
 import { createLogger } from "@bearhacks/logger";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
 import { AllergenInfoModal } from "@/components/allergen-info-modal";
 import { BobaStatusCard } from "@/components/boba-status-card";
-import { BobaPaymentCard } from "@/components/boba-payment-card";
 import {
   BobaCombinedOrderForm,
   BobaDrinkEditForm,
@@ -192,38 +191,23 @@ export default function BobaOrderPage() {
   const cancelMomoMutation = useCancelBobaMomoMutation();
 
   const [successState, setSuccessState] = useState<SuccessState | null>(null);
-  const paymentSectionRef = useRef<HTMLDivElement | null>(null);
-  const [paymentHighlighted, setPaymentHighlighted] = useState(false);
-
-  const scrollAndHighlightPayment = useCallback(() => {
-    // Defer to the next tick so React has applied the modal-close render
-    // before we measure scroll offsets — otherwise the hidden modal can
-    // still occupy layout on iOS Safari for a frame and skew the scroll.
-    window.requestAnimationFrame(() => {
-      paymentSectionRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-      setPaymentHighlighted(true);
-      window.setTimeout(() => setPaymentHighlighted(false), 2000);
-    });
-  }, []);
 
   // Plain dismissal path — "Close" button, Escape, overlay click, "×".
-  // Intentionally does NOT scroll the payment card into view: the hacker
-  // dismissed the modal without asking for payment, so surprising them
-  // with a scroll feels like a bug. (Distinct from
-  // ``goToPaymentFromSuccessModal`` below.)
+  // Intentionally does NOT navigate: the hacker dismissed the modal
+  // without asking for payment, so jumping them elsewhere would feel
+  // like a bug. (Distinct from ``goToPaymentFromSuccessModal`` below.)
   const dismissSuccessModal = useCallback(() => {
     setSuccessState(null);
   }, []);
 
-  // Explicit "Take me to payment ↓" action — closes the modal AND scrolls
-  // the payment card into view with the highlight ring.
+  // Explicit "Take me to payment ↓" action — closes the modal and deep-
+  // links to the home page, which hosts the BobaPaymentCard. The
+  // ``?payment=highlight`` query param tells the home page to scroll the
+  // card into view and flash the transient ring.
   const goToPaymentFromSuccessModal = useCallback(() => {
     setSuccessState(null);
-    scrollAndHighlightPayment();
-  }, [scrollAndHighlightPayment]);
+    router.push("/?payment=highlight");
+  }, [router]);
 
   const defaultContact = useMemo(
     () =>
@@ -524,28 +508,6 @@ export default function BobaOrderPage() {
               </CardHeader>
             </Card>
           )}
-
-          <div
-            ref={paymentSectionRef}
-            // `scroll-mt` keeps the heading clear of the sticky-ish header
-            // when we programmatically scroll the section into view after
-            // closing the success modal. The transient ring is the same
-            // accent we use for "action needed" so the cue is calm but
-            // unmistakable on dismiss.
-            className={`scroll-mt-6 transition-shadow duration-500 ${
-              paymentHighlighted
-                ? "rounded-(--bearhacks-radius-lg) ring-4 ring-(--bearhacks-accent)/70"
-                : ""
-            }`}
-          >
-            <BobaPaymentCard
-              payment={myOrderQuery.data?.payment ?? null}
-              mealWindowId={activeWindow.id}
-              recipientName={menuQuery.data.payment.etransfer_recipient_name}
-              etransferEmail={menuQuery.data.payment.etransfer_email}
-              discountNote={menuQuery.data.payment.discount_note}
-            />
-          </div>
 
           {/* `key` forces a fresh mount (and therefore fresh `useState`
               initial values) each time a new order is placed, which

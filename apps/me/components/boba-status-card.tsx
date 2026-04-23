@@ -286,9 +286,14 @@ function Pill({
   tone: "open" | "muted";
   children: React.ReactNode;
 }) {
+  // `open` used to use the solid accent fill, which made it visually
+  // indistinguishable from the "Add more →" CTA directly below (same fill,
+  // same contrast). We now use a soft-tinted label that still reads as
+  // "active" but no longer competes with buttons for the eye. Mirrors the
+  // confirmed pill style on `BobaPaymentCard`.
   const cls =
     tone === "open"
-      ? "bg-(--bearhacks-accent) text-(--bearhacks-primary)"
+      ? "bg-(--bearhacks-accent-soft)/60 text-(--bearhacks-text-marketing) border border-(--bearhacks-accent)/50"
       : "bg-(--bearhacks-surface-alt) text-(--bearhacks-text-marketing)/80 border border-(--bearhacks-border)";
   return (
     <span
