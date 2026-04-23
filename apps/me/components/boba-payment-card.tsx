@@ -115,10 +115,19 @@ export function BobaPaymentCard({
   const outstandingDollars = (outstandingCents / 100).toFixed(2);
   const totalExpectedDollars = (totalExpected / 100).toFixed(2);
 
+  // Drift (confirmed but under-received) is a sub-state of ``confirmed``
+  // — splitting it into its own bucket keeps the rollup buckets mutually
+  // exclusive so they always sum to ``rows.length``. If we double-counted
+  // drift rows into both ``confirmed`` and ``drift``, two drifted rows
+  // would render as "2 confirmed · 2 with drift", misleading the hacker
+  // into thinking two extra payments were fully settled.
   const counts = rows.reduce(
     (acc, r) => {
-      if (isDrift(r.payment)) acc.drift += 1;
-      acc[r.payment.status] += 1;
+      if (isDrift(r.payment)) {
+        acc.drift += 1;
+      } else {
+        acc[r.payment.status] += 1;
+      }
       return acc;
     },
     { unpaid: 0, submitted: 0, confirmed: 0, refunded: 0, drift: 0 },

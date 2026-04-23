@@ -950,7 +950,16 @@ function PaymentsTableCard({
     { id: "updated_at", desc: true },
   ]);
 
-  const data = query.data?.payments ?? [];
+  // Stable reference for the payments slice: `query.data?.payments ?? []`
+  // evaluates to a fresh `[]` on every render while the query is loading
+  // / errored, which would thrash the downstream `liveData` / `pastData`
+  // memos' dependency array. Memoising on `query.data?.payments` keeps
+  // identity stable across renders where the server response hasn't
+  // changed.
+  const data = useMemo(
+    () => query.data?.payments ?? [],
+    [query.data?.payments],
+  );
 
   // Split per-order payments into "live" (underlying order still
   // ``placed``) and "past" (cancelled or already picked up). The old
@@ -1574,7 +1583,6 @@ function PastPaymentsDrawer({
             <li
               key={o.id}
               className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2 opacity-70 sm:grid sm:grid-cols-[minmax(10rem,1fr)_minmax(14rem,2fr)_auto_auto] sm:items-start sm:gap-3"
-              aria-disabled="true"
             >
               <div className="flex flex-col min-w-0">
                 <span className="text-sm font-semibold text-(--bearhacks-fg) line-through wrap-break-word">
