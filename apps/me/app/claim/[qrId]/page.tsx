@@ -319,11 +319,11 @@ export default function ClaimQrPage() {
             <Card className="bg-(--bearhacks-cream) border-b-4 border-b-(--bearhacks-text-marketing)">
               <CardHeader>
                 <CardTitle className="text-(--bearhacks-text-marketing)">
-                  You've already claimed a QR
+                  You&apos;ve already claimed a QR
                 </CardTitle>
                 <CardDescription className="text-(--bearhacks-text-marketing)/80">
-                  Each attendee can only claim one QR. Here's the card that's
-                  linked to your account.
+                  Each attendee can only claim one QR. Here&apos;s the card
+                  that&apos;s linked to your account.
                 </CardDescription>
               </CardHeader>
               <Link
