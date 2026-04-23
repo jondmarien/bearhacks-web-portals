@@ -104,6 +104,33 @@ const ACTION_BUTTON_REFUND =
 const ACTION_BUTTON_UNDO =
   `${ACTION_BUTTON_BASE} bg-(--bearhacks-warning-bg)! text-(--bearhacks-warning-fg)! border-(--bearhacks-warning-border) hover:bg-(--bearhacks-warning-border)! disabled:hover:bg-(--bearhacks-warning-bg)!`;
 
+/**
+ * Admin soft-gate for the per-row "Confirm" action.
+ *
+ * The Confirm button can only be clicked once the hacker has flipped
+ * their payment row from ``unpaid`` → ``submitted`` on the portal (the
+ * "I sent the e-transfer" / "Mark as sent" button in
+ * ``boba-payment-card.tsx``). This stops admins from racing ahead of
+ * the hacker and marking money as received before it actually is —
+ * by the time the row reaches ``submitted`` the hacker has explicitly
+ * told us the e-transfer is out the door, so "Confirm" means "verify
+ * the money landed and close the loop" instead of "guess that it will".
+ *
+ * Refund is intentionally not gated the same way: an admin must always
+ * be able to cancel/refund an ``unpaid`` row (e.g. the hacker walked
+ * off without paying), otherwise stale rows have no resolution path.
+ *
+ * This mirrors the ``PAIR_ACTION_STATUSES.confirm`` list below and the
+ * ``onBatchConfirm`` filter so every surface that can confirm a
+ * payment uses the same rule.
+ */
+function canAdminConfirm(row: AdminPaymentRow): boolean {
+  return row.status === "submitted";
+}
+
+const CONFIRM_DISABLED_REASON =
+  "Waiting on hacker — they need to tap \u201CI sent the e-transfer\u201D on their portal before this row can be confirmed.";
+
 // Shared checkbox styling for the select column + the mobile list's
 // per-card checkbox. Matches the form controls elsewhere in the admin
 // app: 18px square, accent-tinted, with a visible focus ring for
@@ -398,7 +425,10 @@ export default function AdminBobaPaymentsPage() {
     "confirm" | "refund" | "unconfirm",
     ReadonlyArray<AdminPaymentRow["status"]>
   > = {
-    confirm: ["unpaid", "submitted"],
+    // Only pair-confirm siblings the hacker has also flagged as sent.
+    // See ``canAdminConfirm`` — an admin must not force-confirm an
+    // ``unpaid`` row, and the same rule holds for a paired sibling.
+    confirm: ["submitted"],
     refund: ["submitted", "confirmed"],
     unconfirm: ["confirmed"],
   };
@@ -556,15 +586,19 @@ export default function AdminBobaPaymentsPage() {
   }
 
   async function onBatchConfirm() {
-    const eligible = selectedRows.filter(
-      (r) => r.status === "unpaid" || r.status === "submitted",
-    );
+    // Only ``submitted`` rows are eligible — we never force-confirm a
+    // payment the hacker hasn't told us they sent yet (see the row-
+    // level Confirm button's ``disabled`` gating and the comment on
+    // ``canAdminConfirm``). Unpaid rows in the selection are skipped
+    // and called out in the confirm-dialog copy so the admin knows
+    // why the batch count doesn't match what they ticked.
+    const eligible = selectedRows.filter((r) => r.status === "submitted");
     if (eligible.length === 0) return;
     const total = eligible.reduce((sum, r) => sum + r.expected_cents, 0);
     const ok = await confirm({
       title: `Confirm ${eligible.length === 1 ? "1 payment" : `${eligible.length} payments`} totaling $${(total / 100).toFixed(2)}?`,
       description:
-        "Marks each order paid in full (received_cents = expected_cents). Selected rows that aren't Unpaid or Submitted are skipped.",
+        "Marks each order paid in full (received_cents = expected_cents). Only rows the hacker has marked as sent (Submitted) are included — Unpaid and already-Confirmed/Refunded rows are skipped.",
       confirmLabel: "Confirm all",
     });
     if (!ok) return;
@@ -738,13 +772,14 @@ export default function AdminBobaPaymentsPage() {
             const rows = sibling ? [row, sibling] : [row];
             const total = rows.reduce((s, r) => s + r.expected_cents, 0);
             const refText = (row.reference ?? "").trim();
+            // ``row.status`` is always ``"submitted"`` here — the row-
+            // level Confirm button is ``disabled`` for any other status
+            // (see ``canAdminConfirm``). No fallback branch needed.
             const description = sibling
               ? `Confirms both halves of this submission (${row.kind} + ${sibling.kind}) as paid in full. received_cents = expected_cents for each.`
-              : row.status === "submitted"
-                ? refText.length > 0
-                  ? `Hacker submitted ref “${refText}”. Marks this order paid in full.`
-                  : "Hacker submitted nothing for reference. Confirm they added a reference to their e-transfer in person. CONFIRM PAYMENT marks this order paid in full."
-                : "Marks this order paid in full (received_cents = expected_cents).";
+              : refText.length > 0
+                ? `Hacker submitted ref “${refText}”. Marks this order paid in full.`
+                : "Hacker submitted nothing for reference. Confirm they added a reference to their e-transfer in person. CONFIRM PAYMENT marks this order paid in full.";
             const ok = await confirm({
               title: sibling
                 ? `Confirm paired submission totaling $${(total / 100).toFixed(2)} from ${row.hacker_name}?`
@@ -1333,12 +1368,16 @@ function PaymentsTableCard({
               </div>
             );
           }
+          const confirmable = canAdminConfirm(o);
           return (
             <div className="flex items-start justify-end gap-1.5 whitespace-nowrap">
               <Button
                 type="button"
                 variant="pill"
                 className={ACTION_BUTTON_CONFIRM}
+                disabled={!confirmable}
+                title={confirmable ? undefined : CONFIRM_DISABLED_REASON}
+                aria-disabled={!confirmable}
                 onClick={() => void onConfirm(o)}
               >
                 Confirm
@@ -1653,24 +1692,39 @@ function PaymentsTableCard({
                       </Button>
                     </div>
                   ) : (
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                      <Button
-                        type="button"
-                        variant="pill"
-                        className={`w-full sm:w-auto ${ACTION_BUTTON_CONFIRM}`}
-                        onClick={() => void onConfirm(o)}
-                      >
-                        Confirm
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="pill"
-                        className={`w-full sm:w-auto ${ACTION_BUTTON_REFUND}`}
-                        onClick={() => void onRefund(o)}
-                      >
-                        Refund
-                      </Button>
-                    </div>
+                    (() => {
+                      const confirmable = canAdminConfirm(o);
+                      return (
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                          <Button
+                            type="button"
+                            variant="pill"
+                            className={`w-full sm:w-auto ${ACTION_BUTTON_CONFIRM}`}
+                            disabled={!confirmable}
+                            title={
+                              confirmable ? undefined : CONFIRM_DISABLED_REASON
+                            }
+                            aria-disabled={!confirmable}
+                            onClick={() => void onConfirm(o)}
+                          >
+                            Confirm
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="pill"
+                            className={`w-full sm:w-auto ${ACTION_BUTTON_REFUND}`}
+                            onClick={() => void onRefund(o)}
+                          >
+                            Refund
+                          </Button>
+                          {!confirmable ? (
+                            <p className="text-xs text-(--bearhacks-muted) sm:ml-1 sm:self-center">
+                              Waiting on hacker to mark as sent.
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })()
                   )}
                 </li>
               );
