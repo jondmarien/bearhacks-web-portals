@@ -56,7 +56,6 @@ export function BobaPaymentCard({
 }: Props) {
   const submit = useSubmitBobaPaymentMutation();
   const undo = useUndoBobaPaymentMutation();
-  const [reference, setReference] = useState("");
   const [emailCopied, setEmailCopied] = useState(false);
 
   if (!payment || payment.expected_cents === 0 || !mealWindowId) {
@@ -100,12 +99,15 @@ export function BobaPaymentCard({
 
   const onSubmit = async () => {
     try {
-      await submit.mutateAsync({
-        meal_window_id: mealWindowId,
-        reference: reference.trim() || undefined,
-      });
+      // The optional free-text reference field was removed from this
+      // card on 2026-04-22 — hackers kept leaving it blank anyway, and
+      // admins can match submissions to hackers via the bundle's
+      // hacker name/email in the super-admin payments console. The
+      // mutation's `reference` arg stays optional so historical rows
+      // and any future server-side flows that still carry a reference
+      // keep working.
+      await submit.mutateAsync({ meal_window_id: mealWindowId });
       toast.success("Marked as sent — admins will confirm shortly.");
-      setReference("");
     } catch (error) {
       log.error("Boba payment self-submit failed", { error });
       toast.error(
@@ -195,20 +197,6 @@ export function BobaPaymentCard({
 
         {payment.status === "unpaid" ? (
           <div className="flex flex-col gap-2">
-            <label
-              htmlFor="payment-reference"
-              className="text-sm font-medium text-(--bearhacks-title)"
-            >
-              E-transfer reference (optional)
-            </label>
-            <input
-              id="payment-reference"
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              maxLength={120}
-              placeholder='e.g. "Sam — Sat dinner"'
-              className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none"
-            />
             <Button
               type="button"
               variant="primary"
