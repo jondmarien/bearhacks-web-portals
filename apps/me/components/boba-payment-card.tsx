@@ -120,8 +120,24 @@ export function BobaPaymentCard({
   // batch button for the rest of the rows).
   const [bulkPending, setBulkPending] = useState(false);
 
+  // Skip cancelled orders entirely. The backend zeroes out
+  // ``expected_cents`` on cancel but leaves the payment row in place
+  // (with whatever status it had pre-cancel) so that audit history
+  // survives — the admin past-payments drawer consumes those rows.
+  // Without this filter they leak into the hacker's payment list as
+  // ghost "$0.00 CAD · ACTION NEEDED" entries with a live "I sent the
+  // e-transfer" button, and tapping that button 409s with
+  // ``no_orders_to_pay`` because the self-submit endpoint only
+  // accepts payments whose underlying order is ``placed``.
+  //
+  // ``fulfilled`` orders are kept: they're picked-up food with a
+  // legitimate ``confirmed`` / ``refunded`` payment that belongs in
+  // the Settled drawer as a receipt.
   const drinkRows: PayableRow[] = drinks
-    .filter((d): d is BobaOrder & { payment: BobaPayment } => d.payment != null)
+    .filter(
+      (d): d is BobaOrder & { payment: BobaPayment } =>
+        d.payment != null && d.status !== "cancelled",
+    )
     .map((d) => ({
       key: `drink:${d.id}`,
       kind: "drink" as const,
@@ -132,7 +148,8 @@ export function BobaPaymentCard({
     }));
   const momoRows: PayableRow[] = momos
     .filter(
-      (m): m is BobaMomoOrder & { payment: BobaPayment } => m.payment != null,
+      (m): m is BobaMomoOrder & { payment: BobaPayment } =>
+        m.payment != null && m.status !== "cancelled",
     )
     .map((m) => ({
       key: `momo:${m.id}`,
