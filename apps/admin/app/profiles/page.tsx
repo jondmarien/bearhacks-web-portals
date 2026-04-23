@@ -66,6 +66,21 @@ export default function AdminProfilesPage() {
     [selectedRoles],
   );
 
+  // Debounced live search: as the user types into `draftSearch`, wait
+  // 250ms of keyboard quiet before promoting it to `appliedSearch`
+  // (which is what actually keys the query). Pressing Enter or clicking
+  // Apply below bypasses this delay for power users. The `setState` in
+  // the timer's callback is async, so React 19's
+  // `react-hooks/set-state-in-effect` rule leaves it alone.
+  useEffect(() => {
+    if (draftSearch === appliedSearch) return;
+    const timer = window.setTimeout(() => {
+      setAppliedSearch(draftSearch);
+      setPage(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [draftSearch, appliedSearch]);
+
   useEffect(() => {
     if (!supabase) return;
     void supabase.auth.getSession().then(({ data }) => {
@@ -266,6 +281,7 @@ export default function AdminProfilesPage() {
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDraftSearch(e.target.value)}
                   placeholder="Substring match"
                   autoComplete="off"
+                  hint="Filters live as you type — Enter or Apply skips the delay."
                 />
               </div>
               <Button type="submit" variant="primary">
