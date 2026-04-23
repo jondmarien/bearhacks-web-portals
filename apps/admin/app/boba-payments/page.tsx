@@ -104,6 +104,14 @@ const ACTION_BUTTON_REFUND =
 const ACTION_BUTTON_UNDO =
   `${ACTION_BUTTON_BASE} bg-(--bearhacks-warning-bg)! text-(--bearhacks-warning-fg)! border-(--bearhacks-warning-border) hover:bg-(--bearhacks-warning-border)! disabled:hover:bg-(--bearhacks-warning-bg)!`;
 
+// Shared checkbox styling for the select column + the mobile list's
+// per-card checkbox. Matches the form controls elsewhere in the admin
+// app: 18px square, accent-tinted, with a visible focus ring for
+// keyboard admins. Kept outside the component so both renderers
+// reference the same source of truth.
+const CHECKBOX_CLASSES =
+  "h-[18px] w-[18px] shrink-0 cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border-strong) accent-(--bearhacks-accent) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--bearhacks-focus-ring)";
+
 type PaymentItem = AdminPaymentRow["items"][number];
 
 /**
@@ -369,6 +377,192 @@ export default function AdminBobaPaymentsPage() {
   const unconfirmMutation = useUnconfirmPaymentMutation();
   const unrefundMutation = useUnrefundPaymentMutation();
 
+  // ---------------------------------------------------------------------------
+  // Batch selection
+  //
+  // Selection is deliberately *per-page*: the ids in `selected` are only
+  // valid for the rows currently visible. When the admin flips pages,
+  // toggles a status chip, changes the meal window, or applies a new
+  // search, we clear the set so the next batch action can't target
+  // rows the admin isn't looking at. A single derived `scopeKey`
+  // captures every input that would change which slice the server
+  // returns; the prev-tracker pattern pipes that through a
+  // render-phase reset without tripping React 19's
+  // set-state-in-effect rule (same trick as the total-shrink
+  // snap-back just above).
+  // ---------------------------------------------------------------------------
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const selectionScopeKey = `${focusedWindowId ?? ""}|${selectedStatusesKey.join(",")}|${appliedSearch}|${page}`;
+  const [prevSelectionScope, setPrevSelectionScope] =
+    useState(selectionScopeKey);
+  if (selectionScopeKey !== prevSelectionScope) {
+    setPrevSelectionScope(selectionScopeKey);
+    if (selected.size > 0) setSelected(new Set());
+  }
+
+  const currentRows = paymentsQuery.data?.payments ?? [];
+  const selectedRows = currentRows.filter((r) => selected.has(r.id));
+
+  const toggleRow = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const toggleAll = (ids: string[], select: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (select) ids.forEach((id) => next.add(id));
+      else ids.forEach((id) => next.delete(id));
+      return next;
+    });
+
+  const clearSelection = () => setSelected(new Set());
+
+  /**
+   * Shared runner for every batch mutation.
+   *
+   * Fires all mutations in parallel via ``Promise.allSettled`` so one
+   * hacker's 500 doesn't block the rest — each row's log line +
+   * fulfilled/rejected count is surfaced in a single summary toast at
+   * the end. The selection is cleared regardless of partial failure;
+   * the 30s auto-refetch plus the per-mutation ``invalidateQueries``
+   * will repopulate the table with the fresh statuses, so the admin
+   * can re-select only the rows that actually failed if they want to
+   * retry.
+   */
+  async function runBatch({
+    rows,
+    mutateAsync,
+    event,
+    verbPast,
+    verbAttempt,
+  }: {
+    rows: AdminPaymentRow[];
+    mutateAsync: (row: AdminPaymentRow) => Promise<unknown>;
+    event: string;
+    verbPast: string;
+    verbAttempt: string;
+  }) {
+    if (rows.length === 0) return;
+    const results = await Promise.allSettled(rows.map((r) => mutateAsync(r)));
+    let ok = 0;
+    results.forEach((r, i) => {
+      const row = rows[i]!;
+      const succeeded = r.status === "fulfilled";
+      if (succeeded) ok += 1;
+      log(succeeded ? "info" : "error", {
+        event,
+        actor,
+        resourceId: row.id,
+        result: succeeded ? "success" : "error",
+        ...(r.status === "rejected" ? { error: r.reason } : {}),
+      });
+    });
+    const failed = rows.length - ok;
+    const pluralize = (n: number, s: string) =>
+      `${n} ${s}${n === 1 ? "" : "s"}`;
+    if (failed === 0) {
+      toast.success(`${verbPast} ${pluralize(ok, "payment")}.`);
+    } else if (ok === 0) {
+      toast.error(
+        `Failed to ${verbAttempt} ${pluralize(failed, "payment")}.`,
+      );
+    } else {
+      toast.error(
+        `${verbPast} ${pluralize(ok, "payment")} — ${failed} failed.`,
+      );
+    }
+    clearSelection();
+  }
+
+  async function onBatchConfirm() {
+    const eligible = selectedRows.filter(
+      (r) => r.status === "unpaid" || r.status === "submitted",
+    );
+    if (eligible.length === 0) return;
+    const total = eligible.reduce((sum, r) => sum + r.expected_cents, 0);
+    const ok = await confirm({
+      title: `Confirm ${eligible.length === 1 ? "1 payment" : `${eligible.length} payments`} totaling $${(total / 100).toFixed(2)}?`,
+      description:
+        "Marks each bundle paid in full (received_cents = expected_cents). Selected rows that aren't Unpaid or Submitted are skipped.",
+      confirmLabel: "Confirm all",
+    });
+    if (!ok) return;
+    await runBatch({
+      rows: eligible,
+      mutateAsync: (r) => confirmMutation.mutateAsync({ paymentId: r.id }),
+      event: "admin_boba_payment_confirm",
+      verbPast: "Confirmed",
+      verbAttempt: "confirm",
+    });
+  }
+
+  async function onBatchRefund() {
+    const eligible = selectedRows.filter(
+      (r) => r.status === "unpaid" || r.status === "submitted",
+    );
+    if (eligible.length === 0) return;
+    const total = eligible.reduce((sum, r) => sum + r.expected_cents, 0);
+    const ok = await confirm({
+      title: `Refund ${eligible.length === 1 ? "1 payment" : `${eligible.length} payments`} totaling $${(total / 100).toFixed(2)}?`,
+      description:
+        "Marks each bundle refunded. Hackers can re-submit to pay again. Selected rows that aren't Unpaid or Submitted are skipped.",
+      confirmLabel: "Refund all",
+      tone: "danger",
+    });
+    if (!ok) return;
+    await runBatch({
+      rows: eligible,
+      mutateAsync: (r) => refundMutation.mutateAsync({ paymentId: r.id }),
+      event: "admin_boba_payment_refund",
+      verbPast: "Refunded",
+      verbAttempt: "refund",
+    });
+  }
+
+  async function onBatchUnconfirm() {
+    const eligible = selectedRows.filter((r) => r.status === "confirmed");
+    if (eligible.length === 0) return;
+    const ok = await confirm({
+      title: `Undo confirmation on ${eligible.length === 1 ? "1 payment" : `${eligible.length} payments`}?`,
+      description:
+        "Reverts each bundle to Submitted. Use this if the e-transfers bounced or were confirmed by mistake. Selected rows that aren't Confirmed are skipped.",
+      confirmLabel: "Undo confirmations",
+      tone: "danger",
+    });
+    if (!ok) return;
+    await runBatch({
+      rows: eligible,
+      mutateAsync: (r) => unconfirmMutation.mutateAsync({ paymentId: r.id }),
+      event: "admin_boba_payment_unconfirm",
+      verbPast: "Reverted",
+      verbAttempt: "revert confirmation on",
+    });
+  }
+
+  async function onBatchUnrefund() {
+    const eligible = selectedRows.filter((r) => r.status === "refunded");
+    if (eligible.length === 0) return;
+    const ok = await confirm({
+      title: `Undo refund on ${eligible.length === 1 ? "1 payment" : `${eligible.length} payments`}?`,
+      description:
+        "Reverses each refund and restores the prior status (confirmed / submitted / unpaid). Use this if the refunds were accidental. Selected rows that aren't Refunded are skipped.",
+      confirmLabel: "Undo refunds",
+      tone: "danger",
+    });
+    if (!ok) return;
+    await runBatch({
+      rows: eligible,
+      mutateAsync: (r) => unrefundMutation.mutateAsync({ paymentId: r.id }),
+      event: "admin_boba_payment_unrefund",
+      verbPast: "Reverted refund on",
+      verbAttempt: "revert refund on",
+    });
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
       <PageHeader
@@ -454,6 +648,14 @@ export default function AdminBobaPaymentsPage() {
           pageSize={PAGE_SIZE}
           onPrev={() => setPage((p) => Math.max(0, p - 1))}
           onNext={() => setPage((p) => p + 1)}
+          selected={selected}
+          onToggleRow={toggleRow}
+          onToggleAll={toggleAll}
+          onClearSelection={clearSelection}
+          onBatchConfirm={onBatchConfirm}
+          onBatchRefund={onBatchRefund}
+          onBatchUnconfirm={onBatchUnconfirm}
+          onBatchUnrefund={onBatchUnrefund}
           onConfirm={async (row) => {
             const ok = await confirm({
               title: `Confirm $${(row.expected_cents / 100).toFixed(2)} from ${row.hacker_name}?`,
@@ -795,6 +997,14 @@ type PaymentsTableCardProps = {
   pageSize: number;
   onPrev: () => void;
   onNext: () => void;
+  selected: Set<string>;
+  onToggleRow: (id: string) => void;
+  onToggleAll: (ids: string[], select: boolean) => void;
+  onClearSelection: () => void;
+  onBatchConfirm: () => Promise<void> | void;
+  onBatchRefund: () => Promise<void> | void;
+  onBatchUnconfirm: () => Promise<void> | void;
+  onBatchUnrefund: () => Promise<void> | void;
   onConfirm: (row: AdminPaymentRow) => Promise<void>;
   onRefund: (row: AdminPaymentRow) => Promise<void>;
   onUnconfirm: (row: AdminPaymentRow) => Promise<void>;
@@ -807,6 +1017,14 @@ function PaymentsTableCard({
   pageSize,
   onPrev,
   onNext,
+  selected,
+  onToggleRow,
+  onToggleAll,
+  onClearSelection,
+  onBatchConfirm,
+  onBatchRefund,
+  onBatchUnconfirm,
+  onBatchUnrefund,
   onConfirm,
   onRefund,
   onUnconfirm,
@@ -820,6 +1038,52 @@ function PaymentsTableCard({
 
   const columns = useMemo<ColumnDef<AdminPaymentRow>[]>(
     () => [
+      {
+        id: "select",
+        header: ({ table }) => {
+          // Header checkbox drives the current page only — same
+          // scope as the mobile "Select all" button below. Indeterm.
+          // state means some-but-not-all rows on this page are
+          // selected; checking in that state selects the rest.
+          const visibleIds = table
+            .getRowModel()
+            .rows.map((r) => r.original.id);
+          const selectedHere = visibleIds.filter((id) => selected.has(id));
+          const allSelected =
+            visibleIds.length > 0 && selectedHere.length === visibleIds.length;
+          const someSelected =
+            selectedHere.length > 0 && !allSelected;
+          return (
+            <input
+              type="checkbox"
+              className={CHECKBOX_CLASSES}
+              aria-label={
+                allSelected
+                  ? "Deselect all payments on this page"
+                  : "Select all payments on this page"
+              }
+              checked={allSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someSelected;
+              }}
+              onChange={(e) => onToggleAll(visibleIds, e.target.checked)}
+            />
+          );
+        },
+        cell: (ctx) => {
+          const o = ctx.row.original;
+          return (
+            <input
+              type="checkbox"
+              className={CHECKBOX_CLASSES}
+              aria-label={`Select payment for ${o.hacker_name}`}
+              checked={selected.has(o.id)}
+              onChange={() => onToggleRow(o.id)}
+            />
+          );
+        },
+        enableSorting: false,
+      },
       {
         accessorKey: "hacker_name",
         header: "Hacker",
@@ -974,7 +1238,15 @@ function PaymentsTableCard({
         enableSorting: false,
       },
     ],
-    [onConfirm, onRefund, onUnconfirm, onUnrefund],
+    [
+      onConfirm,
+      onRefund,
+      onUnconfirm,
+      onUnrefund,
+      selected,
+      onToggleRow,
+      onToggleAll,
+    ],
   );
 
   // Search + filtering are server-side now (pagination lives in the
@@ -1004,6 +1276,23 @@ function PaymentsTableCard({
   const pageStart = hasRange ? page * pageSize + 1 : 0;
   const pageEnd = hasRange ? Math.min(total, page * pageSize + data.length) : 0;
 
+  // Counts for the batch action bar. We always count against the
+  // *visible* rows (`data`) intersected with `selected` so selections
+  // that the user can't see (e.g. an id that got filtered out
+  // server-side between renders) don't inflate the button count.
+  const selectedVisible = data.filter((r) => selected.has(r.id));
+  const selectedCount = selectedVisible.length;
+  const eligibleConfirmCount = selectedVisible.filter(
+    (r) => r.status === "unpaid" || r.status === "submitted",
+  ).length;
+  const eligibleRefundCount = eligibleConfirmCount;
+  const eligibleUnconfirmCount = selectedVisible.filter(
+    (r) => r.status === "confirmed",
+  ).length;
+  const eligibleUnrefundCount = selectedVisible.filter(
+    (r) => r.status === "refunded",
+  ).length;
+
   return (
     <Card className="p-0">
       <div className="flex flex-col gap-1 border-b border-(--bearhacks-border) px-4 py-3">
@@ -1019,6 +1308,21 @@ function PaymentsTableCard({
             : null}
         </CardDescription>
       </div>
+
+      {selectedCount > 0 ? (
+        <BatchActionBar
+          selectedCount={selectedCount}
+          eligibleConfirmCount={eligibleConfirmCount}
+          eligibleRefundCount={eligibleRefundCount}
+          eligibleUnconfirmCount={eligibleUnconfirmCount}
+          eligibleUnrefundCount={eligibleUnrefundCount}
+          onBatchConfirm={onBatchConfirm}
+          onBatchRefund={onBatchRefund}
+          onBatchUnconfirm={onBatchUnconfirm}
+          onBatchUnrefund={onBatchUnrefund}
+          onClear={onClearSelection}
+        />
+      ) : null}
 
       {query.isLoading ? (
         <p className="px-4 py-6 text-sm text-(--bearhacks-muted)">Loading…</p>
@@ -1043,6 +1347,7 @@ function PaymentsTableCard({
                       const canSort = header.column.getCanSort();
                       const sort = header.column.getIsSorted();
                       const isActions = header.column.id === "actions";
+                      const isSelect = header.column.id === "select";
                       return (
                         <th
                           key={header.id}
@@ -1050,7 +1355,9 @@ function PaymentsTableCard({
                           className={`px-3 py-3 font-medium text-(--bearhacks-fg) align-top ${
                             isActions
                               ? "w-[200px] min-w-[200px] text-right"
-                              : ""
+                              : isSelect
+                                ? "w-[40px] min-w-[40px]"
+                                : ""
                           }`}
                         >
                           {header.isPlaceholder ? null : canSort ? (
@@ -1087,13 +1394,16 @@ function PaymentsTableCard({
                   >
                     {row.getVisibleCells().map((cell) => {
                       const isActions = cell.column.id === "actions";
+                      const isSelect = cell.column.id === "select";
                       return (
                         <td
                           key={cell.id}
                           className={`px-3 py-3 ${
                             isActions
                               ? "w-[200px] min-w-[200px] text-right align-top whitespace-nowrap"
-                              : ""
+                              : isSelect
+                                ? "w-[40px] min-w-[40px] align-top"
+                                : ""
                           }`}
                         >
                           {flexRender(
@@ -1123,15 +1433,24 @@ function PaymentsTableCard({
                   className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-3"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="text-sm font-semibold text-(--bearhacks-fg) wrap-break-word">
-                        {o.hacker_name}
-                      </span>
-                      {o.hacker_email ? (
-                        <span className="text-xs text-(--bearhacks-muted) wrap-break-word">
-                          {o.hacker_email}
+                    <div className="flex min-w-0 flex-1 items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className={`${CHECKBOX_CLASSES} mt-0.5`}
+                        aria-label={`Select payment for ${o.hacker_name}`}
+                        checked={selected.has(o.id)}
+                        onChange={() => onToggleRow(o.id)}
+                      />
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="text-sm font-semibold text-(--bearhacks-fg) wrap-break-word">
+                          {o.hacker_name}
                         </span>
-                      ) : null}
+                        {o.hacker_email ? (
+                          <span className="text-xs text-(--bearhacks-muted) wrap-break-word">
+                            {o.hacker_email}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                     <span
                       className={`inline-flex shrink-0 items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE_CLASSES[o.status]}`}
@@ -1239,6 +1558,102 @@ function PaymentsTableCard({
         />
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * Sticky-ish toolbar shown above the payments table when one or more
+ * rows are checked. Each action button is labelled with its eligible
+ * subset count (e.g. "Confirm (3)") — if a button would affect zero
+ * rows in the current selection it stays disabled, which keeps the
+ * toolbar honest about what a click will do without having to mix in
+ * tooltips. Selection is per-page (see the scope-key reset in the
+ * parent), so "Clear" is effectively a one-click bailout.
+ */
+function BatchActionBar({
+  selectedCount,
+  eligibleConfirmCount,
+  eligibleRefundCount,
+  eligibleUnconfirmCount,
+  eligibleUnrefundCount,
+  onBatchConfirm,
+  onBatchRefund,
+  onBatchUnconfirm,
+  onBatchUnrefund,
+  onClear,
+}: {
+  selectedCount: number;
+  eligibleConfirmCount: number;
+  eligibleRefundCount: number;
+  eligibleUnconfirmCount: number;
+  eligibleUnrefundCount: number;
+  onBatchConfirm: () => Promise<void> | void;
+  onBatchRefund: () => Promise<void> | void;
+  onBatchUnconfirm: () => Promise<void> | void;
+  onBatchUnrefund: () => Promise<void> | void;
+  onClear: () => void;
+}) {
+  return (
+    <div
+      role="toolbar"
+      aria-label="Batch actions"
+      className="flex flex-wrap items-center gap-2 border-b border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-3"
+    >
+      <span className="text-sm font-semibold text-(--bearhacks-fg)">
+        {selectedCount} selected
+      </span>
+      <span aria-hidden className="text-(--bearhacks-muted)">
+        ·
+      </span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button
+          type="button"
+          variant="pill"
+          className={ACTION_BUTTON_CONFIRM}
+          disabled={eligibleConfirmCount === 0}
+          onClick={() => void onBatchConfirm()}
+        >
+          Confirm ({eligibleConfirmCount})
+        </Button>
+        <Button
+          type="button"
+          variant="pill"
+          className={ACTION_BUTTON_REFUND}
+          disabled={eligibleRefundCount === 0}
+          onClick={() => void onBatchRefund()}
+        >
+          Refund ({eligibleRefundCount})
+        </Button>
+        <Button
+          type="button"
+          variant="pill"
+          className={ACTION_BUTTON_UNDO}
+          disabled={eligibleUnconfirmCount === 0}
+          onClick={() => void onBatchUnconfirm()}
+        >
+          Undo confirm ({eligibleUnconfirmCount})
+        </Button>
+        <Button
+          type="button"
+          variant="pill"
+          className={ACTION_BUTTON_UNDO}
+          disabled={eligibleUnrefundCount === 0}
+          onClick={() => void onBatchUnrefund()}
+        >
+          Undo refund ({eligibleUnrefundCount})
+        </Button>
+      </div>
+      <div className="ml-auto">
+        <Button
+          type="button"
+          variant="ghost"
+          className="text-xs"
+          onClick={onClear}
+        >
+          Clear selection
+        </Button>
+      </div>
+    </div>
   );
 }
 
