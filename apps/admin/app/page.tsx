@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { createStructuredLogger } from "@/lib/structured-logging";
-import { isSuperAdminUser } from "@/lib/supabase-role";
+import { isStaffUser, isSuperAdminUser } from "@/lib/supabase-role";
 import { useDocumentTitle } from "@/lib/use-document-title";
 
 const log = createStructuredLogger("admin/home-dashboard");
@@ -115,51 +115,57 @@ export default function AdminHome() {
        * width, not sized-to-content.
        */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Link href="/qr" className="no-underline">
-          <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
-            <CardTitle className="min-h-[2lh]">
-              QR <span className="bg-(--bearhacks-cream) px-1 rounded-sm">fulfillment</span>
-            </CardTitle>
-            <CardDescription className="mt-1">
-              Generate, search, reprint, and inspect attendee QR codes.
-            </CardDescription>
-            <div className="mt-auto pt-4">
-              <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
-                Open QR tools →
-              </span>
-            </div>
-          </Card>
-        </Link>
-        <Link href="/profiles" className="no-underline">
-          <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
-            <CardTitle className="min-h-[2lh]">
-              Profile <span className="bg-(--bearhacks-cream) px-1 rounded-sm">directory</span>
-            </CardTitle>
-            <CardDescription className="mt-1">
-              Search and edit attendee profiles (super-admin only).
-            </CardDescription>
-            <div className="mt-auto pt-4">
-              <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
-                Open profiles →
-              </span>
-            </div>
-          </Card>
-        </Link>
-        <Link href="/super-admins" className="no-underline">
-          <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
-            <CardTitle className="min-h-[2lh]">
-              Super Admin <span className="bg-(--bearhacks-cream) px-1 rounded-sm">tools</span>
-            </CardTitle>
-            <CardDescription className="mt-1">
-              Grant or revoke Super Admin access by Discord email.
-            </CardDescription>
-            <div className="mt-auto pt-4">
-              <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
-                Open super-admin tools →
-              </span>
-            </div>
-          </Card>
-        </Link>
+        {isStaffUser(user) ? (
+          <Link href="/qr" className="no-underline">
+            <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
+              <CardTitle className="min-h-[2lh]">
+                QR <span className="bg-(--bearhacks-cream) px-1 rounded-sm">fulfillment</span>
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Generate, search, reprint, and inspect attendee QR codes.
+              </CardDescription>
+              <div className="mt-auto pt-4">
+                <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+                  Open QR tools →
+                </span>
+              </div>
+            </Card>
+          </Link>
+        ) : null}
+        {isSuperAdminUser(user) ? (
+          <Link href="/profiles" className="no-underline">
+            <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
+              <CardTitle className="min-h-[2lh]">
+                Profile <span className="bg-(--bearhacks-cream) px-1 rounded-sm">directory</span>
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Search and edit attendee profiles (super-admin only).
+              </CardDescription>
+              <div className="mt-auto pt-4">
+                <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+                  Open profiles →
+                </span>
+              </div>
+            </Card>
+          </Link>
+        ) : null}
+        {isSuperAdminUser(user) ? (
+          <Link href="/super-admins" className="no-underline">
+            <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
+              <CardTitle className="min-h-[2lh]">
+                Super Admin <span className="bg-(--bearhacks-cream) px-1 rounded-sm">tools</span>
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Grant or revoke Super Admin access by Discord email.
+              </CardDescription>
+              <div className="mt-auto pt-4">
+                <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
+                  Open super-admin tools →
+                </span>
+              </div>
+            </Card>
+          </Link>
+        ) : null}
         {isSuperAdminUser(user) ? (
           <Link href="/boba-orders" className="no-underline">
             <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
