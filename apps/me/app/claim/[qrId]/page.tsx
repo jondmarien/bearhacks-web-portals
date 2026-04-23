@@ -1,20 +1,29 @@
 "use client";
 
-import { ApiError, describeApiError, getApiErrorCode } from "@bearhacks/api-client";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useState } from "react";
-import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
 import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { InputField, TextareaField } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { getOAuthDisplayName } from "@/lib/oauth-display-name";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
+import {
+  ApiError,
+  describeApiError,
+  getApiErrorCode,
+} from "@bearhacks/api-client";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useState } from "react";
+import { toast } from "sonner";
 
 type ClaimStatus = {
   id: string;
@@ -42,6 +51,25 @@ type ProfileDraft = {
   personal_url: string;
 };
 
+// Mirrors `core.auth.PORTAL_ELEVATED_PROFILE_ROLES`. These roles can only be
+// assigned to `profiles.role` by a super-admin via `PATCH /profiles/{id}`;
+// seeing one on a user's row is proof that a super-admin vouched for them and
+// is sufficient for `require_accepted_hacker` to grant portal access (QR
+// claim, boba orders, wallet, etc.) even when the user isn't on the accepted
+// hacker allowlist.
+const PORTAL_ELEVATED_PROFILE_ROLES: ReadonlySet<string> = new Set([
+  "Organizer",
+  "Mentor",
+  "Sponsor",
+  "Volunteer",
+  "Founder",
+  "Director",
+]);
+
+function isElevatedPortalRole(role: string | null | undefined): boolean {
+  return typeof role === "string" && PORTAL_ELEVATED_PROFILE_ROLES.has(role);
+}
+
 function describeClaimError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) {
@@ -50,7 +78,7 @@ function describeClaimError(error: unknown): string {
     if (error.status === 403) {
       const code = getApiErrorCode(error);
       if (code === "email_not_accepted") {
-        return "Your email isn't on the accepted hacker list. If you were accepted under a different email, link it from the dashboard, or reach out to an organizer.";
+        return "You are not in the Approved Hackers List. Please be sure you are using the same email that you applied with. Open a ticket with an organizer if there is a mistake.";
       }
       if (code === "missing_email") {
         return "We couldn't read the email on your account. Sign in again with a provider that shares your email (Google or LinkedIn).";
@@ -113,7 +141,9 @@ export default function ClaimQrPage() {
         return await client!.fetchJson<Profile>(`/profiles/${viewerId}`);
       } catch (error) {
         if (error instanceof ApiError && error.status === 404) {
-          const initialBody = oauthDisplayName ? { display_name: oauthDisplayName } : {};
+          const initialBody = oauthDisplayName
+            ? { display_name: oauthDisplayName }
+            : {};
           await client!.fetchJson<Profile>("/profiles/me", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -124,7 +154,12 @@ export default function ClaimQrPage() {
         throw error;
       }
     },
-    enabled: Boolean(client && viewerId && claimStatusQuery.data && !claimStatusQuery.data.claimed),
+    enabled: Boolean(
+      client &&
+      viewerId &&
+      claimStatusQuery.data &&
+      !claimStatusQuery.data.claimed,
+    ),
   });
 
   const claimMutation = useMutation({
@@ -137,26 +172,47 @@ export default function ClaimQrPage() {
         github_url: myProfileQuery.data?.github_url ?? "",
         personal_url: myProfileQuery.data?.personal_url ?? "",
       };
-      if (!form.display_name.trim() || !form.role.trim()) {
+      const originalRole = (myProfileQuery.data?.role ?? "").trim();
+      const trimmedRole = form.role.trim();
+      // `role` has the only self-assignment gate on PATCH /profiles/me
+      // (`SELF_ASSIGNABLE_PROFILE_ROLES = {"Hacker"}` — see
+      // `routers/profiles.py`). Skipping it when unchanged avoids both:
+      //   1. 403 for users whose super-admin-assigned role (Sponsor, Mentor,
+      //      Volunteer, Organizer, Founder, Director) is already correct,
+      //      since re-sending it trips the escalation guard.
+      //   2. Clobbering that super-admin assignment with "Hacker" if the user
+      //      leaves the field as-is.
+      const roleChanged = trimmedRole !== originalRole;
+      if (!form.display_name.trim() || (roleChanged && !trimmedRole)) {
         throw new Error("Display name and role are required");
+      }
+      if (!trimmedRole && !originalRole) {
+        throw new Error("Display name and role are required");
+      }
+
+      const profileUpdates: Record<string, string | undefined> = {
+        display_name: form.display_name.trim(),
+        bio: form.bio.trim() || undefined,
+        linkedin_url: form.linkedin_url.trim() || undefined,
+        github_url: form.github_url.trim() || undefined,
+        personal_url: form.personal_url.trim() || undefined,
+      };
+      if (roleChanged && trimmedRole) {
+        profileUpdates.role = trimmedRole;
       }
 
       await client!.fetchJson<Profile>("/profiles/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          display_name: form.display_name.trim(),
-          role: form.role.trim(),
-          bio: form.bio.trim() || undefined,
-          linkedin_url: form.linkedin_url.trim() || undefined,
-          github_url: form.github_url.trim() || undefined,
-          personal_url: form.personal_url.trim() || undefined,
-        }),
+        body: JSON.stringify(profileUpdates),
       });
 
-      return client!.fetchJson<{ success: boolean; qr_id: string }>(`/claim/${qrId}`, {
-        method: "POST",
-      });
+      return client!.fetchJson<{ success: boolean; qr_id: string }>(
+        `/claim/${qrId}`,
+        {
+          method: "POST",
+        },
+      );
     },
     onSuccess: async () => {
       toast.success("QR claimed successfully");
@@ -186,6 +242,7 @@ export default function ClaimQrPage() {
     github_url: myProfileQuery.data?.github_url ?? "",
     personal_url: myProfileQuery.data?.personal_url ?? "",
   };
+  const roleLocked = isElevatedPortalRole(myProfileQuery.data?.role);
 
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-8">
@@ -239,13 +296,16 @@ export default function ClaimQrPage() {
       {claimStatusQuery.data && !claimStatusQuery.data.claimed ? (
         <>
           {!auth?.isAuthReady ? (
-            <p className="text-sm text-(--bearhacks-muted)">Checking session…</p>
+            <p className="text-sm text-(--bearhacks-muted)">
+              Checking session…
+            </p>
           ) : !auth.user ? (
             <Card>
               <CardHeader>
                 <CardTitle>Sign in to claim</CardTitle>
                 <CardDescription>
-                  Use Google or LinkedIn to link this QR to your attendee account.
+                  Use Google or LinkedIn to link this QR to your attendee
+                  account.
                 </CardDescription>
               </CardHeader>
               <DashboardOAuthButtons />
@@ -255,7 +315,8 @@ export default function ClaimQrPage() {
               <CardHeader>
                 <CardTitle>Confirm your details</CardTitle>
                 <CardDescription>
-                  Display name and role are required. Everything else is optional.
+                  Display name and role are required. Everything else is
+                  optional.
                 </CardDescription>
               </CardHeader>
               <form
@@ -270,7 +331,10 @@ export default function ClaimQrPage() {
                   required
                   value={profileDraft.display_name}
                   onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                    setDraft({ ...profileDraft, display_name: event.target.value })
+                    setDraft({
+                      ...profileDraft,
+                      display_name: event.target.value,
+                    })
                   }
                   placeholder="Your name"
                   autoComplete="name"
@@ -283,6 +347,13 @@ export default function ClaimQrPage() {
                     setDraft({ ...profileDraft, role: event.target.value })
                   }
                   placeholder="Hacker, Mentor, Sponsor…"
+                  readOnly={roleLocked}
+                  disabled={roleLocked}
+                  hint={
+                    roleLocked
+                      ? "Your role was assigned by an organizer and can't be changed here."
+                      : undefined
+                  }
                 />
                 <TextareaField
                   label="Bio"
@@ -298,7 +369,10 @@ export default function ClaimQrPage() {
                   type="url"
                   value={profileDraft.linkedin_url}
                   onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                    setDraft({ ...profileDraft, linkedin_url: event.target.value })
+                    setDraft({
+                      ...profileDraft,
+                      linkedin_url: event.target.value,
+                    })
                   }
                   placeholder="https://linkedin.com/in/you"
                 />
@@ -307,7 +381,10 @@ export default function ClaimQrPage() {
                   type="url"
                   value={profileDraft.github_url}
                   onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                    setDraft({ ...profileDraft, github_url: event.target.value })
+                    setDraft({
+                      ...profileDraft,
+                      github_url: event.target.value,
+                    })
                   }
                   placeholder="https://github.com/you"
                 />
@@ -315,8 +392,11 @@ export default function ClaimQrPage() {
                   label="Personal link"
                   type="url"
                   value={profileDraft.personal_url}
-                  onChange={(event: React.ChangeEvent<HTMLInputElement> ) =>
-                    setDraft({ ...profileDraft, personal_url: event.target.value })
+                  onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                    setDraft({
+                      ...profileDraft,
+                      personal_url: event.target.value,
+                    })
                   }
                   placeholder="https://yourportfolio.com"
                   hint="Portfolio, project, or anything you want to share."
