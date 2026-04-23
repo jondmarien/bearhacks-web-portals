@@ -24,15 +24,11 @@ const log = createLogger("me/boba-success-modal");
 
 type Props = {
   open: boolean;
-  /** Drink that was just placed by the create call (if any). */
+  /** Drink that was just placed by the create call (if any), carrying its own payment. */
   drink: BobaOrder | null;
-  /** Momo order that was just placed by the create call (if any). */
+  /** Momo order that was just placed by the create call (if any), carrying its own payment. */
   momo: BobaMomoOrder | null;
-  /** Bundled payment for the active window after the create call. */
-  payment: BobaPayment | null;
   menu: BobaMenuResponse;
-  /** Active meal-window id used for the self-submit body. */
-  mealWindowId: string | null;
   /**
    * Plain dismissal (x button, Escape, overlay click, "Close" footer
    * button). Caller should NOT scroll the payment section into view for
@@ -46,6 +42,14 @@ type Props = {
   onGoToPayment: () => void;
 };
 
+type SubmittableRow = {
+  key: string;
+  kind: "drink" | "momo";
+  orderId: string;
+  title: string;
+  payment: BobaPayment;
+};
+
 // Keeps SSR happy: `createPortal` must not run during the server render
 // pass, so we gate on a client-only mount flag via `useSyncExternalStore`.
 const subscribeNoop = () => () => {};
@@ -55,26 +59,30 @@ const getMountedServerSnapshot = () => false;
 /**
  * Post-order success dialog.
  *
- * Dismissable on overlay click, escape, or the explicit "Take me to the
- * payment section" button. Embeds the same e-transfer flow as
- * `BobaPaymentCard` so the hacker can fire-and-forget the payment from
- * inside the modal — the underlying card will reflect the same state once
- * dismissed (both read from the same `boba.myOrder` query cache).
+ * Per-order model: shows exactly what the hacker just placed (drink,
+ * momo, or both) with each item's own price and per-row "I sent the
+ * e-transfer" button. There's no cross-order total bleed-in from
+ * earlier orders in the window — each placed order stands alone here,
+ * which is the bug this modal used to have and the whole reason for
+ * the per-order payments migration.
  */
 export function BobaSuccessModal({
   open,
   drink,
   momo,
-  payment,
   menu,
-  mealWindowId,
   onClose,
   onGoToPayment,
 }: Props) {
   const submit = useSubmitBobaPaymentMutation();
-  const [reference, setReference] = useState("");
+  const [referencesByKey, setReferencesByKey] = useState<Record<string, string>>(
+    {},
+  );
+  const [submittedKeys, setSubmittedKeys] = useState<Record<string, boolean>>(
+    {},
+  );
   const [emailCopied, setEmailCopied] = useState(false);
-  const [submittedHere, setSubmittedHere] = useState(false);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const mounted = useSyncExternalStore(
@@ -82,12 +90,6 @@ export function BobaSuccessModal({
     getMountedSnapshot,
     getMountedServerSnapshot,
   );
-
-  // Per-open state (reference / submittedHere) is reset automatically by
-  // remounting this component — the caller in /boba/page.tsx passes a
-  // `key` prop tied to the current order's identity, so each new success
-  // dialog gets fresh `useState` initial values. This keeps us compliant
-  // with React 19's `react-hooks/set-state-in-effect` rule.
 
   useEffect(() => {
     if (!open) return;
@@ -102,25 +104,50 @@ export function BobaSuccessModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const drinkSummary = useMemo(() => describeDrink(drink, menu), [drink, menu]);
-  const momoSummary = useMemo(() => describeMomo(momo, menu), [momo, menu]);
+  const rows = useMemo<SubmittableRow[]>(() => {
+    const out: SubmittableRow[] = [];
+    if (drink && drink.payment) {
+      out.push({
+        key: `drink:${drink.id}`,
+        kind: "drink",
+        orderId: drink.id,
+        title: describeDrink(drink, menu) ?? "Drink",
+        payment: drink.payment,
+      });
+    }
+    if (momo && momo.payment) {
+      out.push({
+        key: `momo:${momo.id}`,
+        kind: "momo",
+        orderId: momo.id,
+        title: describeMomo(momo, menu) ?? "Momos",
+        payment: momo.payment,
+      });
+    }
+    return out;
+  }, [drink, momo, menu]);
 
   if (!open || !mounted) return null;
 
-  const expectedDollars =
-    payment != null ? (payment.expected_cents / 100).toFixed(2) : null;
+  const totalExpected = rows.reduce(
+    (sum, r) => sum + r.payment.expected_cents,
+    0,
+  );
+  const totalReceived = rows.reduce(
+    (sum, r) => sum + (r.payment.received_cents ?? 0),
+    0,
+  );
+  const outstanding = Math.max(totalExpected - totalReceived, 0);
+  const outstandingDollars = (outstanding / 100).toFixed(2);
+  const totalExpectedDollars = (totalExpected / 100).toFixed(2);
 
-  const receivedCents = payment?.received_cents ?? 0;
-  const expectedCents = payment?.expected_cents ?? 0;
-  const isFullyPaid =
-    payment?.status === "confirmed" && receivedCents >= expectedCents;
-  const outstandingCents = Math.max(expectedCents - receivedCents, 0);
-  const outstandingDollars = (outstandingCents / 100).toFixed(2);
-  const isUnpaid = payment?.status === "unpaid" || outstandingCents > 0;
-
-  const showSubmittedAck =
-    !isFullyPaid &&
-    (submittedHere || payment?.status === "submitted");
+  const allFullyPaid =
+    rows.length > 0 &&
+    rows.every(
+      (r) =>
+        r.payment.status === "confirmed" &&
+        (r.payment.received_cents ?? 0) >= r.payment.expected_cents,
+    );
 
   const copyEmail = async () => {
     try {
@@ -133,14 +160,16 @@ export function BobaSuccessModal({
     }
   };
 
-  const onSubmitPayment = async () => {
-    if (!mealWindowId) return;
+  const onSubmitRow = async (row: SubmittableRow) => {
+    const reference = (referencesByKey[row.key] ?? "").trim();
+    setPendingKey(row.key);
     try {
       await submit.mutateAsync({
-        meal_window_id: mealWindowId,
-        reference: reference.trim() || undefined,
+        kind: row.kind,
+        order_id: row.orderId,
+        reference: reference || undefined,
       });
-      setSubmittedHere(true);
+      setSubmittedKeys((prev) => ({ ...prev, [row.key]: true }));
       toast.success("Marked as sent — admins will confirm shortly.");
     } catch (error) {
       log.error("Boba payment self-submit failed (modal)", { error });
@@ -149,6 +178,8 @@ export function BobaSuccessModal({
           ? error.message
           : "Couldn't mark payment as sent.",
       );
+    } finally {
+      setPendingKey(null);
     }
   };
 
@@ -172,7 +203,7 @@ export function BobaSuccessModal({
               id="boba-success-title"
               className="mt-1 text-xl font-semibold text-(--bearhacks-title)"
             >
-              {isFullyPaid
+              {allFullyPaid
                 ? "You're in. Payment already settled."
                 : "You're in. Now finish payment."}
             </h2>
@@ -187,132 +218,84 @@ export function BobaSuccessModal({
           </button>
         </header>
 
-        {/* Order summary --------------------------------------------------- */}
-        <section
-          aria-label="Order summary"
-          className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-4 py-3"
-        >
-          <p className="text-xs uppercase tracking-[0.08em] text-(--bearhacks-muted)">
-            Just placed
-          </p>
-          <ul className="flex flex-col gap-1 text-sm text-(--bearhacks-fg)">
-            {drinkSummary ? (
-              <li>
-                <span className="font-semibold">Drink:</span> {drinkSummary}
-              </li>
-            ) : null}
-            {momoSummary ? (
-              <li>
-                <span className="font-semibold">Momos:</span> {momoSummary}
-              </li>
-            ) : null}
-          </ul>
-        </section>
-
         {/* Payment block --------------------------------------------------- */}
-        {payment != null && expectedDollars != null && mealWindowId ? (
-          isFullyPaid ? (
-            // Fully-paid bundle + this placed item fits under the received
-            // amount (e.g. admin confirmed with a buffer). Nothing to
-            // collect — just reassure the hacker instead of showing a
-            // misleading "pay now" block.
-            <section
-              aria-label="Payment status"
-              className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-success-border) bg-(--bearhacks-success-bg) px-4 py-3"
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-(--bearhacks-success-fg)">
-                Already paid
+        {rows.length > 0 && !allFullyPaid ? (
+          <section
+            aria-label="Payment instructions"
+            className="flex flex-col gap-3 rounded-(--bearhacks-radius-md) border-2 border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 py-4 text-(--bearhacks-primary)"
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-(--bearhacks-primary)/80">
+                {rows.length === 1 ? "To send" : "Total to send"}
               </p>
-              <p className="text-sm text-(--bearhacks-success-fg)">
-                Your payment bundle for this meal window is confirmed —
-                nothing more to send.
+              <p className="text-2xl font-semibold text-(--bearhacks-primary)">
+                ${outstanding > 0 ? outstandingDollars : totalExpectedDollars}{" "}
+                <span className="text-sm font-medium">CAD</span>
               </p>
-            </section>
-          ) : (
-            // Navy text on yellow works in both light and dark modes
-            // (--bearhacks-primary is #1d3264 in both themes). The default
-            // `text-(--bearhacks-fg)` / `text-(--bearhacks-muted)` tokens
-            // flip to near-white in dark mode, which is unreadable on the
-            // yellow accent-soft surface.
-            <section
-              aria-label="Payment instructions"
-              className="flex flex-col gap-3 rounded-(--bearhacks-radius-md) border-2 border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 py-4 text-(--bearhacks-primary)"
-            >
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-(--bearhacks-primary)/80">
-                  {receivedCents > 0 ? "Additional to send" : "Total to send"}
-                </p>
-                <p className="text-2xl font-semibold text-(--bearhacks-primary)">
-                  ${outstandingCents > 0 ? outstandingDollars : expectedDollars}{" "}
-                  <span className="text-sm font-medium">CAD</span>
-                </p>
+            </div>
+            <p className="text-xs text-(--bearhacks-primary)/80">
+              {menu.payment.discount_note} One e-transfer per order.
+            </p>
+
+            <div className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2">
+              <p className="text-xs uppercase tracking-[0.08em] text-(--bearhacks-muted)">
+                E-transfer to
+              </p>
+              <p className="text-sm font-semibold text-(--bearhacks-fg)">
+                {menu.payment.etransfer_recipient_name}
+              </p>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <code className="min-w-0 max-w-full break-all rounded-(--bearhacks-radius-md) bg-(--bearhacks-surface-alt) px-2 py-1 text-sm text-(--bearhacks-fg) select-all">
+                  {menu.payment.etransfer_email}
+                </code>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full sm:w-auto"
+                  onClick={() => void copyEmail()}
+                >
+                  {emailCopied ? "Copied!" : "Copy email"}
+                </Button>
               </div>
-              <p className="text-xs text-(--bearhacks-primary)/80">
-                {receivedCents > 0
-                  ? `Previously received $${(receivedCents / 100).toFixed(2)} — this covers the new items you just added.`
-                  : `${menu.payment.discount_note}. Bundle covers every drink + momo for this meal window.`}
+              <p className="mt-2 text-xs text-(--bearhacks-muted)">
+                Tip: include your name in the e-transfer message so we can
+                match it quickly.
               </p>
+            </div>
 
-              <div className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2">
-                <p className="text-xs uppercase tracking-[0.08em] text-(--bearhacks-muted)">
-                  E-transfer to
-                </p>
-                <p className="text-sm font-semibold text-(--bearhacks-fg)">
-                  {menu.payment.etransfer_recipient_name}
-                </p>
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                  <code className="min-w-0 max-w-full break-all rounded-(--bearhacks-radius-md) bg-(--bearhacks-surface-alt) px-2 py-1 text-sm text-(--bearhacks-fg) select-all">
-                    {menu.payment.etransfer_email}
-                  </code>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="w-full sm:w-auto"
-                    onClick={() => void copyEmail()}
-                  >
-                    {emailCopied ? "Copied!" : "Copy email"}
-                  </Button>
-                </div>
-                <p className="mt-2 text-xs text-(--bearhacks-muted)">
-                  Tip: include your name in the e-transfer message so we can
-                  match it quickly.
-                </p>
-              </div>
+            <ul className="flex flex-col gap-3">
+              {rows.map((row) => (
+                <SuccessRow
+                  key={row.key}
+                  row={row}
+                  reference={referencesByKey[row.key] ?? ""}
+                  onReferenceChange={(value) =>
+                    setReferencesByKey((prev) => ({
+                      ...prev,
+                      [row.key]: value,
+                    }))
+                  }
+                  submittedHere={Boolean(submittedKeys[row.key])}
+                  pending={pendingKey === row.key && submit.isPending}
+                  onSubmit={() => void onSubmitRow(row)}
+                />
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
-              {isUnpaid && !submittedHere ? (
-                <div className="flex flex-col gap-2">
-                  <label
-                    htmlFor="boba-success-reference"
-                    className="text-sm font-medium text-(--bearhacks-primary)"
-                  >
-                    E-transfer reference (optional)
-                  </label>
-                  <input
-                    id="boba-success-reference"
-                    value={reference}
-                    onChange={(e) => setReference(e.target.value)}
-                    maxLength={120}
-                    placeholder='e.g. "Sam — Sat dinner"'
-                    className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 py-2 text-base text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none"
-                  />
-                  <Button
-                    type="button"
-                    variant="primary"
-                    onClick={() => void onSubmitPayment()}
-                    disabled={submit.isPending}
-                  >
-                    {submit.isPending ? "Marking…" : "I sent the e-transfer"}
-                  </Button>
-                </div>
-              ) : null}
-
-              {showSubmittedAck ? (
-                <p className="rounded-(--bearhacks-radius-md) bg-(--bearhacks-surface) px-3 py-2 text-sm text-(--bearhacks-fg)">
-                  Thanks — marked as sent. The food team will confirm shortly.
-                </p>
-              ) : null}
-            </section>
-          )
+        {rows.length > 0 && allFullyPaid ? (
+          <section
+            aria-label="Payment status"
+            className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-success-border) bg-(--bearhacks-success-bg) px-4 py-3"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-(--bearhacks-success-fg)">
+              Already paid
+            </p>
+            <p className="text-sm text-(--bearhacks-success-fg)">
+              This order is already confirmed — nothing more to send.
+            </p>
+          </section>
         ) : null}
 
         <footer className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -324,7 +307,7 @@ export function BobaSuccessModal({
           >
             Close
           </Button>
-          {!isFullyPaid ? (
+          {!allFullyPaid ? (
             <Button type="button" variant="primary" onClick={onGoToPayment}>
               Take me to payment ↓
             </Button>
@@ -333,6 +316,78 @@ export function BobaSuccessModal({
       </div>
     </div>,
     document.body,
+  );
+}
+
+function SuccessRow({
+  row,
+  reference,
+  onReferenceChange,
+  submittedHere,
+  pending,
+  onSubmit,
+}: {
+  row: SubmittableRow;
+  reference: string;
+  onReferenceChange: (value: string) => void;
+  submittedHere: boolean;
+  pending: boolean;
+  onSubmit: () => void;
+}) {
+  const { payment } = row;
+  const expected = (payment.expected_cents / 100).toFixed(2);
+  const received = payment.received_cents ?? 0;
+  const fullyPaid =
+    payment.status === "confirmed" && received >= payment.expected_cents;
+  const showSubmittedAck =
+    !fullyPaid && (submittedHere || payment.status === "submitted");
+  const canSubmit =
+    !fullyPaid && !submittedHere && payment.status === "unpaid";
+  const inputId = `boba-success-ref-${row.key}`;
+
+  return (
+    <li className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-3 text-(--bearhacks-fg)">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-sm font-semibold">{row.title}</p>
+        <p className="text-sm font-semibold">${expected} CAD</p>
+      </div>
+
+      {canSubmit ? (
+        <div className="flex flex-col gap-2">
+          <label htmlFor={inputId} className="text-xs font-medium">
+            Reference (optional)
+          </label>
+          <input
+            id={inputId}
+            value={reference}
+            onChange={(e) => onReferenceChange(e.target.value)}
+            maxLength={120}
+            placeholder='e.g. "Sam — Sat dinner"'
+            className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 py-2 text-sm text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none"
+          />
+          <Button
+            type="button"
+            variant="primary"
+            onClick={onSubmit}
+            disabled={pending}
+          >
+            {pending ? "Marking…" : "I sent the e-transfer"}
+          </Button>
+        </div>
+      ) : null}
+
+      {showSubmittedAck ? (
+        <p className="rounded-(--bearhacks-radius-md) bg-(--bearhacks-surface-alt) px-3 py-2 text-xs">
+          Thanks — marked as sent. The food team will confirm shortly.
+        </p>
+      ) : null}
+
+      {fullyPaid ? (
+        <p className="rounded-(--bearhacks-radius-md) bg-(--bearhacks-success-bg) px-3 py-2 text-xs text-(--bearhacks-success-fg)">
+          Already paid.
+        </p>
+      ) : null}
+    </li>
   );
 }
 

@@ -72,6 +72,39 @@ export type BobaWindowsResponse = {
   windows: BobaWindowPayload[];
 };
 
+export type BobaPaymentStatus =
+  | "unpaid"
+  | "submitted"
+  | "confirmed"
+  | "refunded";
+
+/**
+ * Per-order payment row.
+ *
+ * Post-migration, every drink and momo has its own payment row keyed by
+ * ``boba_order_id`` / ``momo_order_id`` (exactly one non-null per XOR
+ * constraint). ``notes`` is admin-only and intentionally not surfaced
+ * here — hackers don't see admin notes.
+ */
+export type BobaPayment = {
+  id: string;
+  user_id: string;
+  meal_window_id: string;
+  /** Discriminator — matches which FK is populated. */
+  kind: "drink" | "momo";
+  boba_order_id: string | null;
+  momo_order_id: string | null;
+  status: BobaPaymentStatus;
+  expected_cents: number;
+  received_cents: number | null;
+  reference: string | null;
+  submitted_at: string | null;
+  confirmed_at: string | null;
+  confirmed_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type BobaOrder = {
   id: string;
   user_id: string;
@@ -88,6 +121,8 @@ export type BobaOrder = {
   /** Contact snapshot at create time so logistics has the value used for this order. */
   contact_discord_username?: string | null;
   contact_phone_number?: string | null;
+  /** Per-order payment row. ``null`` only on legacy rows pre-backfill. */
+  payment: BobaPayment | null;
 };
 
 export type BobaMomoOrder = {
@@ -103,28 +138,8 @@ export type BobaMomoOrder = {
   /** Contact snapshot at create time so logistics has the value used for this order. */
   contact_discord_username?: string | null;
   contact_phone_number?: string | null;
-};
-
-export type BobaPaymentStatus =
-  | "unpaid"
-  | "submitted"
-  | "confirmed"
-  | "refunded";
-
-export type BobaPayment = {
-  id: string;
-  user_id: string;
-  meal_window_id: string;
-  status: BobaPaymentStatus;
-  expected_cents: number;
-  received_cents: number | null;
-  reference: string | null;
-  notes: string | null;
-  submitted_at: string | null;
-  confirmed_at: string | null;
-  confirmed_by: string | null;
-  created_at: string;
-  updated_at: string;
+  /** Per-order payment row. ``null`` only on legacy rows pre-backfill. */
+  payment: BobaPayment | null;
 };
 
 export type MyOrderResponse = {
@@ -166,8 +181,6 @@ export type MyOrderResponse = {
    */
   shared_cap_active: boolean;
   active_window_id: string | null;
-  /** Bundled payment for the active window, or ``null`` if nothing placed. */
-  payment: BobaPayment | null;
 };
 
 export const bobaKeys = {
@@ -222,11 +235,18 @@ function invalidateBobaCaches(qc: ReturnType<typeof useQueryClient>) {
 // Combined create — POST /boba/orders accepting drink and/or momo
 // ----------------------------------------------------------------------------
 
-/** Server response for the combined POST. */
+/**
+ * Server response for the combined POST.
+ *
+ * Each nested order (drink / momo) carries its own ``payment`` field —
+ * the top-level bundle ``payment`` went away with the per-order model.
+ * The ``Partial<BobaOrder>`` intersection preserves the legacy flat
+ * response shape when only a drink was placed (server spreads the drink
+ * row at the top level so ``response.id`` keeps working).
+ */
 export type CombinedOrderResponse = {
   drink: BobaOrder | null;
   momo: BobaMomoOrder | null;
-  payment: BobaPayment | null;
 } & Partial<BobaOrder>;
 
 export function useCreateBobaOrderMutation(): UseMutationResult<
@@ -331,10 +351,18 @@ export function useCancelBobaMomoMutation(): UseMutationResult<
 // Payment self-submit / undo — POST/DELETE /boba/payments/me
 // ----------------------------------------------------------------------------
 
+/**
+ * Mark a single drink or momo order's payment as submitted.
+ *
+ * Per-order migration: the server now keys payments on
+ * ``(kind, order_id)`` instead of the old window-level bundle. The
+ * hacker sends one e-transfer per order, so every CTA in the portal
+ * resolves to exactly one of these mutations against one order_id.
+ */
 export function useSubmitBobaPaymentMutation(): UseMutationResult<
   BobaPayment,
   Error,
-  { meal_window_id: string; reference?: string }
+  { kind: "drink" | "momo"; order_id: string; reference?: string }
 > {
   const client = useApiClient();
   const qc = useQueryClient();
@@ -352,7 +380,7 @@ export function useSubmitBobaPaymentMutation(): UseMutationResult<
 export function useUndoBobaPaymentMutation(): UseMutationResult<
   BobaPayment,
   Error,
-  { meal_window_id: string }
+  { kind: "drink" | "momo"; order_id: string }
 > {
   const client = useApiClient();
   const qc = useQueryClient();

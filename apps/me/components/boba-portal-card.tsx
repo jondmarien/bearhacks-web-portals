@@ -1,19 +1,28 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { BobaPaymentCard } from "@/components/boba-payment-card";
 import { BobaStatusCard } from "@/components/boba-status-card";
 import { Card } from "@/components/ui/card";
-import type { BobaPayment } from "@/lib/boba-queries";
+import type {
+  BobaMenuResponse,
+  BobaMomoOrder,
+  BobaOrder,
+  BobaPayment,
+} from "@/lib/boba-queries";
 
 type Panel = "order" | "payment";
 
 type Props = {
   isAuthReady: boolean;
   userId: string | null;
-  payment: BobaPayment | null;
-  mealWindowId: string | null;
+  /** Drinks for the active window, each carrying its own payment. */
+  drinks: readonly BobaOrder[];
+  /** Momos for the active window, each carrying its own payment. */
+  momos: readonly BobaMomoOrder[];
+  /** Menu (used by the payment card to render readable row titles). */
+  menu: BobaMenuResponse | null;
   recipientName: string;
   etransferEmail: string;
   discountNote: string;
@@ -33,24 +42,40 @@ type Props = {
  * ``BobaPaymentCard``) so the portal home page reads as a single,
  * compact hub. Only one panel renders at a time.
  *
- * The Payment tab only appears when there is actually a bundle to pay
- * for (``expected_cents > 0`` and a live meal window). If it disappears
- * while active, we fall back to the Order tab so the surface never
- * shows an empty panel.
+ * The Payment tab only appears when there is actually something to pay
+ * for (any placed drink or momo has a live ``payment`` row). If it
+ * disappears while active, we fall back to the Order tab so the surface
+ * never shows an empty panel.
  */
 export function BobaPortalCard({
   isAuthReady,
   userId,
-  payment,
-  mealWindowId,
+  drinks,
+  momos,
+  menu,
   recipientName,
   etransferEmail,
   discountNote,
   highlightPayment = false,
 }: Props) {
-  const hasPaymentPanel = Boolean(
-    payment && payment.expected_cents > 0 && mealWindowId,
+  const payableRows = useMemo<BobaPayment[]>(
+    () => [
+      ...drinks
+        .filter(
+          (d): d is BobaOrder & { payment: BobaPayment } => d.payment != null,
+        )
+        .map((d) => d.payment),
+      ...momos
+        .filter(
+          (m): m is BobaMomoOrder & { payment: BobaPayment } =>
+            m.payment != null,
+        )
+        .map((m) => m.payment),
+    ],
+    [drinks, momos],
   );
+
+  const hasPaymentPanel = payableRows.length > 0;
 
   const [panel, setPanel] = useState<Panel>(
     highlightPayment && hasPaymentPanel ? "payment" : "order",
@@ -73,19 +98,13 @@ export function BobaPortalCard({
   // highlight flag has already gone. Without this latch the deep-link
   // silently fails and the hacker lands on the Order tab. Initialised
   // synchronously from props so the SSR / first-paint case is covered
-  // too. Cleared on any user-initiated tab change (see ``handleTabChange``)
-  // so a manual click during the wait wins over the deferred intent.
+  // too. Cleared on any user-initiated tab change (see
+  // ``handleTabChange``) so a manual click during the wait wins over
+  // the deferred intent.
   const [pendingPaymentSwitch, setPendingPaymentSwitch] = useState(
     highlightPayment && !hasPaymentPanel,
   );
 
-  // Deep-link auto-switch: when the parent flips ``highlightPayment`` on
-  // (the ``/?payment=highlight`` flow) and the payment panel is ready,
-  // jump to it. We only react to the *transition* into the highlight
-  // state — otherwise the user couldn't click back to Order while the
-  // parent is still holding the highlight flag true. If the payment
-  // panel isn't ready yet, latch the intent for the ``hasPaymentPanel``
-  // branch below to pick up once the data arrives.
   if (highlightPayment !== prevHighlight) {
     setPrevHighlight(highlightPayment);
     if (highlightPayment) {
@@ -97,14 +116,6 @@ export function BobaPortalCard({
     }
   }
 
-  // Two responsibilities keyed off ``hasPaymentPanel`` changing:
-  //   - If the panel disappears mid-session (e.g. every order in the
-  //     window was cancelled) while it's active, drop back to Order so
-  //     the tab bar never sits on an empty panel.
-  //   - If the panel *appears* and a deep-link switch is still pending
-  //     from an earlier render, honour it now. This is the late-arriving
-  //     data path that the fixed 2s highlight fade can't reach on its
-  //     own.
   if (hasPaymentPanel !== prevHasPaymentPanel) {
     setPrevHasPaymentPanel(hasPaymentPanel);
     if (!hasPaymentPanel && panel === "payment") {
@@ -115,23 +126,20 @@ export function BobaPortalCard({
     }
   }
 
-  // User-initiated tab change: applies the click and discards any
-  // pending deep-link switch so the late-data path can't overwrite a
-  // manual choice.
   const handleTabChange = (next: Panel) => {
     setPanel(next);
     if (pendingPaymentSwitch) setPendingPaymentSwitch(false);
   };
 
-  // Small "action needed" dot on the Payment tab. Triggers when the
-  // hacker still owes money: the bundle is unpaid, or the bundle was
-  // confirmed but drift has re-opened the balance.
-  const receivedCents = payment?.received_cents ?? 0;
-  const paymentNeedsAttention =
-    payment != null &&
-    (payment.status === "unpaid" ||
-      (payment.status === "confirmed" &&
-        receivedCents < payment.expected_cents));
+  // Small "action needed" dot on the Payment tab. Fires when *any*
+  // per-order payment is unpaid, or when a confirmed row has drift
+  // (hacker edited the order after it was confirmed and the new
+  // expected total exceeds what was received).
+  const paymentNeedsAttention = payableRows.some((p) => {
+    if (p.status === "unpaid") return true;
+    const received = p.received_cents ?? 0;
+    return p.status === "confirmed" && p.expected_cents > received;
+  });
 
   const ringClass = highlightPayment
     ? "ring-4 ring-(--bearhacks-accent)/70"
@@ -160,11 +168,7 @@ export function BobaPortalCard({
       ) : null}
 
       {panel === "order" ? (
-        <div
-          id={orderPanelId}
-          role="tabpanel"
-          aria-labelledby={orderTabId}
-        >
+        <div id={orderPanelId} role="tabpanel" aria-labelledby={orderTabId}>
           <BobaStatusCard
             variant="section"
             isAuthReady={isAuthReady}
@@ -179,8 +183,9 @@ export function BobaPortalCard({
         >
           <BobaPaymentCard
             variant="section"
-            payment={payment}
-            mealWindowId={mealWindowId}
+            drinks={drinks}
+            momos={momos}
+            menu={menu}
             recipientName={recipientName}
             etransferEmail={etransferEmail}
             discountNote={discountNote}
@@ -211,9 +216,6 @@ function TabList({
   const orderRef = useRef<HTMLButtonElement | null>(null);
   const paymentRef = useRef<HTMLButtonElement | null>(null);
 
-  // ARIA tabs pattern: arrow keys move focus + selection between tabs.
-  // With two tabs, ArrowLeft/ArrowRight/Home/End all flip to the other
-  // tab. Auto-activation is safe here — swapping panels is cheap.
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
     if (!keys.includes(event.key)) return;

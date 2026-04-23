@@ -112,67 +112,15 @@ const ACTION_BUTTON_UNDO =
 const CHECKBOX_CLASSES =
   "h-[18px] w-[18px] shrink-0 cursor-pointer rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border-strong) accent-(--bearhacks-accent) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--bearhacks-focus-ring)";
 
-type PaymentItem = AdminPaymentRow["items"][number];
-
 /**
- * One line in the payments "Items" column, laid out like a mini-row:
- *   [Kind pill] [size]  [status?] detail                           $X.XX
- *
- * Mirrors the orders table's Kind / Size / Detail / $ columns so admins don't
- * have to re-learn a second visual grammar when they switch consoles. Past
- * items (cancelled / fulfilled) fade, strike through the detail text, and
- * carry an inline status badge so ``Cancelled`` vs ``Picked up`` stays
- * scannable inside the collapsed "past items" drawer.
- *
- * Renders as four grid cells (pill | size | detail | price) via
- * `display: contents`, so every row in the parent grid shares the same
- * column rail regardless of whether an item has a size. See the wrapping
- * `<ul>` for the grid-template that defines the shared columns.
+ * Tiny inline status chip used when the underlying drink/momo is no
+ * longer in ``placed`` (cancelled or already picked up). Payment rows
+ * themselves carry a separate ``status`` pill (unpaid / submitted /
+ * confirmed / refunded); this badge is item-state context so admins
+ * can spot a "confirmed payment for a cancelled order -> owe a refund"
+ * situation at a glance.
  */
-function PaymentItemLine({ item }: { item: PaymentItem }) {
-  const isPlaced = item.status === "placed";
-  const label = item.kind === "drink" ? "Drink" : "Momos";
-  const dimmed = isPlaced ? "" : "opacity-70";
-  const priceTone = isPlaced
-    ? "text-(--bearhacks-fg)"
-    : "text-(--bearhacks-muted)";
-  return (
-    <li className={`contents ${dimmed}`}>
-      <span
-        className={`inline-flex self-start items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-[11px] font-semibold ${KIND_PILL_CLASSES[item.kind]}`}
-      >
-        {label}
-      </span>
-      <span className="self-start text-xs text-(--bearhacks-muted)">
-        {item.size ?? "—"}
-      </span>
-      <span className="self-start text-xs wrap-break-word">
-        {!isPlaced ? <ItemStatusBadge status={item.status} /> : null}
-        <span
-          className={
-            isPlaced
-              ? "text-(--bearhacks-fg)"
-              : "text-(--bearhacks-muted) line-through"
-          }
-        >
-          {item.detail}
-        </span>
-      </span>
-      <span
-        className={`self-start text-xs font-semibold text-right tabular-nums ${priceTone}`}
-      >
-        ${(item.amount_cents / 100).toFixed(2)}
-      </span>
-    </li>
-  );
-}
-
-/**
- * Tiny inline status chip used on past items inside the ``<details>``
- * drawer. Kept visually lighter than the top-level payment status pill so
- * it reads as line-level context, not a competing call-to-action.
- */
-function ItemStatusBadge({ status }: { status: PaymentItem["status"] }) {
+function ItemStatusBadge({ status }: { status: AdminPaymentRow["item_status"] }) {
   if (status === "placed") return null;
   const cls =
     status === "cancelled"
@@ -189,78 +137,46 @@ function ItemStatusBadge({ status }: { status: PaymentItem["status"] }) {
 }
 
 /**
- * Renders a payment bundle's items, split into "live" (what the food
- * team still has to make / hand off) and "past" (cancelled or already
- * picked up — audit context, but not the pickup queue).
+ * Single-order cell for the "Item" column.
  *
- * Past items live inside a collapsed ``<details>`` so they don't compete
- * with the live pickup list — the user's explicit ask after the food
- * team kept confusing crossed-out lines with outstanding work. The
- * drawer opens by default only when there's nothing live to look at,
- * so "everything cancelled" bundles still expose their audit trail
- * without an extra click.
+ * Post per-order migration, each payment row covers exactly one drink or
+ * momo. We render the same [Kind pill] [size] detail layout the old
+ * multi-item cell used, but without the live/past split or the
+ * collapsible drawer — those only made sense for aggregated bundles.
+ * A cancelled underlying order still shows here (admin may need to
+ * refund) with the detail text struck through and a status chip so it
+ * reads as "payment for X that got cancelled" rather than a live pickup.
  */
-function PaymentItemsCell({ items }: { items: readonly PaymentItem[] }) {
-  if (items.length === 0) {
-    return (
-      <span className="text-xs text-(--bearhacks-muted)">No placed items</span>
-    );
-  }
-
-  const liveItems = items.filter((it) => it.status === "placed");
-  const pastItems = items.filter((it) => it.status !== "placed");
-  const cancelledCount = pastItems.filter(
-    (it) => it.status === "cancelled",
-  ).length;
-  const fulfilledCount = pastItems.filter(
-    (it) => it.status === "fulfilled",
-  ).length;
-
-  const summaryParts: string[] = [];
-  if (cancelledCount > 0) summaryParts.push(`${cancelledCount} cancelled`);
-  if (fulfilledCount > 0) summaryParts.push(`${fulfilledCount} picked up`);
-  const totalPast = pastItems.length;
-  const summaryLine =
-    totalPast === 0
-      ? ""
-      : `${totalPast} past item${totalPast === 1 ? "" : "s"}${
-          summaryParts.length > 0 ? ` · ${summaryParts.join(" · ")}` : ""
-        }`;
-
+function PaymentItemCell({ row }: { row: AdminPaymentRow }) {
+  const isPlaced = row.item_status === "placed";
+  const label = row.kind === "drink" ? "Drink" : "Momos";
+  const dimmed = isPlaced ? "" : "opacity-70";
   return (
-    <div className="flex min-w-[18rem] flex-col gap-2">
-      {liveItems.length > 0 ? (
-        <ul className="grid grid-cols-[auto_auto_1fr_auto] gap-x-3 gap-y-1.5">
-          {liveItems.map((it) => (
-            <PaymentItemLine key={it.id} item={it} />
-          ))}
-        </ul>
-      ) : (
-        <p className="text-xs italic text-(--bearhacks-muted)">
-          No live items — everything cancelled or already picked up.
-        </p>
-      )}
-
-      {pastItems.length > 0 ? (
-        <details
-          // Open by default only when there are no live items; otherwise
-          // the drawer stays collapsed so the pickup view isn't cluttered.
-          {...(liveItems.length === 0 ? { open: true } : {})}
-          className="rounded-(--bearhacks-radius-md) border border-dashed border-(--bearhacks-border) bg-(--bearhacks-surface-alt)/40"
-        >
-          <summary className="cursor-pointer list-none select-none px-2 py-1.5 text-xs font-medium text-(--bearhacks-muted) hover:text-(--bearhacks-fg) [&::-webkit-details-marker]:hidden">
-            <span aria-hidden="true" className="mr-1.5 inline-block">
-              ▸
-            </span>
-            {summaryLine}
-          </summary>
-          <ul className="grid grid-cols-[auto_auto_1fr_auto] gap-x-3 gap-y-1.5 border-t border-dashed border-(--bearhacks-border) px-2 pb-2 pt-2">
-            {pastItems.map((it) => (
-              <PaymentItemLine key={it.id} item={it} />
-            ))}
-          </ul>
-        </details>
+    <div
+      className={`flex min-w-[16rem] items-start gap-2 ${dimmed}`}
+    >
+      <span
+        className={`inline-flex shrink-0 items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-[11px] font-semibold ${KIND_PILL_CLASSES[row.kind]}`}
+      >
+        {label}
+      </span>
+      {row.item_size ? (
+        <span className="shrink-0 text-xs text-(--bearhacks-muted)">
+          {row.item_size}
+        </span>
       ) : null}
+      <span className="min-w-0 text-xs wrap-break-word">
+        {!isPlaced ? <ItemStatusBadge status={row.item_status} /> : null}
+        <span
+          className={
+            isPlaced
+              ? "text-(--bearhacks-fg)"
+              : "text-(--bearhacks-muted) line-through"
+          }
+        >
+          {row.item_detail}
+        </span>
+      </span>
     </div>
   );
 }
@@ -487,7 +403,7 @@ export default function AdminBobaPaymentsPage() {
     const ok = await confirm({
       title: `Confirm ${eligible.length === 1 ? "1 payment" : `${eligible.length} payments`} totaling $${(total / 100).toFixed(2)}?`,
       description:
-        "Marks each bundle paid in full (received_cents = expected_cents). Selected rows that aren't Unpaid or Submitted are skipped.",
+        "Marks each order paid in full (received_cents = expected_cents). Selected rows that aren't Unpaid or Submitted are skipped.",
       confirmLabel: "Confirm all",
     });
     if (!ok) return;
@@ -509,7 +425,7 @@ export default function AdminBobaPaymentsPage() {
     const ok = await confirm({
       title: `Refund ${eligible.length === 1 ? "1 payment" : `${eligible.length} payments`} totaling $${(total / 100).toFixed(2)}?`,
       description:
-        "Marks each bundle refunded. Hackers can re-submit to pay again. Selected rows that aren't Unpaid or Submitted are skipped.",
+        "Marks each order refunded. Hackers can re-submit to pay again. Selected rows that aren't Unpaid or Submitted are skipped.",
       confirmLabel: "Refund all",
       tone: "danger",
     });
@@ -529,7 +445,7 @@ export default function AdminBobaPaymentsPage() {
     const ok = await confirm({
       title: `Undo confirmation on ${eligible.length === 1 ? "1 payment" : `${eligible.length} payments`}?`,
       description:
-        "Reverts each bundle to Submitted. Use this if the e-transfers bounced or were confirmed by mistake. Selected rows that aren't Confirmed are skipped.",
+        "Reverts each order to Submitted. Use this if the e-transfers bounced or were confirmed by mistake. Selected rows that aren't Confirmed are skipped.",
       confirmLabel: "Undo confirmations",
       tone: "danger",
     });
@@ -568,7 +484,7 @@ export default function AdminBobaPaymentsPage() {
       <PageHeader
         title="Boba & Momo payments"
         tone="marketing"
-        subtitle="Per-hacker × meal-window e-transfer ledger. Confirm, refund, or undo confirmations."
+        subtitle="Per-order e-transfer ledger. Confirm, refund, or undo confirmations for each drink or momo."
         backHref="/"
         showBack
       />
@@ -662,9 +578,9 @@ export default function AdminBobaPaymentsPage() {
               description:
                 row.status === "submitted"
                   ? (row.reference ?? "").trim().length > 0
-                    ? `Hacker submitted ref “${row.reference}”. Marks the bundle paid in full.`
-                    : "Hacker submitted nothing for reference. Confirm they added a reference to their e-transfer in person. CONFIRM PAYMENT marks the bundle paid in full."
-                  : "Marks the bundle paid in full (received_cents = expected_cents).",
+                    ? `Hacker submitted ref “${row.reference}”. Marks this order paid in full.`
+                    : "Hacker submitted nothing for reference. Confirm they added a reference to their e-transfer in person. CONFIRM PAYMENT marks this order paid in full."
+                  : "Marks this order paid in full (received_cents = expected_cents).",
               confirmLabel: "Confirm payment",
             });
             if (!ok) return;
@@ -696,7 +612,7 @@ export default function AdminBobaPaymentsPage() {
             const ok = await confirm({
               title: `Refund payment for ${row.hacker_name}?`,
               description:
-                "Marks the bundle refunded. Hacker can re-submit to pay again.",
+                "Marks this order refunded. Hacker can re-submit to pay again.",
               confirmLabel: "Refund",
               tone: "danger",
             });
@@ -729,7 +645,7 @@ export default function AdminBobaPaymentsPage() {
             const ok = await confirm({
               title: `Undo confirmation for ${row.hacker_name}?`,
               description:
-                "Reverts the bundle to submitted. Use this if the e-transfer bounced or was confirmed by mistake.",
+                "Reverts this order to submitted. Use this if the e-transfer bounced or was confirmed by mistake.",
               confirmLabel: "Undo confirmation",
               tone: "danger",
             });
@@ -762,7 +678,7 @@ export default function AdminBobaPaymentsPage() {
             const ok = await confirm({
               title: `Undo refund for ${row.hacker_name}?`,
               description:
-                "Reverses the refund and restores the bundle to its prior status (confirmed / submitted / unpaid). Use this if the refund was accidental.",
+                "Reverses the refund and restores this order to its prior status (confirmed / submitted / unpaid). Use this if the refund was accidental.",
               confirmLabel: "Undo refund",
               tone: "danger",
             });
@@ -1110,9 +1026,9 @@ function PaymentsTableCard({
           ),
       },
       {
-        id: "items",
-        header: "Items",
-        cell: (ctx) => <PaymentItemsCell items={ctx.row.original.items} />,
+        id: "item",
+        header: "Item",
+        cell: (ctx) => <PaymentItemCell row={ctx.row.original} />,
         enableSorting: false,
       },
       {
@@ -1300,7 +1216,7 @@ function PaymentsTableCard({
           All <span className="bg-(--bearhacks-cream) px-1 rounded-sm">payments</span>
         </CardTitle>
         <CardDescription>
-          Per-hacker payment bundles for the focused window.{" "}
+          Per-order e-transfer payments for the focused window.{" "}
           {query.data
             ? hasRange
               ? `Showing ${pageStart}–${pageEnd} of ${total}.`
@@ -1334,7 +1250,7 @@ function PaymentsTableCard({
         </p>
       ) : data.length === 0 ? (
         <p className="px-4 py-6 text-sm text-(--bearhacks-muted)">
-          No payment bundles match the current filters.
+          No payments match the current filters.
         </p>
       ) : (
         <>
@@ -1460,7 +1376,7 @@ function PaymentsTableCard({
                   </div>
 
                   <div className="mt-2">
-                    <PaymentItemsCell items={o.items} />
+                    <PaymentItemCell row={o} />
                   </div>
 
                   <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">

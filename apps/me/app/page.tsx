@@ -6,7 +6,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
 import { BobaPortalCard } from "@/components/boba-portal-card";
@@ -16,11 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputField, TextareaField } from "@/components/ui/field";
 import { QrPreview } from "@/components/ui/qr-preview";
-import {
-  useBobaMenuQuery,
-  useBobaWindowsQuery,
-  useMyBobaOrderQuery,
-} from "@/lib/boba-queries";
+import { useBobaMenuQuery, useMyBobaOrderQuery } from "@/lib/boba-queries";
 import { getOAuthDisplayName } from "@/lib/oauth-display-name";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
@@ -106,16 +102,7 @@ function HomePageContent() {
   });
 
   const menuQuery = useBobaMenuQuery();
-  const windowsQuery = useBobaWindowsQuery();
   const myOrderQuery = useMyBobaOrderQuery(userId);
-
-  const activeWindowId = windowsQuery.data?.active_window_id ?? null;
-  const activeWindow = useMemo(() => {
-    if (!activeWindowId || !windowsQuery.data) return null;
-    return (
-      windowsQuery.data.windows.find((w) => w.id === activeWindowId) ?? null
-    );
-  }, [activeWindowId, windowsQuery.data]);
 
   // Deep-link highlight: /?payment=highlight scrolls the payment card into
   // view and flashes a transient ring. Same pattern as the old
@@ -306,8 +293,9 @@ function HomePageContent() {
         <BobaPortalCard
           isAuthReady={Boolean(auth?.isAuthReady)}
           userId={userId}
-          payment={myOrderQuery.data?.payment ?? null}
-          mealWindowId={activeWindow?.id ?? null}
+          drinks={myOrderQuery.data?.drinks ?? []}
+          momos={myOrderQuery.data?.momos ?? []}
+          menu={menuQuery.data ?? null}
           recipientName={menuQuery.data?.payment.etransfer_recipient_name ?? ""}
           etransferEmail={menuQuery.data?.payment.etransfer_email ?? ""}
           discountNote={menuQuery.data?.payment.discount_note ?? ""}

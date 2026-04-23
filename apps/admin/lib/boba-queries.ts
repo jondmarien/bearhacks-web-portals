@@ -143,15 +143,14 @@ export type DevWindowSettingPatch = Partial<
   Pick<DevWindowSetting, "enabled" | "max_orders">
 >;
 
-export type AdminPaymentItem = {
-  kind: "drink" | "momo";
-  id: string;
-  detail: string;
-  size: string | null;
-  amount_cents: number;
-  status: BobaStatus;
-};
-
+/**
+ * Per-order payment row from ``GET /admin/boba/payments``.
+ *
+ * Post per-order migration, each row covers exactly one drink or momo
+ * order via ``boba_order_id`` / ``momo_order_id`` (exactly one non-null).
+ * The admin table renders one row per item instead of the old bundle
+ * with an inline cancelled-items collapsible.
+ */
 export type AdminPaymentRow = {
   id: string;
   user_id: string;
@@ -169,9 +168,19 @@ export type AdminPaymentRow = {
   hacker_name: string;
   hacker_email: string | null;
   display_name: string | null;
-  drink_count: number;
-  momo_count: number;
-  items: AdminPaymentItem[];
+  /** Polymorphic FK — exactly one of these is set per XOR constraint. */
+  boba_order_id: string | null;
+  momo_order_id: string | null;
+  /** Discriminator for the single order this payment covers. */
+  kind: "drink" | "momo";
+  /** The underlying order's id (drink or momo, per ``kind``). */
+  order_id: string;
+  /** Pre-rendered "Classic Milk Tea + Pearls · 50% sugar · Regular ice" copy. */
+  item_detail: string;
+  /** Current status of the underlying drink/momo order. */
+  item_status: BobaStatus;
+  /** Drink size id when ``kind === "drink"``; ``null`` for momo rows. */
+  item_size: string | null;
 };
 
 export type PaymentsResponse = {

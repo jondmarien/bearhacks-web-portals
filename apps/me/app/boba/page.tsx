@@ -35,7 +35,6 @@ import {
   type BobaMenuResponse,
   type BobaMomoOrder,
   type BobaOrder,
-  type BobaPayment,
 } from "@/lib/boba-queries";
 import { useDocumentTitle } from "@/lib/use-document-title";
 
@@ -50,7 +49,6 @@ type ContactProfile = {
 type SuccessState = {
   drink: BobaOrder | null;
   momo: BobaMomoOrder | null;
-  payment: BobaPayment | null;
 };
 
 const log = createLogger("me/boba-order");
@@ -476,7 +474,6 @@ export default function BobaOrderPage() {
                     setSuccessState({
                       drink: response.drink ?? null,
                       momo: response.momo ?? null,
-                      payment: response.payment ?? null,
                     });
                   } catch (error) {
                     log.error("Boba order create failed", { userId, error });
@@ -522,9 +519,7 @@ export default function BobaOrderPage() {
             open={successState !== null}
             drink={successState?.drink ?? null}
             momo={successState?.momo ?? null}
-            payment={successState?.payment ?? null}
             menu={menuQuery.data}
-            mealWindowId={activeWindow.id}
             onClose={dismissSuccessModal}
             onGoToPayment={goToPaymentFromSuccessModal}
           />

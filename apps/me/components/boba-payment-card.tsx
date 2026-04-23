@@ -7,6 +7,9 @@ import { toast } from "sonner";
 import {
   useSubmitBobaPaymentMutation,
   useUndoBobaPaymentMutation,
+  type BobaMenuResponse,
+  type BobaMomoOrder,
+  type BobaOrder,
   type BobaPayment,
 } from "@/lib/boba-queries";
 import { Button } from "@/components/ui/button";
@@ -15,10 +18,12 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 const log = createLogger("me/boba-payment");
 
 type Props = {
-  /** Payment bundle for the active window. ``null`` until first order placed. */
-  payment: BobaPayment | null;
-  /** Active meal-window id (used for the self-submit body). */
-  mealWindowId: string | null;
+  /** Drinks placed for the active window, each carrying its own payment. */
+  drinks: readonly BobaOrder[];
+  /** Momo orders placed for the active window, each carrying their own payment. */
+  momos: readonly BobaMomoOrder[];
+  /** Menu data used to render readable drink/momo labels per row. */
+  menu: BobaMenuResponse | null;
   /** E-transfer recipient name (e.g. "Audrey"). */
   recipientName: string;
   /** E-transfer email address. */
@@ -36,19 +41,33 @@ type Props = {
   variant?: "card" | "section";
 };
 
+type PayableRow = {
+  key: string;
+  kind: "drink" | "momo";
+  orderId: string;
+  title: string;
+  payment: BobaPayment;
+};
+
 /**
- * Per-window payment bundle UI.
+ * Per-order payment UI.
  *
- * States:
- *   - no expected (nothing placed) -> hidden by parent
- *   - unpaid -> shows e-transfer instructions + "I sent it" CTA
- *   - submitted -> shows reference + "Undo I sent it" CTA + waiting copy
- *   - confirmed -> success state with received amount
- *   - refunded -> reversed state
+ * Each placed drink + momo carries its own ``payment`` row in the
+ * per-order model, so this card renders:
+ *
+ *   - A rollup header ("$X across N orders · Y unpaid · Z confirmed")
+ *   - Shared e-transfer instructions while *any* row still needs money
+ *   - A ``<ul>`` of per-order rows with their own status pill and CTA
+ *
+ * Drift (hacker edited the size after confirmation so ``expected_cents``
+ * moves above ``received_cents``) is scoped to a single row — the
+ * backend auto-flips that payment back to ``unpaid`` on the next
+ * recompute, and the drift banner / CTA appears only on that row.
  */
 export function BobaPaymentCard({
-  payment,
-  mealWindowId,
+  drinks,
+  momos,
+  menu,
   recipientName,
   etransferEmail,
   discountNote,
@@ -57,31 +76,60 @@ export function BobaPaymentCard({
   const submit = useSubmitBobaPaymentMutation();
   const undo = useUndoBobaPaymentMutation();
   const [emailCopied, setEmailCopied] = useState(false);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
-  if (!payment || payment.expected_cents === 0 || !mealWindowId) {
-    return null;
-  }
+  const rows: PayableRow[] = [
+    ...drinks
+      .filter((d): d is BobaOrder & { payment: BobaPayment } => d.payment != null)
+      .map((d) => ({
+        key: `drink:${d.id}`,
+        kind: "drink" as const,
+        orderId: d.id,
+        title: describeDrinkRow(d, menu),
+        payment: d.payment,
+      })),
+    ...momos
+      .filter(
+        (m): m is BobaMomoOrder & { payment: BobaPayment } => m.payment != null,
+      )
+      .map((m) => ({
+        key: `momo:${m.id}`,
+        kind: "momo" as const,
+        orderId: m.id,
+        title: describeMomoRow(m, menu),
+        payment: m.payment,
+      })),
+  ];
 
-  const expectedDollars = (payment.expected_cents / 100).toFixed(2);
-  const receivedCents = payment.received_cents ?? 0;
-  const receivedDollars =
-    payment.received_cents != null
-      ? (payment.received_cents / 100).toFixed(2)
-      : null;
+  if (rows.length === 0) return null;
 
-  // "PAID" should only render when the received amount actually covers
-  // the expected total. A bundle whose status sits at ``confirmed`` but
-  // whose ``expected_cents`` has since outgrown ``received_cents`` (the
-  // hacker placed new orders after the initial admin confirmation) is
-  // really "additional due". The backend's ``recompute_boba_payment``
-  // transitions this case back to ``unpaid``, but UI-side drift
-  // detection keeps any cache-stale row from misreporting as fully paid.
-  const outstandingCents = Math.max(payment.expected_cents - receivedCents, 0);
+  const totalExpected = rows.reduce(
+    (sum, r) => sum + r.payment.expected_cents,
+    0,
+  );
+  const totalReceived = rows.reduce(
+    (sum, r) => sum + (r.payment.received_cents ?? 0),
+    0,
+  );
+  const outstandingCents = Math.max(totalExpected - totalReceived, 0);
   const outstandingDollars = (outstandingCents / 100).toFixed(2);
-  const isFullyPaidConfirmed =
-    payment.status === "confirmed" && outstandingCents === 0;
-  const hasDriftOnConfirmed =
-    payment.status === "confirmed" && outstandingCents > 0;
+  const totalExpectedDollars = (totalExpected / 100).toFixed(2);
+
+  const counts = rows.reduce(
+    (acc, r) => {
+      if (isDrift(r.payment)) acc.drift += 1;
+      acc[r.payment.status] += 1;
+      return acc;
+    },
+    { unpaid: 0, submitted: 0, confirmed: 0, refunded: 0, drift: 0 },
+  );
+
+  const anyPayable = rows.some(
+    (r) =>
+      r.payment.status === "unpaid" ||
+      r.payment.status === "submitted" ||
+      isDrift(r.payment),
+  );
 
   const copyEmail = async () => {
     try {
@@ -90,23 +138,14 @@ export function BobaPaymentCard({
       toast.success("E-transfer email copied");
       window.setTimeout(() => setEmailCopied(false), 2000);
     } catch {
-      // Clipboard access can be denied (insecure context, permissions, …).
-      // Surface a single, calm toast — the email is right there for manual
-      // copy.
       toast.info(`Copy this email manually: ${etransferEmail}`);
     }
   };
 
-  const onSubmit = async () => {
+  const onSubmit = async (row: PayableRow) => {
+    setPendingKey(row.key);
     try {
-      // The optional free-text reference field was removed from this
-      // card on 2026-04-22 — hackers kept leaving it blank anyway, and
-      // admins can match submissions to hackers via the bundle's
-      // hacker name/email in the super-admin payments console. The
-      // mutation's `reference` arg stays optional so historical rows
-      // and any future server-side flows that still carry a reference
-      // keep working.
-      await submit.mutateAsync({ meal_window_id: mealWindowId });
+      await submit.mutateAsync({ kind: row.kind, order_id: row.orderId });
       toast.success("Marked as sent — admins will confirm shortly.");
     } catch (error) {
       log.error("Boba payment self-submit failed", { error });
@@ -115,12 +154,15 @@ export function BobaPaymentCard({
           ? error.message
           : "Couldn't mark payment as sent.",
       );
+    } finally {
+      setPendingKey(null);
     }
   };
 
-  const onUndo = async () => {
+  const onUndo = async (row: PayableRow) => {
+    setPendingKey(row.key);
     try {
-      await undo.mutateAsync({ meal_window_id: mealWindowId });
+      await undo.mutateAsync({ kind: row.kind, order_id: row.orderId });
       toast.success("Reverted — you can resend the e-transfer.");
     } catch (error) {
       log.error("Boba payment undo failed", { error });
@@ -129,45 +171,50 @@ export function BobaPaymentCard({
           ? error.message
           : "Couldn't undo the submission.",
       );
+    } finally {
+      setPendingKey(null);
     }
   };
 
+  const rollupParts: string[] = [];
+  if (counts.unpaid > 0) rollupParts.push(`${counts.unpaid} unpaid`);
+  if (counts.submitted > 0) rollupParts.push(`${counts.submitted} submitted`);
+  if (counts.confirmed > 0) rollupParts.push(`${counts.confirmed} confirmed`);
+  if (counts.refunded > 0) rollupParts.push(`${counts.refunded} refunded`);
+  if (counts.drift > 0) rollupParts.push(`${counts.drift} with drift`);
+
   const header = (
     <CardHeader>
-      <CardTitle className="flex items-center justify-between gap-3">
+      <CardTitle className="flex flex-wrap items-baseline justify-between gap-2">
         <span>Payment</span>
-        <PaymentStatusPill
-          status={payment.status}
-          hasDrift={hasDriftOnConfirmed}
-        />
+        <span className="text-sm font-medium text-(--bearhacks-muted)">
+          ${totalExpectedDollars} across {rows.length} order
+          {rows.length === 1 ? "" : "s"}
+        </span>
       </CardTitle>
       <CardDescription>
-        Bundle covers every drink + momo you placed for this meal window.
+        {rollupParts.length > 0 ? rollupParts.join(" · ") : "All set."}
       </CardDescription>
     </CardHeader>
   );
 
   const body = (
     <div className="flex flex-col gap-3">
-        <div className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-3">
-          <p className="text-xs uppercase tracking-[0.08em] text-(--bearhacks-muted)">
-            {hasDriftOnConfirmed ? "Additional to send" : "Total to send"}
-          </p>
-          <p className="text-2xl font-semibold text-(--bearhacks-fg)">
-            $
-            {hasDriftOnConfirmed ? outstandingDollars : expectedDollars}{" "}
-            <span className="text-sm font-medium">CAD</span>
-          </p>
-          <p className="mt-1 text-xs text-(--bearhacks-muted)">
-            {hasDriftOnConfirmed
-              ? `You've previously sent $${(receivedCents / 100).toFixed(2)} of the $${expectedDollars} total — this covers the new items you just added.`
-              : discountNote}
-          </p>
-        </div>
+      {anyPayable ? (
+        <>
+          <div className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-3">
+            <p className="text-xs uppercase tracking-[0.08em] text-(--bearhacks-muted)">
+              Still to send
+            </p>
+            <p className="text-2xl font-semibold text-(--bearhacks-fg)">
+              ${outstandingDollars}{" "}
+              <span className="text-sm font-medium">CAD</span>
+            </p>
+            <p className="mt-1 text-xs text-(--bearhacks-muted)">
+              {discountNote} One e-transfer per order — mark each one sent below.
+            </p>
+          </div>
 
-        {payment.status === "unpaid" ||
-        payment.status === "submitted" ||
-        hasDriftOnConfirmed ? (
           <div className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-4 py-3">
             <p className="text-xs uppercase tracking-[0.08em] text-(--bearhacks-muted)">
               E-transfer to
@@ -193,79 +240,24 @@ export function BobaPaymentCard({
               it quickly.
             </p>
           </div>
-        ) : null}
+        </>
+      ) : null}
 
-        {payment.status === "unpaid" ? (
-          <div className="flex flex-col gap-2">
-            <Button
-              type="button"
-              variant="primary"
-              className="w-full sm:w-auto"
-              onClick={() => void onSubmit()}
-              disabled={submit.isPending}
-            >
-              {submit.isPending ? "Marking…" : "I sent the e-transfer"}
-            </Button>
-          </div>
-        ) : null}
-
-        {payment.status === "submitted" ? (
-          <div className="flex flex-col gap-2">
-            {payment.reference ? (
-              <p className="text-sm text-(--bearhacks-fg)">
-                Reference on file:{" "}
-                <span className="font-medium">{payment.reference}</span>
-              </p>
-            ) : null}
-            <p className="text-sm text-(--bearhacks-muted)">
-              Waiting on the food team to confirm. Hang tight!
-            </p>
-            <Button
-              type="button"
-              variant="ghost"
-              className="w-full sm:w-auto"
-              onClick={() => void onUndo()}
-              disabled={undo.isPending}
-            >
-              {undo.isPending ? "Undoing…" : "Undo: I haven't sent it yet"}
-            </Button>
-          </div>
-        ) : null}
-
-        {isFullyPaidConfirmed ? (
-          <p className="text-sm text-(--bearhacks-fg)">
-            Confirmed by the food team
-            {receivedDollars != null ? ` — $${receivedDollars} received.` : "."}{" "}
-            You&apos;re all set.
-          </p>
-        ) : null}
-
-        {hasDriftOnConfirmed ? (
-          <div className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg) px-4 py-3">
-            <p className="text-sm text-(--bearhacks-warning-fg)">
-              Your bundle was confirmed for $
-              {(receivedCents / 100).toFixed(2)}, but you&apos;ve since added
-              items that bring the total to ${expectedDollars}. Please send
-              the $&#x200b;{outstandingDollars} difference by e-transfer and
-              ping the food team so they can reconcile.
-            </p>
-          </div>
-        ) : null}
-
-        {payment.status === "refunded" ? (
-          <p className="text-sm text-(--bearhacks-fg)">
-            This payment was refunded. If you believe this was made in error,  
-            please make a ticket in the #support-tickets channel in Discord,
-            if this looks wrong.
-          </p>
-        ) : null}
-      </div>
+      <ul className="flex flex-col gap-2">
+        {rows.map((row) => (
+          <PaymentRow
+            key={row.key}
+            row={row}
+            pending={pendingKey === row.key && (submit.isPending || undo.isPending)}
+            onSubmit={() => void onSubmit(row)}
+            onUndo={() => void onUndo(row)}
+          />
+        ))}
+      </ul>
+    </div>
   );
 
   if (variant === "section") {
-    // Section mode: the parent (``BobaPortalCard``) owns the outer shell,
-    // so we drop the status-tone border. The ``PaymentStatusPill`` in the
-    // inline header still communicates payment state at a glance.
     return (
       <div className="flex flex-col">
         {header}
@@ -275,45 +267,138 @@ export function BobaPaymentCard({
   }
 
   return (
-    <Card
-      className={paymentToneClass(payment.status, {
-        drift: hasDriftOnConfirmed,
-      })}
-    >
+    <Card className={cardToneClass(rows)}>
       {header}
       {body}
     </Card>
   );
 }
 
-function paymentToneClass(
-  status: BobaPayment["status"],
-  { drift }: { drift: boolean } = { drift: false },
-): string {
-  if (drift) {
-    // Drift is payment-owed, not success — match the unpaid accent ring
-    // so the card visually asks for the hacker's attention.
+/**
+ * True when a payment is ``confirmed`` but the underlying order has
+ * since grown (``expected_cents > received_cents``). The backend
+ * normally flips the row back to ``unpaid`` on the next recompute, but
+ * stale cache reads can still surface this transition — we treat it as
+ * drift so the UI asks for the diff instead of lying about being paid.
+ */
+function isDrift(payment: BobaPayment): boolean {
+  const received = payment.received_cents ?? 0;
+  return payment.status === "confirmed" && payment.expected_cents > received;
+}
+
+function cardToneClass(rows: PayableRow[]): string {
+  const anyDrift = rows.some((r) => isDrift(r.payment));
+  const anyUnpaid = rows.some((r) => r.payment.status === "unpaid");
+  const anySubmitted = rows.some((r) => r.payment.status === "submitted");
+  const allConfirmed = rows.every((r) => r.payment.status === "confirmed");
+  if (anyDrift || anyUnpaid) {
     return "border-(--bearhacks-accent) ring-2 ring-(--bearhacks-accent)/40";
   }
-  switch (status) {
-    case "confirmed":
-      return "border-(--bearhacks-success-border) ring-1 ring-(--bearhacks-success-border)/60";
-    case "submitted":
-      return "border-(--bearhacks-warning-border) ring-1 ring-(--bearhacks-warning-border)/60";
-    case "refunded":
-      return "border-(--bearhacks-border) opacity-90";
-    case "unpaid":
-    default:
-      return "border-(--bearhacks-accent) ring-2 ring-(--bearhacks-accent)/40";
+  if (anySubmitted) {
+    return "border-(--bearhacks-warning-border) ring-1 ring-(--bearhacks-warning-border)/60";
   }
+  if (allConfirmed) {
+    return "border-(--bearhacks-success-border) ring-1 ring-(--bearhacks-success-border)/60";
+  }
+  return "border-(--bearhacks-border) opacity-90";
+}
+
+function PaymentRow({
+  row,
+  pending,
+  onSubmit,
+  onUndo,
+}: {
+  row: PayableRow;
+  pending: boolean;
+  onSubmit: () => void;
+  onUndo: () => void;
+}) {
+  const { payment } = row;
+  const expected = (payment.expected_cents / 100).toFixed(2);
+  const received = payment.received_cents ?? 0;
+  const drift = isDrift(payment);
+  const outstanding = Math.max(payment.expected_cents - received, 0);
+  const outstandingDollars = (outstanding / 100).toFixed(2);
+  const receivedDollars = (received / 100).toFixed(2);
+
+  return (
+    <li className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <p className="text-sm font-semibold text-(--bearhacks-fg)">
+            {row.title}
+          </p>
+          <p className="text-xs text-(--bearhacks-muted)">${expected} CAD</p>
+        </div>
+        <PaymentStatusPill payment={payment} drift={drift} />
+      </div>
+
+      {payment.status === "unpaid" ? (
+        <Button
+          type="button"
+          variant="primary"
+          className="w-full sm:w-auto"
+          disabled={pending}
+          onClick={onSubmit}
+        >
+          {pending ? "Marking…" : "I sent the e-transfer"}
+        </Button>
+      ) : null}
+
+      {payment.status === "submitted" ? (
+        <div className="flex flex-col gap-1">
+          {payment.reference ? (
+            <p className="text-xs text-(--bearhacks-fg)">
+              Reference:{" "}
+              <span className="font-medium">{payment.reference}</span>
+            </p>
+          ) : null}
+          <p className="text-xs text-(--bearhacks-muted)">
+            Waiting on the food team to confirm.
+          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full sm:w-auto"
+            disabled={pending}
+            onClick={onUndo}
+          >
+            {pending ? "Undoing…" : "Undo"}
+          </Button>
+        </div>
+      ) : null}
+
+      {payment.status === "confirmed" && !drift ? (
+        <p className="text-xs text-(--bearhacks-fg)">
+          Confirmed{received > 0 ? ` — $${receivedDollars} received.` : "."}
+        </p>
+      ) : null}
+
+      {drift ? (
+        <div className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-warning-border) bg-(--bearhacks-warning-bg) px-3 py-2 text-xs text-(--bearhacks-warning-fg)">
+          You edited this order after confirmation. New total ${expected},
+          received ${receivedDollars}. Send the ${outstandingDollars}{" "}
+          difference and ping the food team to reconcile.
+        </div>
+      ) : null}
+
+      {payment.status === "refunded" ? (
+        <p className="text-xs text-(--bearhacks-fg)">
+          Refunded. If this looks wrong, open a ticket in #support-tickets on
+          Discord.
+        </p>
+      ) : null}
+    </li>
+  );
 }
 
 function PaymentStatusPill({
-  status,
-  hasDrift,
+  payment,
+  drift,
 }: {
-  status: BobaPayment["status"];
-  hasDrift: boolean;
+  payment: BobaPayment;
+  drift: boolean;
 }) {
   const map: Record<BobaPayment["status"], { label: string; cls: string }> = {
     unpaid: {
@@ -333,12 +418,12 @@ function PaymentStatusPill({
       cls: "bg-(--bearhacks-surface-alt) text-(--bearhacks-muted) border border-(--bearhacks-border)",
     },
   };
-  const resolved = hasDrift
+  const resolved = drift
     ? {
         label: "Additional due",
         cls: "bg-(--bearhacks-accent) text-(--bearhacks-primary)",
       }
-    : map[status];
+    : map[payment.status];
   return (
     <span
       className={`inline-flex items-center rounded-(--bearhacks-radius-pill) px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] ${resolved.cls}`}
@@ -346,4 +431,26 @@ function PaymentStatusPill({
       {resolved.label}
     </span>
   );
+}
+
+function describeDrinkRow(
+  drink: BobaOrder,
+  menu: BobaMenuResponse | null,
+): string {
+  if (!menu) return `Drink · ${drink.size}`;
+  const name =
+    menu.drinks.find((d) => d.id === drink.drink_id)?.label ?? drink.drink_id;
+  const size = menu.sizes.find((s) => s.id === drink.size)?.label ?? drink.size;
+  return `${name} · ${size}`;
+}
+
+function describeMomoRow(
+  momo: BobaMomoOrder,
+  menu: BobaMenuResponse | null,
+): string {
+  if (!menu) return `Momos · ${momo.filling}`;
+  const filling =
+    menu.momos.fillings.find((f) => f.id === momo.filling)?.label ??
+    momo.filling;
+  return `Momos · ${filling}`;
 }
