@@ -317,7 +317,28 @@ export default function AdminBobaPaymentsPage() {
   }
 
   const currentRows = paymentsQuery.data?.payments ?? [];
-  const selectedRows = currentRows.filter((r) => selected.has(r.id));
+  // Only ``placed`` rows are eligible for batch operations. The child
+  // table already hides non-placed rows from the selectable surface
+  // (they render in a read-only past-payments drawer) and its
+  // ``selectedVisible`` counter filters against ``liveData``, but the
+  // selection ``Set<string>`` persists across the 30s auto-refetch by
+  // design — losing an admin's selection on every refresh would be
+  // miserable. That persistence creates a narrow race: a row that was
+  // ``placed`` when the admin checked it can transition to
+  // ``cancelled``/``fulfilled`` before the admin hits "Confirm all",
+  // and the fresh server response brings it back as a past row. The
+  // row id is still in ``selected``, so without this filter every
+  // batch handler's ``eligible`` set would include it, the
+  // confirmation dialog would show an inflated count/total, and the
+  // mutation would fire against an order whose food never existed —
+  // exactly the scenario the past-payments drawer exists to prevent.
+  //
+  // Filtering at the ``selectedRows`` derivation point (instead of in
+  // each handler) means every current and future batch handler
+  // inherits the guard automatically.
+  const selectedRows = currentRows.filter(
+    (r) => selected.has(r.id) && r.item_status === "placed",
+  );
 
   const toggleRow = (id: string) =>
     setSelected((prev) => {
