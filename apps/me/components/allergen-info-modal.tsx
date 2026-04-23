@@ -472,7 +472,21 @@ function DrinkTable({ rows }: { rows: DrinkRow[] }) {
   return (
     <>
       <div className="hidden overflow-x-auto sm:block">
-        <table className="w-full text-left text-sm">
+        {/*
+         * `table-fixed` + a shared `<colgroup>` (identical in
+         * `ToppingTable`) forces the Vegan column to start at the same
+         * x-position across both tables, so the `VeganBadge` pills line
+         * up vertically between Drinks and Toppings. Without this each
+         * `<table>` auto-sizes from its own content and longer topping
+         * labels ("QQ (pearls + coconut jelly)") push the Vegan column
+         * right relative to the drinks table.
+         */}
+        <table className="w-full table-fixed text-left text-sm">
+          <colgroup>
+            <col className="w-2/5" />
+            <col className="w-36" />
+            <col />
+          </colgroup>
           <thead>
             <tr className="border-b border-(--bearhacks-border) text-xs uppercase tracking-[0.06em] text-(--bearhacks-muted)">
               <th className="py-2 pr-2">Drink</th>
@@ -483,13 +497,13 @@ function DrinkTable({ rows }: { rows: DrinkRow[] }) {
           <tbody>
             {rows.map((row) => (
               <tr key={row.label} className="border-b border-(--bearhacks-border)/60 last:border-b-0">
-                <td className="py-2 pr-2 align-top font-medium text-(--bearhacks-fg)">
+                <td className="py-2 pr-2 align-top font-medium text-(--bearhacks-fg) wrap-break-word">
                   {row.label}
                 </td>
                 <td className="py-2 pr-2 text-center align-top">
                   <VeganBadge value={row.vegan} />
                 </td>
-                <td className="py-2 align-top text-(--bearhacks-fg)">{row.notes}</td>
+                <td className="py-2 align-top text-(--bearhacks-fg) wrap-break-word">{row.notes}</td>
               </tr>
             ))}
           </tbody>
@@ -522,7 +536,15 @@ function ToppingTable({ rows }: { rows: ToppingRow[] }) {
   return (
     <>
       <div className="hidden overflow-x-auto sm:block">
-        <table className="w-full text-left text-sm">
+        {/* Column layout mirrors `DrinkTable` exactly — see the comment
+         * there for why `table-fixed` + this `<colgroup>` are required
+         * to keep the Vegan pills aligned across both tables. */}
+        <table className="w-full table-fixed text-left text-sm">
+          <colgroup>
+            <col className="w-2/5" />
+            <col className="w-36" />
+            <col />
+          </colgroup>
           <thead>
             <tr className="border-b border-(--bearhacks-border) text-xs uppercase tracking-[0.06em] text-(--bearhacks-muted)">
               <th className="py-2 pr-2">Topping</th>
@@ -533,13 +555,13 @@ function ToppingTable({ rows }: { rows: ToppingRow[] }) {
           <tbody>
             {rows.map((row) => (
               <tr key={row.label} className="border-b border-(--bearhacks-border)/60 last:border-b-0">
-                <td className="py-2 pr-2 align-top font-medium text-(--bearhacks-fg)">
+                <td className="py-2 pr-2 align-top font-medium text-(--bearhacks-fg) wrap-break-word">
                   {row.label}
                 </td>
                 <td className="py-2 pr-2 text-center align-top">
                   <VeganBadge value={row.vegan} />
                 </td>
-                <td className="py-2 align-top text-(--bearhacks-fg)">{row.notes}</td>
+                <td className="py-2 align-top text-(--bearhacks-fg) wrap-break-word">{row.notes}</td>
               </tr>
             ))}
           </tbody>
