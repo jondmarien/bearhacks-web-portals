@@ -179,7 +179,14 @@ export function BobaSuccessModal({
               </p>
             </div>
             <p className="text-xs text-(--bearhacks-muted)">
-              {menu.payment.discount_note} One e-transfer per order.
+              {/*
+                Explicit period + space between ``discount_note`` and
+                the trailing sentence — the backend copy has no trailing
+                punctuation (see ``PAYMENT_DISCOUNT_NOTE``) and without
+                this the two sentences visually fuse ("…taxes included
+                One e-transfer per order.").
+              */}
+              {menu.payment.discount_note}. One e-transfer per order.
             </p>
 
             <div className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2">
@@ -203,8 +210,8 @@ export function BobaSuccessModal({
                 </Button>
               </div>
               <p className="mt-2 text-xs text-(--bearhacks-muted)">
-                Tip: include your name in the e-transfer message so we can
-                match it quickly.
+                NOTE: Include your name in the e-transfer message so we
+                can match it quickly to you!
               </p>
             </div>
 

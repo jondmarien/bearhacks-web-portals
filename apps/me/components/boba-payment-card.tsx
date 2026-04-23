@@ -356,7 +356,13 @@ export function BobaPaymentCard({
               <span className="text-sm font-medium">CAD</span>
             </p>
             <p className="mt-1 text-xs text-(--bearhacks-muted)">
-              {discountNote} Send one combined e-transfer, then tap below.
+              {/*
+                Explicit period + space between the server-supplied
+                ``discountNote`` and the instruction that follows so the
+                two sentences don't visually fuse (the backend copy has
+                no trailing punctuation — see ``PAYMENT_DISCOUNT_NOTE``).
+              */}
+              {discountNote}. Send one combined e-transfer, then tap below.
             </p>
           </div>
 
@@ -381,14 +387,26 @@ export function BobaPaymentCard({
               </Button>
             </div>
             <p className="mt-2 text-xs text-(--bearhacks-muted)">
-              Tip: include your name in the e-transfer message so we can match
-              it quickly.
+              NOTE: Include your name in the e-transfer message so we can
+              match it quickly to you!
             </p>
           </div>
 
-          {/* One-tap "mark everything outstanding as sent" — only */}
-          {/* appears when there's more than one row to save, because */}
-          {/* a single row already has its own per-row button below. */}
+          {/*
+            One-tap "mark everything outstanding as sent" — only appears
+            when there's more than one row to save, because a single
+            row already has its own per-row button below.
+
+            Copy tier:
+              - 2 rows: "Mark as sent · $X". A drink + momo placed in
+                the same batch is a single combined pickup for the
+                hacker, and the per-order total already sits on each
+                row, so "Mark all 2 as sent" reads as awkward
+                over-counting for what is functionally one order.
+              - 3+ rows: "Mark all N as sent · $X" — the count matters
+                because the hacker is confirming they sent one bigger
+                combined e-transfer covering multiple earlier orders.
+          */}
           {outstandingRows.length > 1 ? (
             <Button
               type="button"
@@ -398,8 +416,12 @@ export function BobaPaymentCard({
               onClick={() => void onSubmitAll(outstandingRows)}
             >
               {bulkPending
-                ? `Marking ${outstandingRows.length}…`
-                : `Mark all ${outstandingRows.length} as sent · $${outstandingDollars}`}
+                ? outstandingRows.length === 2
+                  ? "Marking…"
+                  : `Marking ${outstandingRows.length}…`
+                : outstandingRows.length === 2
+                  ? `Mark as sent · $${outstandingDollars}`
+                  : `Mark all ${outstandingRows.length} as sent · $${outstandingDollars}`}
             </Button>
           ) : null}
         </>
