@@ -409,7 +409,7 @@ function HomePageContent() {
               My <span className="bg-(--bearhacks-cream) px-1 rounded-sm">QR card</span>
             </CardTitle>
             <CardDescription>
-              Show this QR to other attendees to share your profile.
+              Attendees scan this to see your profile.
             </CardDescription>
           </CardHeader>
           <div className="flex flex-col items-center gap-4">
@@ -418,7 +418,7 @@ function HomePageContent() {
               href={`/qr-card/${qrId}`}
               className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-accent-soft)"
             >
-              Open full-size QR card →
+              Full-size QR →
             </Link>
           </div>
         </Card>

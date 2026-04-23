@@ -275,9 +275,8 @@ function StatusBody({
         <div className="flex flex-col gap-3">
           <Pill tone="muted">Order cancelled</Pill>
           <p className="text-sm text-(--bearhacks-fg)">
-            <strong>{status.window.label}</strong> is still open until{" "}
-            {formatClockTime(status.window.closes_at)} — place a new order if
-            you change your mind.
+            Still open until {formatClockTime(status.window.closes_at)} —
+            place a new order if you change your mind.
           </p>
           {quotaLine}
           {hideEditCta ? null : <CtaLink>Place a new order →</CtaLink>}
@@ -296,10 +295,9 @@ function StatusBody({
         <div className="flex flex-col gap-3">
           <Pill tone="muted">Picked up</Pill>
           <p className="text-sm text-(--bearhacks-fg)">
-            Your order for <strong>{status.window.label}</strong> was picked
-            up. Enjoy!
+            Picked up for <strong>{status.window.label}</strong>. Enjoy!
             {showQuota && canPlaceMore
-              ? " Window is still open — feel free to add another drink or momo."
+              ? " Window's still open — add another if you'd like."
               : ""}
           </p>
           {quotaLine}

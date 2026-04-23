@@ -104,10 +104,9 @@ async function maybeShowCapAlert(
       title: "You're over the meal-window limit",
       description: (
         <>
-          You already have <strong>{placed}</strong> order{placed === 1 ? "" : "s"}{" "}
-          placed for this window and the cap is <strong>{max}</strong>. Place
-          drinks only <em>or</em> momos only — not both — to stay within the
-          limit, or cancel one of your existing orders to free a slot.
+          You&apos;ve placed <strong>{placed}</strong> of{" "}
+          <strong>{max}</strong> orders for this window. Cancel one to free a
+          slot, or switch to drinks-only or momos-only.
         </>
       ),
       actionLabel: "Got it",
@@ -499,8 +498,8 @@ export default function BobaOrderPage() {
                 <CardTitle>You&apos;re at the limit</CardTitle>
                 <CardDescription>
                   {maxOrders > 1
-                    ? `You've placed ${placedCount} of ${maxOrders} drinks/momos for this window. Cancel one above to free a slot, or use Edit to change an existing one.`
-                    : "You've already placed a drink and a momo order (5 momos) for this meal window. Cancel one above to free a slot, or use Edit to change an existing one."}
+                    ? `${placedCount} of ${maxOrders} placed this window. Cancel one above to free a slot, or edit an existing order.`
+                    : "Drink and momos already placed. Cancel one above to free a slot, or edit an existing order."}
                 </CardDescription>
               </CardHeader>
             </Card>
