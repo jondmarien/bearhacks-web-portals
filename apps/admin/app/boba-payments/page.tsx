@@ -952,6 +952,24 @@ function PaymentsTableCard({
 
   const data = query.data?.payments ?? [];
 
+  // Split per-order payments into "live" (underlying order still
+  // ``placed``) and "past" (cancelled or already picked up). The old
+  // bundle-era UI collapsed past *items* inside each bundle's drawer —
+  // now that every row is a single order we lift that split up to the
+  // table itself: live rows stay in the main list with full actions,
+  // past rows are hidden behind a <details> drawer below and render
+  // read-only (no checkbox, no confirm/refund/undo). That keeps the
+  // pickup queue uncluttered and stops admins from accidentally
+  // confirming payment on a row whose food never existed.
+  const liveData = useMemo(
+    () => data.filter((r) => r.item_status === "placed"),
+    [data],
+  );
+  const pastData = useMemo(
+    () => data.filter((r) => r.item_status !== "placed"),
+    [data],
+  );
+
   const columns = useMemo<ColumnDef<AdminPaymentRow>[]>(
     () => [
       {
@@ -1170,7 +1188,7 @@ function PaymentsTableCard({
   // left with just sorting over the current page's rows.
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
-    data,
+    data: liveData,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
@@ -1193,10 +1211,12 @@ function PaymentsTableCard({
   const pageEnd = hasRange ? Math.min(total, page * pageSize + data.length) : 0;
 
   // Counts for the batch action bar. We always count against the
-  // *visible* rows (`data`) intersected with `selected` so selections
-  // that the user can't see (e.g. an id that got filtered out
-  // server-side between renders) don't inflate the button count.
-  const selectedVisible = data.filter((r) => selected.has(r.id));
+  // *visible live* rows (`liveData`) intersected with `selected` so
+  // past-item rows (which render read-only in the drawer and don't
+  // expose a checkbox) can't slip into a batch op, and selections
+  // that got filtered out server-side between renders don't inflate
+  // the button count.
+  const selectedVisible = liveData.filter((r) => selected.has(r.id));
   const selectedCount = selectedVisible.length;
   const eligibleConfirmCount = selectedVisible.filter(
     (r) => r.status === "unpaid" || r.status === "submitted",
@@ -1248,13 +1268,21 @@ function PaymentsTableCard({
             ? query.error.message
             : "Failed to load payments"}
         </p>
-      ) : data.length === 0 ? (
+      ) : liveData.length === 0 && pastData.length === 0 ? (
         <p className="px-4 py-6 text-sm text-(--bearhacks-muted)">
           No payments match the current filters.
         </p>
       ) : (
         <>
-          <div className="hidden overflow-x-auto sm:block">
+          {liveData.length === 0 ? (
+            <p className="px-4 py-6 text-sm italic text-(--bearhacks-muted)">
+              No live payments on this page — everything below was cancelled or
+              already picked up.
+            </p>
+          ) : null}
+          <div
+            className={`${liveData.length === 0 ? "hidden" : "hidden overflow-x-auto sm:block"}`}
+          >
             <table className="w-full min-w-3xl border-collapse text-left text-sm">
               <thead className="border-b border-(--bearhacks-border) bg-(--bearhacks-surface-alt)">
                 {table.getHeaderGroups().map((hg) => (
@@ -1335,7 +1363,9 @@ function PaymentsTableCard({
             </table>
           </div>
 
-          <ul className="flex flex-col gap-3 p-3 sm:hidden">
+          <ul
+            className={`${liveData.length === 0 ? "hidden" : "flex flex-col gap-3 p-3 sm:hidden"}`}
+          >
             {table.getRowModel().rows.map((row) => {
               const o = row.original;
               const expected = `$${(o.expected_cents / 100).toFixed(2)}`;
@@ -1460,6 +1490,13 @@ function PaymentsTableCard({
               );
             })}
           </ul>
+
+          {pastData.length > 0 ? (
+            <PastPaymentsDrawer
+              rows={pastData}
+              defaultOpen={liveData.length === 0}
+            />
+          ) : null}
         </>
       )}
 
@@ -1474,6 +1511,120 @@ function PaymentsTableCard({
         />
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * Read-only drawer for payments whose underlying drink/momo is no
+ * longer ``placed`` (cancelled or already picked up).
+ *
+ * Why a separate section?
+ *
+ * - The pickup queue is the primary job this page does, and past
+ *   rows just add noise to it — the food team kept confusing
+ *   struck-through lines with outstanding work.
+ * - Cancelled orders explicitly cannot be acted on. The row has no
+ *   food to hand off and (per the per-order migration) the payment
+ *   is already settled upstream. Rendering Confirm/Refund/Undo here
+ *   would be a footgun, so the entire row is unusable by design.
+ * - Hiding them behind a collapsed ``<details>`` preserves the audit
+ *   trail (and keeps parity with the admin's prior mental model
+ *   from the bundle-era drawer) without crowding the live list.
+ *
+ * The drawer opens by default only when the current page has no
+ * live rows at all — otherwise the live list takes priority and
+ * the drawer stays tucked away.
+ */
+function PastPaymentsDrawer({
+  rows,
+  defaultOpen,
+}: {
+  rows: readonly AdminPaymentRow[];
+  defaultOpen: boolean;
+}) {
+  const cancelledCount = rows.filter((r) => r.item_status === "cancelled").length;
+  const fulfilledCount = rows.filter((r) => r.item_status === "fulfilled").length;
+  const summaryParts: string[] = [];
+  if (cancelledCount > 0) summaryParts.push(`${cancelledCount} cancelled`);
+  if (fulfilledCount > 0) summaryParts.push(`${fulfilledCount} picked up`);
+  const summaryLine = `${rows.length} past payment${rows.length === 1 ? "" : "s"}${
+    summaryParts.length > 0 ? ` · ${summaryParts.join(" · ")}` : ""
+  }`;
+
+  return (
+    <details
+      {...(defaultOpen ? { open: true } : {})}
+      className="mx-3 mt-1 mb-3 rounded-(--bearhacks-radius-md) border border-dashed border-(--bearhacks-border) bg-(--bearhacks-surface-alt)/40"
+    >
+      <summary className="cursor-pointer list-none select-none px-3 py-2 text-xs font-medium text-(--bearhacks-muted) hover:text-(--bearhacks-fg) [&::-webkit-details-marker]:hidden">
+        <span aria-hidden className="mr-1.5 inline-block">
+          ▸
+        </span>
+        {summaryLine}
+      </summary>
+
+      <ul className="flex flex-col gap-2 border-t border-dashed border-(--bearhacks-border) px-3 py-3">
+        {rows.map((o) => {
+          const expected = `$${(o.expected_cents / 100).toFixed(2)}`;
+          const received =
+            o.received_cents == null
+              ? null
+              : `$${(o.received_cents / 100).toFixed(2)}`;
+          return (
+            <li
+              key={o.id}
+              className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-2 opacity-70 sm:grid sm:grid-cols-[minmax(10rem,1fr)_minmax(14rem,2fr)_auto_auto] sm:items-start sm:gap-3"
+              aria-disabled="true"
+            >
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-semibold text-(--bearhacks-fg) line-through wrap-break-word">
+                  {o.hacker_name}
+                </span>
+                {o.hacker_email ? (
+                  <span className="text-xs text-(--bearhacks-muted) line-through wrap-break-word">
+                    {o.hacker_email}
+                  </span>
+                ) : null}
+              </div>
+              <div className="min-w-0">
+                <PaymentItemCell row={o} />
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-semibold text-(--bearhacks-fg) line-through tabular-nums">
+                  {expected}
+                </span>
+                {received ? (
+                  <span className="text-(--bearhacks-muted) line-through tabular-nums">
+                    · received {received}
+                  </span>
+                ) : null}
+                {o.reference ? (
+                  <span className="text-(--bearhacks-muted) line-through wrap-break-word">
+                    · ref {o.reference}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                <span
+                  className={`inline-flex items-center rounded-(--bearhacks-radius-pill) px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE_CLASSES[o.status]}`}
+                >
+                  {STATUS_LABELS[o.status]}
+                </span>
+                <span className="text-xs text-(--bearhacks-muted) line-through whitespace-nowrap">
+                  {new Date(o.updated_at).toLocaleString("en-CA", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    month: "short",
+                    day: "numeric",
+                    timeZone: "America/Toronto",
+                  })}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   );
 }
 
