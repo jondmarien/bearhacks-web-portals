@@ -161,18 +161,24 @@ export function BobaSuccessModal({
         {showPaymentBlock ? (
           <section
             aria-label="Payment instructions"
-            className="flex flex-col gap-4 rounded-(--bearhacks-radius-md) border-2 border-(--bearhacks-accent) bg-(--bearhacks-accent-soft) px-4 py-4 text-(--bearhacks-primary)"
+            // Accent *border* marks this as the payment action block, but
+            // the fill stays on theme-aware surface tokens so the block
+            // doesn't turn into a blinding pale-yellow slab in dark mode
+            // (the `--bearhacks-accent-soft` token is #ffe196 regardless
+            // of theme — fine next to light surfaces, wrong on dark).
+            // This mirrors the dashboard `BobaPaymentCard` summary block.
+            className="flex flex-col gap-4 rounded-(--bearhacks-radius-md) border-2 border-(--bearhacks-accent) bg-(--bearhacks-surface-alt) px-4 py-4 text-(--bearhacks-fg)"
           >
             <div className="flex items-baseline justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-(--bearhacks-primary)/80">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-(--bearhacks-muted)">
                 {payments.length === 1 ? "To send" : "Total to send"}
               </p>
-              <p className="text-2xl font-semibold text-(--bearhacks-primary)">
+              <p className="text-2xl font-semibold text-(--bearhacks-fg)">
                 ${outstanding > 0 ? outstandingDollars : totalExpectedDollars}{" "}
                 <span className="text-sm font-medium">CAD</span>
               </p>
             </div>
-            <p className="text-xs text-(--bearhacks-primary)/80">
+            <p className="text-xs text-(--bearhacks-muted)">
               {menu.payment.discount_note} One e-transfer per order.
             </p>
 
@@ -218,7 +224,7 @@ export function BobaSuccessModal({
               >
                 Take me to payment ↓
               </Button>
-              <p className="text-center text-xs text-(--bearhacks-primary)/80">
+              <p className="text-center text-xs text-(--bearhacks-muted)">
                 Confirm you sent the e-transfer on your dashboard.
               </p>
             </div>
