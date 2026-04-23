@@ -1,6 +1,6 @@
 "use client";
 
-import { ApiError } from "@bearhacks/api-client";
+import { ApiError, describeApiError, getApiErrorCode } from "@bearhacks/api-client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -41,6 +41,46 @@ type ProfileDraft = {
   github_url: string;
   personal_url: string;
 };
+
+function describeClaimError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "Sign in to your participant account first.";
+    }
+    if (error.status === 403) {
+      const code = getApiErrorCode(error);
+      if (code === "email_not_accepted") {
+        return "Your email isn't on the accepted hacker list. If you were accepted under a different email, link it from the dashboard, or reach out to an organizer.";
+      }
+      if (code === "missing_email") {
+        return "We couldn't read the email on your account. Sign in again with a provider that shares your email (Google or LinkedIn).";
+      }
+    }
+    if (error.status === 404) {
+      return "That QR code doesn't exist. Double-check the link and try again.";
+    }
+    if (error.status === 409) {
+      const detailText = typeof error.detail === "string" ? error.detail : null;
+      if (detailText === "QR already claimed") {
+        return "This QR has already been claimed by another attendee.";
+      }
+      if (detailText === "User already claimed a QR") {
+        return "You've already claimed a QR. You can only claim one per account.";
+      }
+    }
+    if (error.status === 429) {
+      return "Too many attempts. Please wait a few seconds and try again.";
+    }
+  }
+  return describeApiError(error, "Claim failed");
+}
+
+function describeClaimStatusError(error: unknown): string {
+  if (error instanceof ApiError && error.status === 404) {
+    return "That QR code doesn't exist. Double-check the link and try again.";
+  }
+  return describeApiError(error, "Failed to load QR status");
+}
 
 export default function ClaimQrPage() {
   const params = useParams();
@@ -123,15 +163,7 @@ export default function ClaimQrPage() {
       await claimStatusQuery.refetch();
     },
     onError: (error) => {
-      if (error instanceof ApiError) {
-        if (error.status === 401) {
-          toast.error("Sign in to your participant account first");
-          return;
-        }
-        toast.error(error.message);
-        return;
-      }
-      toast.error(error instanceof Error ? error.message : "Claim failed");
+      toast.error(describeClaimError(error));
     },
   });
 
@@ -169,9 +201,7 @@ export default function ClaimQrPage() {
       )}
       {claimStatusQuery.isError && (
         <p className="text-sm text-(--bearhacks-danger)">
-          {claimStatusQuery.error instanceof ApiError
-            ? claimStatusQuery.error.message
-            : "Failed to load QR status"}
+          {describeClaimStatusError(claimStatusQuery.error)}
         </p>
       )}
 

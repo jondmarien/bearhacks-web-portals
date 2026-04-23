@@ -1,4 +1,4 @@
-import { ApiError, createApiClient } from "@bearhacks/api-client";
+import { ApiError, createApiClient, describeApiError } from "@bearhacks/api-client";
 import { tryPublicEnv } from "@bearhacks/config";
 import { createLogger } from "@bearhacks/logger";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -54,16 +54,6 @@ export async function checkPortalAccess(
   }
 }
 
-function apiDetailMessage(error: unknown): string {
-  if (!(error instanceof ApiError)) return "Something went wrong.";
-  const d = error.detail;
-  if (d && typeof d === "object" && "message" in d && typeof (d as { message: unknown }).message === "string") {
-    return (d as { message: string }).message;
-  }
-  if (typeof d === "string") return d;
-  return error.message;
-}
-
 function isOtpRequiredError(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.status !== 400) return false;
   const d = error.detail;
@@ -100,7 +90,7 @@ export async function submitPortalClaimEmail(
     return "verified";
   } catch (e) {
     if (isOtpRequiredError(e)) return "otp_required";
-    throw new Error(apiDetailMessage(e));
+    throw new Error(describeApiError(e));
   }
 }
 
@@ -114,7 +104,7 @@ export async function requestPortalClaimOtp(supabase: SupabaseClient, email: str
       body: JSON.stringify({ email: email.trim().toLowerCase() }),
     });
   } catch (e) {
-    throw new Error(apiDetailMessage(e));
+    throw new Error(describeApiError(e));
   }
 }
 
@@ -135,6 +125,6 @@ export async function verifyPortalClaimOtp(
       }),
     });
   } catch (e) {
-    throw new Error(apiDetailMessage(e));
+    throw new Error(describeApiError(e));
   }
 }

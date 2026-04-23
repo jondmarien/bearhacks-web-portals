@@ -1,0 +1,9 @@
+# Client-safe template values only.
+# Copy these into `apps/me/.env.local` and `apps/admin/.env.local`.
+# Keep all secrets (service role, bot token, OAuth client secret, JWT secret) in server-only env files.
+
+NEXT_PUBLIC_SUPABASE_URL=https://puavwzqxqdtuigiirinc.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB1YXZ3enF4cWR0dWlnaWlyaW5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyMjU0MjgsImV4cCI6MjA4NzgwMTQyOH0.b8QfyRWkhrTktf65mV1vJf12t3nTrlffr3kcxSclils
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_NKUV1Dsmy9OL3kwTMr7Jbg_rPaQPfdg
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_DISCORD_INVITE=https://discord.gg/xztAPsA8JG

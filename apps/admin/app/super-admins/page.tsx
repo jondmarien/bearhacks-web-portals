@@ -8,21 +8,21 @@
  * Postgres allowlist in one round-trip.
  */
 
-import { ApiError } from "@bearhacks/api-client";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { User } from "@supabase/supabase-js";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { useSupabase } from "@/app/providers";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { InputField } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { createStructuredLogger } from "@/lib/structured-logging";
+import { isStaffUser, isSuperAdminUser } from "@/lib/supabase-role";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
-import { isStaffUser, isSuperAdminUser } from "@/lib/supabase-role";
-import { createStructuredLogger } from "@/lib/structured-logging";
+import { describeApiError } from "@bearhacks/api-client";
+import type { User } from "@supabase/supabase-js";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 type SuperAdminRow = {
   user_id: string;
@@ -44,19 +44,6 @@ function formatTimestamp(iso: string | null): string {
   if (!iso) return "—";
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
-}
-
-function describeError(error: unknown, fallback: string): string {
-  if (error instanceof ApiError) {
-    const detail = error.detail;
-    if (detail && typeof detail === "object" && !Array.isArray(detail)) {
-      const message = (detail as { message?: unknown }).message;
-      if (typeof message === "string" && message.trim()) return message;
-    }
-    if (typeof detail === "string" && detail.trim()) return detail;
-    if (error.message) return error.message;
-  }
-  return fallback;
 }
 
 export default function AdminSuperAdminsPage() {
@@ -91,7 +78,10 @@ export default function AdminSuperAdminsPage() {
 
   useEffect(() => {
     if (!query.error) return;
-    const message = describeError(query.error, "Failed to load super-admins");
+    const message = describeApiError(
+      query.error,
+      "Failed to load super-admins",
+    );
     log("error", {
       event: "admin_super_admins_list",
       actor,
@@ -126,7 +116,7 @@ export default function AdminSuperAdminsPage() {
       void queryClient.invalidateQueries({ queryKey: ["admin-super-admins"] });
     },
     onError: (error: unknown, email) => {
-      const message = describeError(
+      const message = describeApiError(
         error,
         "Could not grant super-admin access.",
       );
@@ -168,7 +158,7 @@ export default function AdminSuperAdminsPage() {
       void queryClient.invalidateQueries({ queryKey: ["admin-super-admins"] });
     },
     onError: (error: unknown) => {
-      const message = describeError(error, "Could not fix drift.");
+      const message = describeApiError(error, "Could not fix drift.");
       log("error", {
         event: "admin_super_admins_reconcile",
         actor,
@@ -181,7 +171,13 @@ export default function AdminSuperAdminsPage() {
   });
 
   const revokeMutation = useMutation({
-    mutationFn: async ({ userId, email }: { userId: string; email: string }) => {
+    mutationFn: async ({
+      userId,
+      email,
+    }: {
+      userId: string;
+      email: string;
+    }) => {
       const path = userId
         ? `/admin/super-admins/${encodeURIComponent(userId)}`
         : `/admin/super-admins/pending/${encodeURIComponent(email)}`;
@@ -206,7 +202,7 @@ export default function AdminSuperAdminsPage() {
     },
     onError: (error: unknown, variables) => {
       const pending = !variables.userId;
-      const message = describeError(
+      const message = describeApiError(
         error,
         pending
           ? "Could not cancel pre-grant."

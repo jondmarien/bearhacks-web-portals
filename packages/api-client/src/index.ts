@@ -1,2 +1,7 @@
 export { createApiClient, type CreateApiClientOptions, type GetAccessToken } from "./client";
-export { ApiError, type FastApiDetail } from "./errors";
+export {
+  ApiError,
+  describeApiError,
+  getApiErrorCode,
+  type FastApiDetail,
+} from "./errors";
