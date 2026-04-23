@@ -195,7 +195,8 @@ export function useBobaMenuQuery(): UseQueryResult<BobaMenuResponse> {
   const client = useApiClient();
   return useQuery({
     queryKey: bobaKeys.menu(),
-    queryFn: () => (client as ApiClient).fetchJson<BobaMenuResponse>("/boba/menu"),
+    queryFn: () =>
+      (client as ApiClient).fetchJson<BobaMenuResponse>("/boba/menu"),
     enabled: Boolean(client),
     staleTime: 5 * 60_000,
   });
@@ -226,9 +227,26 @@ export function useMyBobaOrderQuery(
   });
 }
 
+/**
+ * Invalidate every boba-scoped query and return a promise that
+ * resolves once the triggered refetches complete.
+ *
+ * Awaiting the returned promise is the difference between "mutation
+ * resolved; UI might be stale for a few hundred ms until the refetch
+ * lands" and "mutation resolved; UI is already showing fresh server
+ * state." Mutation ``onSuccess`` hooks await this so downstream
+ * callers (single-row click, bulk ``Promise.allSettled``, combined
+ * group CTA) can all trust that ``await mutateAsync()`` implies
+ * "cache is current" — which matters for admin-side status
+ * transitions (e.g. submitted → confirmed) that landed while the
+ * hacker was mid-submit.
+ *
+ * Note on key overlap: ``bobaKeys.all === ["boba"]`` is a prefix of
+ * every other key in this module, so a single invalidation against
+ * it transitively covers ``menu``, ``windows``, and ``myOrder``.
+ */
 function invalidateBobaCaches(qc: ReturnType<typeof useQueryClient>) {
-  void qc.invalidateQueries({ queryKey: bobaKeys.windows() });
-  void qc.invalidateQueries({ queryKey: bobaKeys.all });
+  return qc.invalidateQueries({ queryKey: bobaKeys.all });
 }
 
 // ----------------------------------------------------------------------------

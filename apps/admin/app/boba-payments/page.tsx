@@ -147,7 +147,20 @@ function ItemStatusBadge({ status }: { status: AdminPaymentRow["item_status"] })
  * refund) with the detail text struck through and a status chip so it
  * reads as "payment for X that got cancelled" rather than a live pickup.
  */
-function PaymentItemCell({ row }: { row: AdminPaymentRow }) {
+function PaymentItemCell({
+  row,
+  isPaired = false,
+}: {
+  row: AdminPaymentRow;
+  /**
+   * ``true`` when this row has a matched sibling in the visible
+   * page — admin should know that confirming / refunding / undoing
+   * this row will also act on the paired drink/momo from the same
+   * submission. Keeps the batching behaviour discoverable instead
+   * of having the dialog copy be the only hint.
+   */
+  isPaired?: boolean;
+}) {
   const isPlaced = row.item_status === "placed";
   const label = row.kind === "drink" ? "Drink" : "Momos";
   const dimmed = isPlaced ? "" : "opacity-70";
@@ -176,6 +189,14 @@ function PaymentItemCell({ row }: { row: AdminPaymentRow }) {
         >
           {row.item_detail}
         </span>
+        {isPaired ? (
+          <span
+            className="ml-1 inline-flex items-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-surface-muted) px-1.5 py-0.5 text-[10px] font-medium text-(--bearhacks-muted)"
+            title="Placed together with a matched drink/momo from the same submission. Confirm/refund/undo will act on both."
+          >
+            Paired
+          </span>
+        ) : null}
       </span>
     </div>
   );
@@ -339,6 +360,125 @@ export default function AdminBobaPaymentsPage() {
   const selectedRows = currentRows.filter(
     (r) => selected.has(r.id) && r.item_status === "placed",
   );
+
+  // ---------------------------------------------------------------------------
+  // Submission pair detection.
+  //
+  // The per-order payment backend stores one row per drink and one
+  // row per momo — no explicit "cart id" links a drink + momo that
+  // were placed in the same ``POST /boba/orders/me`` submission. The
+  // hacker-facing UI already bundles these visually using a
+  // ``user_id`` + ``meal_window_id`` + ±3s ``created_at`` heuristic
+  // (see ``PayableGroup`` in ``apps/me/components/boba-payment-card``)
+  // so a hacker who ordered a drink + 5 momos together sees one row
+  // with a single "I sent the e-transfer" button that marks both
+  // halves submitted at once.
+  //
+  // The admin table has to honour the same bundling, otherwise
+  // confirming one half of a pair silently leaves the other half
+  // stuck in ``submitted``, the hacker gets a half-confirmed UI, and
+  // the food team scrolls past the orphaned sibling at pickup time.
+  //
+  // This helper returns the matched sibling from ``currentRows`` —
+  // i.e. the same visible page. When a pair straddles pages the
+  // per-row action falls back to acting on just the clicked row, and
+  // the admin can flip to the next page to finish the pair (same UX
+  // as today). Cross-page pair detection would need server support;
+  // the 95% case is both halves sit on the same page because they
+  // share ``updated_at`` and the table's default sort groups them.
+  //
+  // The ``PAIR_ACTION_STATUSES`` map gates which status the sibling
+  // must be in for each action — matching a sibling whose payment
+  // status can't accept the action would just 409, so we filter
+  // those out up front. ``item_status === "placed"`` is always
+  // required because we never want to operate on cancelled / picked-
+  // up food, matching the ``selectedRows`` guard above.
+  const PAIR_EPSILON_MS = 3000;
+  const PAIR_ACTION_STATUSES: Record<
+    "confirm" | "refund" | "unconfirm",
+    ReadonlyArray<AdminPaymentRow["status"]>
+  > = {
+    confirm: ["unpaid", "submitted"],
+    refund: ["submitted", "confirmed"],
+    unconfirm: ["confirmed"],
+  };
+  const findMatchedSibling = (
+    row: AdminPaymentRow,
+    action: "confirm" | "refund" | "unconfirm",
+  ): AdminPaymentRow | null => {
+    if (row.item_status !== "placed") return null;
+    const rowCreatedAt = new Date(row.created_at).getTime();
+    const wantKind: AdminPaymentRow["kind"] =
+      row.kind === "drink" ? "momo" : "drink";
+    const allowedStatuses = PAIR_ACTION_STATUSES[action];
+    for (const cand of currentRows) {
+      if (cand.id === row.id) continue;
+      if (cand.kind !== wantKind) continue;
+      if (cand.user_id !== row.user_id) continue;
+      if (cand.meal_window_id !== row.meal_window_id) continue;
+      if (cand.item_status !== "placed") continue;
+      if (!allowedStatuses.includes(cand.status)) continue;
+      const delta = Math.abs(
+        new Date(cand.created_at).getTime() - rowCreatedAt,
+      );
+      if (delta <= PAIR_EPSILON_MS) return cand;
+    }
+    return null;
+  };
+
+  /**
+   * Run a mutation against a row and (optionally) its matched
+   * sibling, then emit a single summary toast. Uses
+   * ``Promise.allSettled`` so one half's failure doesn't mask the
+   * other half's success — admin gets a truthful count either way.
+   */
+  const runPairAction = async ({
+    rows,
+    mutateAsync,
+    event,
+    successSingular,
+    successPlural,
+    failVerb,
+  }: {
+    rows: AdminPaymentRow[];
+    mutateAsync: (row: AdminPaymentRow) => Promise<unknown>;
+    event: string;
+    successSingular: string;
+    successPlural: string;
+    failVerb: string;
+  }) => {
+    const results = await Promise.allSettled(rows.map((r) => mutateAsync(r)));
+    let ok = 0;
+    results.forEach((res, i) => {
+      const row = rows[i]!;
+      const succeeded = res.status === "fulfilled";
+      if (succeeded) ok += 1;
+      log(succeeded ? "info" : "error", {
+        event,
+        actor,
+        resourceId: row.id,
+        result: succeeded ? "success" : "error",
+        ...(res.status === "rejected" ? { error: res.reason } : {}),
+      });
+    });
+    const failed = rows.length - ok;
+    if (failed === 0) {
+      toast.success(rows.length === 1 ? successSingular : successPlural);
+    } else if (ok === 0) {
+      const first = results.find(
+        (r): r is PromiseRejectedResult => r.status === "rejected",
+      )?.reason;
+      toast.error(
+        first instanceof ApiError
+          ? first.message
+          : `Failed to ${failVerb} payment${rows.length === 1 ? "" : "s"}.`,
+      );
+    } else {
+      toast.error(
+        `${successPlural.replace(".", "")} — ${failed} failed. Refresh and retry.`,
+      );
+    }
+  };
 
   const toggleRow = (id: string) =>
     setSelected((prev) => {
@@ -594,106 +734,82 @@ export default function AdminBobaPaymentsPage() {
           onBatchUnconfirm={onBatchUnconfirm}
           onBatchUnrefund={onBatchUnrefund}
           onConfirm={async (row) => {
+            const sibling = findMatchedSibling(row, "confirm");
+            const rows = sibling ? [row, sibling] : [row];
+            const total = rows.reduce((s, r) => s + r.expected_cents, 0);
+            const refText = (row.reference ?? "").trim();
+            const description = sibling
+              ? `Confirms both halves of this submission (${row.kind} + ${sibling.kind}) as paid in full. received_cents = expected_cents for each.`
+              : row.status === "submitted"
+                ? refText.length > 0
+                  ? `Hacker submitted ref “${refText}”. Marks this order paid in full.`
+                  : "Hacker submitted nothing for reference. Confirm they added a reference to their e-transfer in person. CONFIRM PAYMENT marks this order paid in full."
+                : "Marks this order paid in full (received_cents = expected_cents).";
             const ok = await confirm({
-              title: `Confirm $${(row.expected_cents / 100).toFixed(2)} from ${row.hacker_name}?`,
-              description:
-                row.status === "submitted"
-                  ? (row.reference ?? "").trim().length > 0
-                    ? `Hacker submitted ref “${row.reference}”. Marks this order paid in full.`
-                    : "Hacker submitted nothing for reference. Confirm they added a reference to their e-transfer in person. CONFIRM PAYMENT marks this order paid in full."
-                  : "Marks this order paid in full (received_cents = expected_cents).",
-              confirmLabel: "Confirm payment",
+              title: sibling
+                ? `Confirm paired submission totaling $${(total / 100).toFixed(2)} from ${row.hacker_name}?`
+                : `Confirm $${(row.expected_cents / 100).toFixed(2)} from ${row.hacker_name}?`,
+              description,
+              confirmLabel: sibling ? "Confirm pair" : "Confirm payment",
             });
             if (!ok) return;
-            try {
-              await confirmMutation.mutateAsync({ paymentId: row.id });
-              log("info", {
-                event: "admin_boba_payment_confirm",
-                actor,
-                resourceId: row.id,
-                result: "success",
-              });
-              toast.success("Payment confirmed.");
-            } catch (error) {
-              log("error", {
-                event: "admin_boba_payment_confirm",
-                actor,
-                resourceId: row.id,
-                result: "error",
-                error,
-              });
-              toast.error(
-                error instanceof ApiError
-                  ? error.message
-                  : "Failed to confirm payment",
-              );
-            }
+            await runPairAction({
+              rows,
+              mutateAsync: (r) =>
+                confirmMutation.mutateAsync({ paymentId: r.id }),
+              event: "admin_boba_payment_confirm",
+              successSingular: "Payment confirmed.",
+              successPlural: "Paired payments confirmed.",
+              failVerb: "confirm",
+            });
           }}
           onRefund={async (row) => {
+            const sibling = findMatchedSibling(row, "refund");
+            const rows = sibling ? [row, sibling] : [row];
             const ok = await confirm({
-              title: `Refund payment for ${row.hacker_name}?`,
-              description:
-                "Marks this order refunded. Hacker can re-submit to pay again.",
-              confirmLabel: "Refund",
+              title: sibling
+                ? `Refund paired submission for ${row.hacker_name}?`
+                : `Refund payment for ${row.hacker_name}?`,
+              description: sibling
+                ? `Marks both halves of this submission (${row.kind} + ${sibling.kind}) refunded. Hacker can re-submit to pay again.`
+                : "Marks this order refunded. Hacker can re-submit to pay again.",
+              confirmLabel: sibling ? "Refund pair" : "Refund",
               tone: "danger",
             });
             if (!ok) return;
-            try {
-              await refundMutation.mutateAsync({ paymentId: row.id });
-              log("info", {
-                event: "admin_boba_payment_refund",
-                actor,
-                resourceId: row.id,
-                result: "success",
-              });
-              toast.success("Payment refunded.");
-            } catch (error) {
-              log("error", {
-                event: "admin_boba_payment_refund",
-                actor,
-                resourceId: row.id,
-                result: "error",
-                error,
-              });
-              toast.error(
-                error instanceof ApiError
-                  ? error.message
-                  : "Failed to refund payment",
-              );
-            }
+            await runPairAction({
+              rows,
+              mutateAsync: (r) =>
+                refundMutation.mutateAsync({ paymentId: r.id }),
+              event: "admin_boba_payment_refund",
+              successSingular: "Payment refunded.",
+              successPlural: "Paired payments refunded.",
+              failVerb: "refund",
+            });
           }}
           onUnconfirm={async (row) => {
+            const sibling = findMatchedSibling(row, "unconfirm");
+            const rows = sibling ? [row, sibling] : [row];
             const ok = await confirm({
-              title: `Undo confirmation for ${row.hacker_name}?`,
-              description:
-                "Reverts this order to submitted. Use this if the e-transfer bounced or was confirmed by mistake.",
-              confirmLabel: "Undo confirmation",
+              title: sibling
+                ? `Undo confirmation for paired submission from ${row.hacker_name}?`
+                : `Undo confirmation for ${row.hacker_name}?`,
+              description: sibling
+                ? `Reverts both halves of this submission (${row.kind} + ${sibling.kind}) to submitted. Use this if the e-transfer bounced or was confirmed by mistake.`
+                : "Reverts this order to submitted. Use this if the e-transfer bounced or was confirmed by mistake.",
+              confirmLabel: sibling ? "Undo pair" : "Undo confirmation",
               tone: "danger",
             });
             if (!ok) return;
-            try {
-              await unconfirmMutation.mutateAsync({ paymentId: row.id });
-              log("info", {
-                event: "admin_boba_payment_unconfirm",
-                actor,
-                resourceId: row.id,
-                result: "success",
-              });
-              toast.success("Confirmation reverted.");
-            } catch (error) {
-              log("error", {
-                event: "admin_boba_payment_unconfirm",
-                actor,
-                resourceId: row.id,
-                result: "error",
-                error,
-              });
-              toast.error(
-                error instanceof ApiError
-                  ? error.message
-                  : "Failed to revert confirmation",
-              );
-            }
+            await runPairAction({
+              rows,
+              mutateAsync: (r) =>
+                unconfirmMutation.mutateAsync({ paymentId: r.id }),
+              event: "admin_boba_payment_unconfirm",
+              successSingular: "Confirmation reverted.",
+              successPlural: "Paired confirmations reverted.",
+              failVerb: "revert confirmation for",
+            });
           }}
           onUnrefund={async (row) => {
             const ok = await confirm({
@@ -1000,6 +1116,40 @@ function PaymentsTableCard({
     [data],
   );
 
+  // Submission-pair detection for visual cues in the Item column.
+  //
+  // Mirrors the ``user_id`` + ``meal_window_id`` + ±3s ``created_at``
+  // heuristic used by the hacker-facing ``PayableGroup`` and by the
+  // parent page's ``findMatchedSibling`` — we compute the set of row
+  // IDs that have a sibling in ``liveData`` so ``PaymentItemCell``
+  // can flag them with a small "Paired" badge. Without the badge,
+  // admins would be surprised when the per-row Confirm button
+  // silently acts on two rows. Only ``placed`` rows participate:
+  // past rows can't be actioned anyway.
+  const pairedIds = useMemo<ReadonlySet<string>>(() => {
+    const EPSILON_MS = 3000;
+    const ids = new Set<string>();
+    const parsed = liveData.map((r) => ({
+      row: r,
+      ts: new Date(r.created_at).getTime(),
+    }));
+    for (let i = 0; i < parsed.length; i += 1) {
+      const a = parsed[i]!;
+      if (ids.has(a.row.id)) continue;
+      for (let j = i + 1; j < parsed.length; j += 1) {
+        const b = parsed[j]!;
+        if (a.row.kind === b.row.kind) continue;
+        if (a.row.user_id !== b.row.user_id) continue;
+        if (a.row.meal_window_id !== b.row.meal_window_id) continue;
+        if (Math.abs(a.ts - b.ts) > EPSILON_MS) continue;
+        ids.add(a.row.id);
+        ids.add(b.row.id);
+        break;
+      }
+    }
+    return ids;
+  }, [liveData]);
+
   const columns = useMemo<ColumnDef<AdminPaymentRow>[]>(
     () => [
       {
@@ -1076,7 +1226,12 @@ function PaymentsTableCard({
       {
         id: "item",
         header: "Item",
-        cell: (ctx) => <PaymentItemCell row={ctx.row.original} />,
+        cell: (ctx) => (
+          <PaymentItemCell
+            row={ctx.row.original}
+            isPaired={pairedIds.has(ctx.row.original.id)}
+          />
+        ),
         enableSorting: false,
       },
       {
@@ -1210,6 +1365,7 @@ function PaymentsTableCard({
       selected,
       onToggleRow,
       onToggleAll,
+      pairedIds,
     ],
   );
 
@@ -1436,7 +1592,7 @@ function PaymentsTableCard({
                   </div>
 
                   <div className="mt-2">
-                    <PaymentItemCell row={o} />
+                    <PaymentItemCell row={o} isPaired={pairedIds.has(o.id)} />
                   </div>
 
                   <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
