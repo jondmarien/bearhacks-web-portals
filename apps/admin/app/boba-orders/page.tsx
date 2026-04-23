@@ -27,7 +27,15 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import type { User } from "@supabase/supabase-js";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { toast } from "sonner";
 import { useSupabase } from "@/app/providers";
 import { Button } from "@/components/ui/button";
@@ -50,6 +58,7 @@ import {
   type AdminOrderRow,
   type AdminWindow,
   type BulkDeleteItem,
+  type DevWindowListItem,
   type WindowsResponse,
 } from "@/lib/boba-queries";
 import {
@@ -275,9 +284,7 @@ export default function AdminBobaOrdersPage() {
         </Card>
       )}
 
-      {isSuper ? <DevTestWindowToggleCard enabled={isSuper} actor={actor} /> : null}
-
-      {isSuper ? <OtherDevWindowsCard enabled={isSuper} actor={actor} /> : null}
+      {isSuper ? <DevWindowsPanel enabled={isSuper} actor={actor} /> : null}
 
       {isSuper && windowsQuery.data ? (
         <FilterBar
@@ -358,23 +365,214 @@ export default function AdminBobaOrdersPage() {
 const DEV_WINDOW_MAX_ORDERS_HARD_CEILING = 50;
 
 /**
- * Two-control card for "dev window 0" (``dev-test-window``).
+ * Tabbed admin surface for every dev window in the schedule.
  *
- * Lets a super-admin (a) flip dev window 0 on/off without a redeploy and
- * (b) tune the per-user drink cap on that specific window. Dev window 0 is
- * the ONLY dev window with a configurable multi-drink cap — every other
- * dev window (``dev-window-1``, future ``dev-window-2``, …) behaves exactly
- * like a real event window and is toggled via ``OtherDevWindowsCard`` below.
+ * Mirrors the hacker portal's ``BobaPortalCard`` tab pattern (Order /
+ * Payment) so super-admins see a familiar switcher. One tab per dev
+ * window — dev window 0 (``dev-test-window``) stays first and owns the
+ * unique per-user drink-cap knob; every other dev window is a plain
+ * on/off toggle because secondary dev windows behave exactly like real
+ * event windows (1 drink + 1 momo per hacker, no shared cap).
  *
- * The on/off flag is optimistic so the switch feels instant; the cap uses a
- * discrete "Save" press so admins don't fire a write per keystroke. Both
- * knobs share the same `useToggleDevWindowMutation` (PATCH-style payload)
- * and roll back on error.
+ * Renders nothing when the schedule has no dev windows, so once the
+ * dev windows are removed after BearHacks ships this whole control
+ * surface disappears with zero follow-up cleanup.
+ */
+function DevWindowsPanel({
+  enabled,
+  actor,
+}: {
+  enabled: boolean;
+  actor: string;
+}) {
+  const listQuery = useDevWindowsListQuery(enabled);
+
+  // Canonical tab order: dev window 0 first (is_primary=true), then every
+  // secondary dev window in schedule order. Numbered labels fall out of the
+  // index so adding dev-window-2 later auto-labels as "Dev window 2".
+  const tabs = useMemo(() => {
+    const rows = listQuery.data?.dev_windows ?? [];
+    const primary = rows.filter((r) => r.is_primary);
+    const secondary = rows.filter((r) => !r.is_primary);
+    return [...primary, ...secondary].map((row, index) => ({
+      ...row,
+      numberedLabel: `Dev window ${index}`,
+    }));
+  }, [listQuery.data]);
+
+  const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
+
+  // Seed / reconcile the selected tab when the dev-window list changes.
+  // Using the "adjusting state from props" render-phase pattern instead of
+  // ``useEffect`` so the panel doesn't flash an inconsistent tab during
+  // the first commit after data arrives.
+  const firstTabId = tabs[0]?.window_id ?? null;
+  const activeStillPresent =
+    activeWindowId != null && tabs.some((t) => t.window_id === activeWindowId);
+  if (!activeStillPresent && firstTabId !== activeWindowId) {
+    setActiveWindowId(firstTabId);
+  }
+
+  const baseId = useId();
+
+  if (listQuery.isLoading) {
+    return (
+      <Card className="border-dashed">
+        <CardTitle className="text-base">Dev windows</CardTitle>
+        <CardDescription className="mt-1">Loading…</CardDescription>
+      </Card>
+    );
+  }
+
+  if (tabs.length === 0) return null;
+
+  const activeTab =
+    tabs.find((t) => t.window_id === activeWindowId) ?? tabs[0];
+
+  return (
+    <Card className="border-dashed">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <CardTitle className="text-base">Dev windows</CardTitle>
+          <CardDescription>
+            Flip dev windows on/off without a redeploy. Dev window 0
+            (<span className="font-mono">dev-test-window</span>) is the
+            ONLY dev window with a configurable multi-drink cap — every
+            other dev window behaves like a real event window (1 drink +
+            1 momo per hacker).
+          </CardDescription>
+        </div>
+
+        <DevWindowsTabList
+          baseId={baseId}
+          tabs={tabs}
+          activeWindowId={activeTab.window_id}
+          onChange={setActiveWindowId}
+        />
+
+        <div
+          id={`${baseId}-panel-${activeTab.window_id}`}
+          role="tabpanel"
+          aria-labelledby={`${baseId}-tab-${activeTab.window_id}`}
+        >
+          {activeTab.is_primary ? (
+            <DevWindow0PanelContent enabled={enabled} actor={actor} />
+          ) : (
+            <SecondaryDevWindowPanelContent
+              row={activeTab}
+              actor={actor}
+            />
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+type DevWindowTab = DevWindowListItem & { numberedLabel: string };
+
+function DevWindowsTabList({
+  baseId,
+  tabs,
+  activeWindowId,
+  onChange,
+}: {
+  baseId: string;
+  tabs: readonly DevWindowTab[];
+  activeWindowId: string;
+  onChange: (nextId: string) => void;
+}) {
+  const buttonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  // Left / Right / Home / End — WAI-ARIA tablist keyboard pattern. Matches
+  // the ``TabList`` in ``apps/me/components/boba-portal-card.tsx`` so the
+  // two surfaces behave the same for screen-reader users.
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+    const currentIndex = tabs.findIndex((t) => t.window_id === activeWindowId);
+    if (currentIndex < 0) return;
+    let nextIndex = currentIndex;
+    if (event.key === "ArrowLeft") {
+      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    } else if (event.key === "ArrowRight") {
+      nextIndex = (currentIndex + 1) % tabs.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = tabs.length - 1;
+    }
+    const nextId = tabs[nextIndex]?.window_id;
+    if (nextId) {
+      onChange(nextId);
+      buttonRefs.current[nextId]?.focus();
+    }
+  };
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Dev windows"
+      className="flex flex-wrap gap-1 rounded-(--bearhacks-radius-pill) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) p-1"
+    >
+      {tabs.map((tab) => {
+        const selected = tab.window_id === activeWindowId;
+        const base =
+          "relative flex-1 min-w-0 inline-flex min-h-(--bearhacks-touch-min) items-center justify-center gap-2 rounded-(--bearhacks-radius-pill) px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--bearhacks-focus-ring)";
+        const tone = selected
+          ? "bg-(--bearhacks-accent) text-(--bearhacks-primary) shadow-sm"
+          : "text-(--bearhacks-muted) hover:text-(--bearhacks-fg) hover:bg-(--bearhacks-surface)";
+        return (
+          <button
+            key={tab.window_id}
+            ref={(el) => {
+              buttonRefs.current[tab.window_id] = el;
+            }}
+            id={`${baseId}-tab-${tab.window_id}`}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            aria-controls={`${baseId}-panel-${tab.window_id}`}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onChange(tab.window_id)}
+            onKeyDown={onKeyDown}
+            className={`${base} ${tone}`}
+          >
+            <span className="truncate">{tab.numberedLabel}</span>
+            {/*
+             * Small "on" dot — mirrors the ``paymentNeedsAttention``
+             * pattern in the hacker portal card. Uses the success token
+             * so "enabled" reads the same colour as the per-tab status
+             * label below, and stays invisible when a window is off so
+             * the tablist doesn't get visually noisy.
+             */}
+            {tab.enabled ? (
+              <span
+                aria-hidden="true"
+                className="inline-block h-2 w-2 rounded-full bg-(--bearhacks-success-fg)"
+              />
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Enable + drink-cap controls for dev window 0 (``dev-test-window``).
+ *
+ * Dev window 0 is the ONLY dev window with a configurable multi-drink
+ * cap — it reuses the richer ``/admin/boba/settings/dev-window`` endpoint
+ * (enable flag + max_orders in one payload). The on/off flag is
+ * optimistic so the switch feels instant; the cap uses a discrete "Save"
+ * press so admins don't fire a write per keystroke.
  *
  * Real meal windows are always capped at 1/user (DB partial unique index);
  * the cap field here only affects `dev-test-window`.
  */
-function DevTestWindowToggleCard({
+function DevWindow0PanelContent({
   enabled,
   actor,
 }: {
@@ -402,310 +600,266 @@ function DevTestWindowToggleCard({
     parsedCap <= DEV_WINDOW_MAX_ORDERS_HARD_CEILING;
 
   return (
-    <Card className="border-dashed">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-1">
-            <CardTitle className="text-base">
-              Dev window 0 · <code className="font-mono">dev-test-window</code>
-            </CardTitle>
-            <CardDescription>
-              When on, dev window 0 appears in the hacker portal and admin
-              dropdowns so you can place real orders against it. Off hides it
-              without losing historical data. This is the ONLY dev window
-              that allows multiple drinks per hacker — other dev windows act
-              like real event windows (1 drink + 1 momo) and are toggled
-              below.
-            </CardDescription>
-            <p className="mt-1 text-xs text-(--bearhacks-muted)">
-              Status:{" "}
-              <span
-                className={
-                  isOn
-                    ? "font-semibold text-(--bearhacks-success-fg)"
-                    : "font-semibold text-(--bearhacks-muted)"
-                }
-              >
-                {isLoading ? "Loading…" : isOn ? "Enabled" : "Disabled"}
-              </span>
-            </p>
-          </div>
-          <Button
-            variant={isOn ? "ghost" : "primary"}
-            disabled={isLoading || isPending}
-            onClick={() => {
-              const next = !isOn;
-              toast.promise(mutation.mutateAsync({ enabled: next }), {
-                loading: next
-                  ? "Enabling dev window…"
-                  : "Disabling dev window…",
-                success: () => {
-                  log("info", {
-                    event: "admin_boba_dev_window_toggle",
-                    actor,
-                    resourceId: "dev-test-window",
-                    result: "success",
-                  });
-                  return next ? "Dev window enabled." : "Dev window disabled.";
-                },
-                error: (error) => {
-                  log("error", {
-                    event: "admin_boba_dev_window_toggle",
-                    actor,
-                    resourceId: "dev-test-window",
-                    result: "error",
-                    error,
-                  });
-                  return error instanceof ApiError
-                    ? error.message
-                    : "Failed to update dev window.";
-                },
-              });
-            }}
-          >
-            {isPending
-              ? "Saving…"
-              : isOn
-                ? "Disable dev window 0"
-                : "Enable dev window 0"}
-          </Button>
-        </div>
-
-        <div className="flex flex-col gap-2 border-t border-(--bearhacks-border) pt-4">
-          <label
-            htmlFor="dev-window-max-orders"
-            className="text-sm font-medium text-(--bearhacks-fg)"
-          >
-            Drinks/momos per hacker (dev window 0 only)
-          </label>
-          <p className="text-xs text-(--bearhacks-muted)">
-            Real meal windows and other dev windows are always capped at one
-            combined drink/momo per hacker. This cap applies to{" "}
-            <span className="font-semibold">all hackers</span> ordering against{" "}
-            <span className="font-mono">dev-test-window</span> and is not
-            available on any other dev window. Range: 1–
-            {DEV_WINDOW_MAX_ORDERS_HARD_CEILING}.
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-semibold text-(--bearhacks-fg)">
+            Dev window 0 ·{" "}
+            <code className="font-mono">dev-test-window</code>
           </p>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="flex flex-col gap-1 sm:max-w-40">
-              <input
-                id="dev-window-max-orders"
-                type="number"
-                min={1}
-                max={DEV_WINDOW_MAX_ORDERS_HARD_CEILING}
-                step={1}
-                inputMode="numeric"
-                value={capDraft}
-                disabled={isLoading || isPending}
-                onChange={(e) => setCapDraft(e.target.value)}
-                className={inputClasses}
-              />
-              {!capValid && capDraft.trim() !== "" ? (
-                <p className="text-xs text-(--bearhacks-danger)">
-                  Must be a whole number between 1 and{" "}
-                  {DEV_WINDOW_MAX_ORDERS_HARD_CEILING}.
-                </p>
-              ) : null}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="primary"
-                disabled={!capDirty || !capValid || isPending || isLoading}
-                onClick={() => {
-                  toast.promise(
-                    mutation.mutateAsync({ max_orders: parsedCap }),
-                    {
-                      loading: "Saving cap…",
-                      success: (data) => {
-                        log("info", {
-                          event: "admin_boba_dev_window_max_orders",
-                          actor,
-                          resourceId: "dev-test-window",
-                          result: "success",
-                          maxOrders: data.max_orders,
-                        });
-                        return `Cap set to ${data.max_orders} per hacker.`;
-                      },
-                      error: (error) => {
-                        log("error", {
-                          event: "admin_boba_dev_window_max_orders",
-                          actor,
-                          resourceId: "dev-test-window",
-                          result: "error",
-                          error,
-                        });
-                        return error instanceof ApiError
-                          ? error.message
-                          : "Failed to update cap.";
-                      },
-                    },
-                  );
-                }}
-              >
-                {isPending && capDirty ? "Saving…" : "Save cap"}
-              </Button>
-              {capDirty ? (
-                <Button
-                  variant="ghost"
-                  disabled={isPending}
-                  onClick={() => setCapDraft(String(serverCap))}
-                >
-                  Reset
-                </Button>
-              ) : null}
-            </div>
-          </div>
           <p className="text-xs text-(--bearhacks-muted)">
-            Currently saved:{" "}
-            <span className="font-semibold text-(--bearhacks-fg)">
-              {isLoading ? "…" : `${serverCap} item${serverCap === 1 ? "" : "s"}`}
-            </span>{" "}
-            per hacker.
+            When on, dev window 0 appears in the hacker portal and admin
+            dropdowns so you can place real orders against it. Off hides
+            it without losing historical data. This is the ONLY dev
+            window that allows multiple drinks per hacker — other dev
+            window tabs behave like real event windows (1 drink + 1
+            momo).
+          </p>
+          <p className="mt-1 text-xs text-(--bearhacks-muted)">
+            Status:{" "}
+            <span
+              className={
+                isOn
+                  ? "font-semibold text-(--bearhacks-success-fg)"
+                  : "font-semibold text-(--bearhacks-muted)"
+              }
+            >
+              {isLoading ? "Loading…" : isOn ? "Enabled" : "Disabled"}
+            </span>
           </p>
         </div>
+        <Button
+          variant={isOn ? "ghost" : "primary"}
+          disabled={isLoading || isPending}
+          onClick={() => {
+            const next = !isOn;
+            toast.promise(mutation.mutateAsync({ enabled: next }), {
+              loading: next
+                ? "Enabling dev window…"
+                : "Disabling dev window…",
+              success: () => {
+                log("info", {
+                  event: "admin_boba_dev_window_toggle",
+                  actor,
+                  resourceId: "dev-test-window",
+                  result: "success",
+                });
+                return next ? "Dev window enabled." : "Dev window disabled.";
+              },
+              error: (error) => {
+                log("error", {
+                  event: "admin_boba_dev_window_toggle",
+                  actor,
+                  resourceId: "dev-test-window",
+                  result: "error",
+                  error,
+                });
+                return error instanceof ApiError
+                  ? error.message
+                  : "Failed to update dev window.";
+              },
+            });
+          }}
+        >
+          {isPending
+            ? "Saving…"
+            : isOn
+              ? "Disable dev window 0"
+              : "Enable dev window 0"}
+        </Button>
       </div>
-    </Card>
+
+      <div className="flex flex-col gap-2 border-t border-(--bearhacks-border) pt-4">
+        <label
+          htmlFor="dev-window-max-orders"
+          className="text-sm font-medium text-(--bearhacks-fg)"
+        >
+          Drinks/momos per hacker (dev window 0 only)
+        </label>
+        <p className="text-xs text-(--bearhacks-muted)">
+          Real meal windows and other dev windows are always capped at
+          one combined drink/momo per hacker. This cap applies to{" "}
+          <span className="font-semibold">all hackers</span> ordering
+          against <span className="font-mono">dev-test-window</span> and
+          is not available on any other dev window. Range: 1–
+          {DEV_WINDOW_MAX_ORDERS_HARD_CEILING}.
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="flex flex-col gap-1 sm:max-w-40">
+            <input
+              id="dev-window-max-orders"
+              type="number"
+              min={1}
+              max={DEV_WINDOW_MAX_ORDERS_HARD_CEILING}
+              step={1}
+              inputMode="numeric"
+              value={capDraft}
+              disabled={isLoading || isPending}
+              onChange={(e) => setCapDraft(e.target.value)}
+              className={inputClasses}
+            />
+            {!capValid && capDraft.trim() !== "" ? (
+              <p className="text-xs text-(--bearhacks-danger)">
+                Must be a whole number between 1 and{" "}
+                {DEV_WINDOW_MAX_ORDERS_HARD_CEILING}.
+              </p>
+            ) : null}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="primary"
+              disabled={!capDirty || !capValid || isPending || isLoading}
+              onClick={() => {
+                toast.promise(
+                  mutation.mutateAsync({ max_orders: parsedCap }),
+                  {
+                    loading: "Saving cap…",
+                    success: (data) => {
+                      log("info", {
+                        event: "admin_boba_dev_window_max_orders",
+                        actor,
+                        resourceId: "dev-test-window",
+                        result: "success",
+                        maxOrders: data.max_orders,
+                      });
+                      return `Cap set to ${data.max_orders} per hacker.`;
+                    },
+                    error: (error) => {
+                      log("error", {
+                        event: "admin_boba_dev_window_max_orders",
+                        actor,
+                        resourceId: "dev-test-window",
+                        result: "error",
+                        error,
+                      });
+                      return error instanceof ApiError
+                        ? error.message
+                        : "Failed to update cap.";
+                    },
+                  },
+                );
+              }}
+            >
+              {isPending && capDirty ? "Saving…" : "Save cap"}
+            </Button>
+            {capDirty ? (
+              <Button
+                variant="ghost"
+                disabled={isPending}
+                onClick={() => setCapDraft(String(serverCap))}
+              >
+                Reset
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        <p className="text-xs text-(--bearhacks-muted)">
+          Currently saved:{" "}
+          <span className="font-semibold text-(--bearhacks-fg)">
+            {isLoading ? "…" : `${serverCap} item${serverCap === 1 ? "" : "s"}`}
+          </span>{" "}
+          per hacker.
+        </p>
+      </div>
+    </div>
   );
 }
 
 /**
- * Enable/disable every *secondary* dev window (dev-window-1, future
- * dev-window-2, …) from one place.
+ * Plain on/off toggle for a single *secondary* dev window (dev-window-1,
+ * future dev-window-2, …).
  *
- * Each row is a simple on/off toggle — secondary dev windows behave like
- * real event windows (1 drink + 1 momo per hacker, no shared cap), so there
- * is no per-user cap to configure here. That knob stays on the dev window 0
- * card above. Dev window 0 itself is intentionally excluded from this list
- * because it already has its own richer card; showing a duplicate toggle
- * would make it ambiguous which one wins.
- *
- * Renders nothing when the schedule has no secondary dev windows, so once
- * the dev windows are deleted after BearHacks ships, this card disappears
- * on its own with zero follow-up cleanup.
+ * Secondary dev windows behave exactly like real event windows (1 drink
+ * + 1 momo per hacker, no shared cap), so there is no per-user cap to
+ * configure — just a single enable switch. The richer cap knob lives on
+ * dev window 0's panel and is intentionally not duplicated here.
  */
-function OtherDevWindowsCard({
-  enabled,
+function SecondaryDevWindowPanelContent({
+  row,
   actor,
 }: {
-  enabled: boolean;
+  row: DevWindowListItem;
   actor: string;
 }) {
-  const listQuery = useDevWindowsListQuery(enabled);
   const mutation = useToggleDevWindowByIdMutation();
-
-  const secondaryWindows = useMemo(
-    () => (listQuery.data?.dev_windows ?? []).filter((w) => !w.is_primary),
-    [listQuery.data],
-  );
-
-  if (listQuery.isLoading) {
-    return (
-      <Card className="border-dashed">
-        <CardTitle className="text-base">Other dev windows</CardTitle>
-        <CardDescription className="mt-1">Loading…</CardDescription>
-      </Card>
-    );
-  }
-
-  // Nothing to manage — hide the card entirely rather than show an empty
-  // state, so the admin UI stays clean once these windows are removed.
-  if (secondaryWindows.length === 0) return null;
+  const isPending =
+    mutation.isPending && mutation.variables?.windowId === row.window_id;
 
   return (
-    <Card className="border-dashed">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <CardTitle className="text-base">Other dev windows</CardTitle>
-          <CardDescription>
-            Additional dev/test windows that behave like real event windows
-            (1 drink + 1 momo per hacker, no shared cap). Flip any of them on
-            to smoke-test real-event semantics without waiting for{" "}
-            <span className="font-mono">fri-dinner</span> to open. Off hides
-            them from the hacker portal and admin dropdowns without losing
-            historical data.
-          </CardDescription>
-        </div>
-        <ul className="flex flex-col divide-y divide-(--bearhacks-border)">
-          {secondaryWindows.map((row) => {
-            const isPending =
-              mutation.isPending && mutation.variables?.windowId === row.window_id;
-            return (
-              <li
-                key={row.window_id}
-                className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex flex-col gap-0.5">
-                  <p className="text-sm font-medium text-(--bearhacks-fg)">
-                    {row.label}
-                  </p>
-                  <p className="text-xs text-(--bearhacks-muted)">
-                    <span className="font-mono">{row.window_id}</span> ·
-                    Status:{" "}
-                    <span
-                      className={
-                        row.enabled
-                          ? "font-semibold text-(--bearhacks-success-fg)"
-                          : "font-semibold text-(--bearhacks-muted)"
-                      }
-                    >
-                      {row.enabled ? "Enabled" : "Disabled"}
-                    </span>
-                  </p>
-                </div>
-                <Button
-                  variant={row.enabled ? "ghost" : "primary"}
-                  disabled={mutation.isPending}
-                  onClick={() => {
-                    const next = !row.enabled;
-                    toast.promise(
-                      mutation.mutateAsync({
-                        windowId: row.window_id,
-                        enabled: next,
-                      }),
-                      {
-                        loading: next
-                          ? `Enabling ${row.window_id}…`
-                          : `Disabling ${row.window_id}…`,
-                        success: () => {
-                          log("info", {
-                            event: "admin_boba_dev_window_enable",
-                            actor,
-                            resourceId: row.window_id,
-                            result: "success",
-                            enabled: next,
-                          });
-                          return next
-                            ? `${row.label} enabled.`
-                            : `${row.label} disabled.`;
-                        },
-                        error: (error) => {
-                          log("error", {
-                            event: "admin_boba_dev_window_enable",
-                            actor,
-                            resourceId: row.window_id,
-                            result: "error",
-                            error,
-                          });
-                          return error instanceof ApiError
-                            ? error.message
-                            : "Failed to update dev window.";
-                        },
-                      },
-                    );
-                  }}
-                >
-                  {isPending
-                    ? "Saving…"
-                    : row.enabled
-                      ? "Disable"
-                      : "Enable"}
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-1">
+        <p className="text-sm font-semibold text-(--bearhacks-fg)">
+          {row.label}
+        </p>
+        <p className="text-xs text-(--bearhacks-muted)">
+          Behaves like a real event window (1 drink + 1 momo per hacker,
+          no shared cap). Flip on to smoke-test real-event semantics
+          without waiting for <span className="font-mono">fri-dinner</span>
+          {" "}to open. Off hides it from the hacker portal and admin
+          dropdowns without losing historical data.
+        </p>
+        <p className="mt-1 text-xs text-(--bearhacks-muted)">
+          <span className="font-mono">{row.window_id}</span> · Status:{" "}
+          <span
+            className={
+              row.enabled
+                ? "font-semibold text-(--bearhacks-success-fg)"
+                : "font-semibold text-(--bearhacks-muted)"
+            }
+          >
+            {row.enabled ? "Enabled" : "Disabled"}
+          </span>
+        </p>
       </div>
-    </Card>
+      <Button
+        variant={row.enabled ? "ghost" : "primary"}
+        disabled={mutation.isPending}
+        onClick={() => {
+          const next = !row.enabled;
+          toast.promise(
+            mutation.mutateAsync({
+              windowId: row.window_id,
+              enabled: next,
+            }),
+            {
+              loading: next
+                ? `Enabling ${row.window_id}…`
+                : `Disabling ${row.window_id}…`,
+              success: () => {
+                log("info", {
+                  event: "admin_boba_dev_window_enable",
+                  actor,
+                  resourceId: row.window_id,
+                  result: "success",
+                  enabled: next,
+                });
+                return next
+                  ? `${row.label} enabled.`
+                  : `${row.label} disabled.`;
+              },
+              error: (error) => {
+                log("error", {
+                  event: "admin_boba_dev_window_enable",
+                  actor,
+                  resourceId: row.window_id,
+                  result: "error",
+                  error,
+                });
+                return error instanceof ApiError
+                  ? error.message
+                  : "Failed to update dev window.";
+              },
+            },
+          );
+        }}
+      >
+        {isPending
+          ? "Saving…"
+          : row.enabled
+            ? "Disable"
+            : "Enable"}
+      </Button>
+    </div>
   );
 }
 

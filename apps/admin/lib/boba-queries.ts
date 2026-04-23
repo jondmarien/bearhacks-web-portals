@@ -149,8 +149,9 @@ export type DevWindowSettingPatch = Partial<
  * Each dev window in the schedule gets one entry. ``is_primary`` marks
  * ``dev-test-window`` ("dev window 0"), which has a richer settings model
  * (a configurable multi-drink cap) than the secondary dev windows — the
- * admin UI keeps the cap control on the existing ``DevTestWindowToggleCard``
- * and only uses these rows to render enable/disable toggles for the rest.
+ * admin UI keeps the cap control on dev window 0's tab (rendered via
+ * ``DevWindow0PanelContent``) and only uses these rows to drive the
+ * tab list and the enable/disable toggles on every other tab.
  */
 export type DevWindowListItem = {
   window_id: string;
