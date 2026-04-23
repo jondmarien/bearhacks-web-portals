@@ -849,7 +849,7 @@ function PaymentGroupRow({
                 })();
               }}
             >
-              {pendingThisGroup ? "Undoing…" : "Undo both"}
+              {pendingThisGroup ? "Marking…" : "Mark unsent"}
             </Button>
           </div>
         )
