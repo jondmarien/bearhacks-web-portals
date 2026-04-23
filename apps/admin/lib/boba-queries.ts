@@ -144,6 +144,26 @@ export type DevWindowSettingPatch = Partial<
 >;
 
 /**
+ * Row shape returned by ``GET /admin/boba/settings/dev-windows``.
+ *
+ * Each dev window in the schedule gets one entry. ``is_primary`` marks
+ * ``dev-test-window`` ("dev window 0"), which has a richer settings model
+ * (a configurable multi-drink cap) than the secondary dev windows — the
+ * admin UI keeps the cap control on the existing ``DevTestWindowToggleCard``
+ * and only uses these rows to render enable/disable toggles for the rest.
+ */
+export type DevWindowListItem = {
+  window_id: string;
+  label: string;
+  enabled: boolean;
+  is_primary: boolean;
+};
+
+export type DevWindowListResponse = {
+  dev_windows: DevWindowListItem[];
+};
+
+/**
  * Per-order payment row from ``GET /admin/boba/payments``.
  *
  * Post per-order migration, each row covers exactly one drink or momo
@@ -223,6 +243,8 @@ export const adminBobaKeys = {
     [...adminBobaKeys.all, "pickup", mealWindowId] as const,
   devWindowSetting: () =>
     [...adminBobaKeys.all, "settings", "dev-window"] as const,
+  devWindowList: () =>
+    [...adminBobaKeys.all, "settings", "dev-windows"] as const,
   payments: (params: AdminPaymentsQueryParams) =>
     [
       ...adminBobaKeys.all,
@@ -371,6 +393,85 @@ export function useToggleDevWindowMutation(): UseMutationResult<
       }
     },
     onSettled: () => {
+      void qc.invalidateQueries({ queryKey: adminBobaKeys.devWindowSetting() });
+      void qc.invalidateQueries({ queryKey: adminBobaKeys.windows() });
+    },
+  });
+}
+
+/**
+ * Lists every dev window in the schedule with its current enabled flag.
+ *
+ * Backs the "Other dev windows" admin card. Dev window 0
+ * (``dev-test-window``) is also included so the UI can render a consistent
+ * list, but its enable toggle is still handled via the richer
+ * ``useToggleDevWindowMutation`` above — this query's mutation is only used
+ * for secondary dev windows (``dev-window-1``, future dev-window-2, …).
+ */
+export function useDevWindowsListQuery(
+  enabled: boolean,
+): UseQueryResult<DevWindowListResponse> {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: adminBobaKeys.devWindowList(),
+    queryFn: () =>
+      (client as ApiClient).fetchJson<DevWindowListResponse>(
+        "/admin/boba/settings/dev-windows",
+      ),
+    enabled: enabled && Boolean(client),
+  });
+}
+
+/**
+ * Per-window enable/disable for a single dev window.
+ *
+ * Optimistically flips the matching row in the cached list so the toggle
+ * feels instant; on error the previous list is restored. Also invalidates
+ * the admin windows and payments caches because flipping a dev window
+ * changes what appears in the meal-window selector.
+ */
+export function useToggleDevWindowByIdMutation(): UseMutationResult<
+  DevWindowListItem,
+  Error,
+  { windowId: string; enabled: boolean },
+  { previous: DevWindowListResponse | undefined }
+> {
+  const client = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ windowId, enabled: nextEnabled }) =>
+      (client as ApiClient).fetchJson<DevWindowListItem>(
+        `/admin/boba/settings/dev-windows/${encodeURIComponent(windowId)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ enabled: nextEnabled }),
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    onMutate: async ({ windowId, enabled: nextEnabled }) => {
+      await qc.cancelQueries({ queryKey: adminBobaKeys.devWindowList() });
+      const previous = qc.getQueryData<DevWindowListResponse>(
+        adminBobaKeys.devWindowList(),
+      );
+      if (previous) {
+        qc.setQueryData<DevWindowListResponse>(adminBobaKeys.devWindowList(), {
+          dev_windows: previous.dev_windows.map((row) =>
+            row.window_id === windowId ? { ...row, enabled: nextEnabled } : row,
+          ),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        qc.setQueryData<DevWindowListResponse>(
+          adminBobaKeys.devWindowList(),
+          context.previous,
+        );
+      }
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: adminBobaKeys.devWindowList() });
       void qc.invalidateQueries({ queryKey: adminBobaKeys.devWindowSetting() });
       void qc.invalidateQueries({ queryKey: adminBobaKeys.windows() });
     },
