@@ -34,6 +34,7 @@ type ClaimStatus = {
 
 type Profile = {
   id: string;
+  qr_id?: string | null;
   display_name?: string | null;
   bio?: string | null;
   linkedin_url?: string | null;
@@ -309,6 +310,28 @@ export default function ClaimQrPage() {
                 </CardDescription>
               </CardHeader>
               <DashboardOAuthButtons />
+            </Card>
+          ) : myProfileQuery.isLoading ? (
+            <p className="text-sm text-(--bearhacks-muted)">
+              Checking your QR card…
+            </p>
+          ) : myProfileQuery.data?.qr_id ? (
+            <Card className="bg-(--bearhacks-cream) border-b-4 border-b-(--bearhacks-text-marketing)">
+              <CardHeader>
+                <CardTitle className="text-(--bearhacks-text-marketing)">
+                  You've already claimed a QR
+                </CardTitle>
+                <CardDescription className="text-(--bearhacks-text-marketing)/80">
+                  Each attendee can only claim one QR. Here's the card that's
+                  linked to your account.
+                </CardDescription>
+              </CardHeader>
+              <Link
+                href={`/qr-card/${myProfileQuery.data.qr_id}`}
+                className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-pill) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-6 py-3 text-sm font-semibold text-(--bearhacks-fg) no-underline shadow-(--bearhacks-shadow-card) hover:bg-(--bearhacks-cream)"
+              >
+                View my QR card →
+              </Link>
             </Card>
           ) : (
             <Card>
