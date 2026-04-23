@@ -25,6 +25,15 @@ type Props = {
   etransferEmail: string;
   /** Discount note shown under the total ("40% off Gong Cha menu, taxes included"). */
   discountNote: string;
+  /**
+   * Rendering mode:
+   *   - ``"card"`` (default): wraps the contents in a ``<Card>`` surface
+   *     with a status-driven border tone.
+   *   - ``"section"``: renders the header + body inline, without the
+   *     outer card shell or status-tone border. Used inside
+   *     ``BobaPortalCard`` so the tabbed portal owns the single surface.
+   */
+  variant?: "card" | "section";
 };
 
 /**
@@ -43,6 +52,7 @@ export function BobaPaymentCard({
   recipientName,
   etransferEmail,
   discountNote,
+  variant = "card",
 }: Props) {
   const submit = useSubmitBobaPaymentMutation();
   const undo = useUndoBobaPaymentMutation();
@@ -120,26 +130,23 @@ export function BobaPaymentCard({
     }
   };
 
-  return (
-    <Card
-      className={paymentToneClass(payment.status, {
-        drift: hasDriftOnConfirmed,
-      })}
-    >
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between gap-3">
-          <span>Payment</span>
-          <PaymentStatusPill
-            status={payment.status}
-            hasDrift={hasDriftOnConfirmed}
-          />
-        </CardTitle>
-        <CardDescription>
-          Bundle covers every drink + momo you placed for this meal window.
-        </CardDescription>
-      </CardHeader>
+  const header = (
+    <CardHeader>
+      <CardTitle className="flex items-center justify-between gap-3">
+        <span>Payment</span>
+        <PaymentStatusPill
+          status={payment.status}
+          hasDrift={hasDriftOnConfirmed}
+        />
+      </CardTitle>
+      <CardDescription>
+        Bundle covers every drink + momo you placed for this meal window.
+      </CardDescription>
+    </CardHeader>
+  );
 
-      <div className="flex flex-col gap-3">
+  const body = (
+    <div className="flex flex-col gap-3">
         <div className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) px-4 py-3">
           <p className="text-xs uppercase tracking-[0.08em] text-(--bearhacks-muted)">
             {hasDriftOnConfirmed ? "Additional to send" : "Total to send"}
@@ -265,6 +272,28 @@ export function BobaPaymentCard({
           </p>
         ) : null}
       </div>
+  );
+
+  if (variant === "section") {
+    // Section mode: the parent (``BobaPortalCard``) owns the outer shell,
+    // so we drop the status-tone border. The ``PaymentStatusPill`` in the
+    // inline header still communicates payment state at a glance.
+    return (
+      <div className="flex flex-col">
+        {header}
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Card
+      className={paymentToneClass(payment.status, {
+        drift: hasDriftOnConfirmed,
+      })}
+    >
+      {header}
+      {body}
     </Card>
   );
 }

@@ -28,6 +28,15 @@ type Props = {
    * floating action underneath the card.
    */
   headerAction?: React.ReactNode;
+  /**
+   * Rendering mode:
+   *   - ``"card"`` (default): wraps the contents in a ``<Card>`` surface
+   *     with the open-window accent ring. Used standalone on ``/boba``.
+   *   - ``"section"``: renders the header + body inline, without the
+   *     outer card shell or ring. Used inside ``BobaPortalCard`` so the
+   *     tabbed portal owns the single surrounding surface.
+   */
+  variant?: "card" | "section";
 };
 
 /**
@@ -45,6 +54,7 @@ export function BobaStatusCard({
   userId,
   hideEditCta = false,
   headerAction,
+  variant = "card",
 }: Props) {
   const windowsQuery = useBobaWindowsQuery();
   const orderQuery = useMyBobaOrderQuery(userId);
@@ -106,6 +116,48 @@ export function BobaStatusCard({
   const showQuota = isOpen && maxOrders > 1;
   const canPlaceMore = placedCount < maxOrders;
 
+  const header = (
+    <CardHeader className={headerAction ? "pr-16" : ""}>
+      <CardTitle>
+        <span className="bg-(--bearhacks-cream) px-1 rounded-sm">Boba &amp; Momo</span> ordering
+      </CardTitle>
+      <CardDescription>
+        Pre-order your drink/food during meal windows so the food team can
+        batch pickups.
+      </CardDescription>
+    </CardHeader>
+  );
+
+  const body = (
+    <>
+      <StatusBody
+        status={status}
+        hideEditCta={hideEditCta}
+        showQuota={showQuota}
+        placedCount={placedCount}
+        maxOrders={maxOrders}
+        canPlaceMore={canPlaceMore}
+      />
+      {loadError ? (
+        <p className="mt-3 text-xs text-(--bearhacks-danger)">{loadError.message}</p>
+      ) : null}
+    </>
+  );
+
+  if (variant === "section") {
+    // Section mode: the parent (``BobaPortalCard``) owns the outer shell.
+    // We intentionally drop the open-window ring because the portal card
+    // itself anchors the page; emphasising an inner sub-section would
+    // create a card-inside-a-card visual. ``headerAction`` is unsupported
+    // here — nobody combines it with the portal — so we ignore it.
+    return (
+      <div className="flex flex-col">
+        {header}
+        {body}
+      </div>
+    );
+  }
+
   return (
     <Card className={cardClassName}>
       {headerAction ? (
@@ -117,28 +169,8 @@ export function BobaStatusCard({
         // mobile widths.
         <div className="absolute top-5 right-5 z-10">{headerAction}</div>
       ) : null}
-      <CardHeader className={headerAction ? "pr-16" : ""}>
-        <CardTitle>
-          <span className="bg-(--bearhacks-cream) px-1 rounded-sm">Boba &amp; Momo</span> ordering
-        </CardTitle>
-        <CardDescription>
-          Pre-order your drink/food during meal windows so the food team can
-          batch pickups.
-        </CardDescription>
-      </CardHeader>
-
-      <StatusBody
-        status={status}
-        hideEditCta={hideEditCta}
-        showQuota={showQuota}
-        placedCount={placedCount}
-        maxOrders={maxOrders}
-        canPlaceMore={canPlaceMore}
-      />
-
-      {loadError ? (
-        <p className="mt-3 text-xs text-(--bearhacks-danger)">{loadError.message}</p>
-      ) : null}
+      {header}
+      {body}
     </Card>
   );
 }

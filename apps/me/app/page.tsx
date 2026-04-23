@@ -9,8 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
-import { BobaPaymentCard } from "@/components/boba-payment-card";
-import { BobaStatusCard } from "@/components/boba-status-card";
+import { BobaPortalCard } from "@/components/boba-portal-card";
 import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -302,22 +301,16 @@ function HomePageContent() {
         </div>
       </div>
 
-      <BobaStatusCard isAuthReady={Boolean(auth?.isAuthReady)} userId={userId} />
-
-      <div
-        ref={paymentSectionRef}
-        className={`scroll-mt-6 transition-shadow duration-500 ${
-          paymentHighlighted
-            ? "rounded-(--bearhacks-radius-lg) ring-4 ring-(--bearhacks-accent)/70"
-            : ""
-        }`}
-      >
-        <BobaPaymentCard
+      <div ref={paymentSectionRef} className="scroll-mt-6">
+        <BobaPortalCard
+          isAuthReady={Boolean(auth?.isAuthReady)}
+          userId={userId}
           payment={myOrderQuery.data?.payment ?? null}
           mealWindowId={activeWindow?.id ?? null}
           recipientName={menuQuery.data?.payment.etransfer_recipient_name ?? ""}
           etransferEmail={menuQuery.data?.payment.etransfer_email ?? ""}
           discountNote={menuQuery.data?.payment.discount_note ?? ""}
+          highlightPayment={paymentHighlighted}
         />
       </div>
 
