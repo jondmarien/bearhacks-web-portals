@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { BobaPaymentCard } from "@/components/boba-payment-card";
 import { BobaStatusCard } from "@/components/boba-status-card";
@@ -56,20 +56,37 @@ export function BobaPortalCard({
     highlightPayment && hasPaymentPanel ? "payment" : "order",
   );
 
-  // Deep-link auto-switch: when the parent sets ``highlightPayment`` true
+  // Prev-trackers for the two prop-driven state reconciliations below.
+  // This is the React-recommended "Adjusting state when a prop changes"
+  // pattern (see https://react.dev/learn/you-might-not-need-an-effect),
+  // preferred over ``useEffect`` + ``setState`` because React reconciles
+  // in the same commit — no wasted render from the stale state + fresh
+  // props combo, and no ``react-hooks/set-state-in-effect`` violation.
+  const [prevHighlight, setPrevHighlight] = useState(highlightPayment);
+  const [prevHasPaymentPanel, setPrevHasPaymentPanel] = useState(hasPaymentPanel);
+
+  // Deep-link auto-switch: when the parent flips ``highlightPayment`` on
   // (the ``/?payment=highlight`` flow) and the payment panel is ready,
-  // jump to it. Running on every change of either input means a late-
-  // arriving payment bundle still routes the hacker to the right tab.
-  useEffect(() => {
-    if (highlightPayment && hasPaymentPanel) setPanel("payment");
-  }, [highlightPayment, hasPaymentPanel]);
+  // jump to it. We only react to the *transition* into the highlight
+  // state — otherwise the user couldn't click back to Order while the
+  // parent is still holding the highlight flag true.
+  if (highlightPayment !== prevHighlight) {
+    setPrevHighlight(highlightPayment);
+    if (highlightPayment && hasPaymentPanel) {
+      setPanel("payment");
+    }
+  }
 
   // Guard against the payment panel disappearing mid-session (e.g. every
   // order in the window was cancelled) — drop back to Order so the tab
-  // bar never sits on an empty panel.
-  useEffect(() => {
-    if (panel === "payment" && !hasPaymentPanel) setPanel("order");
-  }, [panel, hasPaymentPanel]);
+  // bar never sits on an empty panel. Gated on ``hasPaymentPanel``
+  // changing so user-initiated tab switches aren't clobbered.
+  if (hasPaymentPanel !== prevHasPaymentPanel) {
+    setPrevHasPaymentPanel(hasPaymentPanel);
+    if (!hasPaymentPanel && panel === "payment") {
+      setPanel("order");
+    }
+  }
 
   // Small "action needed" dot on the Payment tab. Triggers when the
   // hacker still owes money: the bundle is unpaid, or the bundle was
