@@ -17,14 +17,13 @@ import { ApiError } from "@bearhacks/api-client";
 import {
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
 import type { User } from "@supabase/supabase-js";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSupabase } from "@/app/providers";
 import { Button } from "@/components/ui/button";
@@ -260,15 +259,20 @@ function PaymentItemsCell({ items }: { items: readonly PaymentItem[] }) {
 
 type FilterValues = {
   meal_window_id?: string;
-  status?: PaymentStatus;
-  search: string;
+  /** Multi-select. Empty set means "all statuses". */
+  statuses: ReadonlySet<PaymentStatus>;
 };
 
 const DEFAULT_FILTER: FilterValues = {
   meal_window_id: undefined,
-  status: undefined,
-  search: "",
+  statuses: new Set<PaymentStatus>(),
 };
+
+/**
+ * Page size for server-side pagination. Matches the super-admin profile
+ * directory so the two admin consoles read as one product.
+ */
+const PAGE_SIZE = 25;
 
 export default function AdminBobaPaymentsPage() {
   const supabase = useSupabase();
@@ -277,7 +281,31 @@ export default function AdminBobaPaymentsPage() {
 
   const [user, setUser] = useState<User | null>(null);
   const [filters, setFilters] = useState<FilterValues>(DEFAULT_FILTER);
-  const deferredSearch = useDeferredValue(filters.search);
+  const [draftSearch, setDraftSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [page, setPage] = useState(0);
+
+  // Stable array for the query key + URLSearchParams. Sets have identity
+  // equality, but a sorted array is structurally comparable.
+  const selectedStatusesKey = useMemo(
+    () => [...filters.statuses].sort() as PaymentStatus[],
+    [filters.statuses],
+  );
+
+  // Debounced live search mirroring the profile directory: 250ms of
+  // keyboard quiet promotes `draftSearch` to `appliedSearch` (which keys
+  // the query). Pressing Enter or clicking Apply bypasses the delay by
+  // setting both synchronously in the form's `onSubmit`. The async
+  // `setState` inside the timer sidesteps React 19's
+  // `react-hooks/set-state-in-effect` rule.
+  useEffect(() => {
+    if (draftSearch === appliedSearch) return;
+    const timer = window.setTimeout(() => {
+      setAppliedSearch(draftSearch);
+      setPage(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [draftSearch, appliedSearch]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -305,7 +333,10 @@ export default function AdminBobaPaymentsPage() {
   const paymentsQuery = useAdminPaymentsQuery(
     {
       meal_window_id: focusedWindowId,
-      status: filters.status,
+      statuses: selectedStatusesKey,
+      search: appliedSearch,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
     },
     isSuper,
   );
@@ -350,7 +381,39 @@ export default function AdminBobaPaymentsPage() {
           windows={windowsQuery.data}
           values={filters}
           fallbackWindowId={fallbackWindowId}
-          onChange={setFilters}
+          draftSearch={draftSearch}
+          onDraftSearchChange={setDraftSearch}
+          // `page` resets live with each interaction that could change the
+          // result set (filter toggles, window change, search apply). We
+          // keep it in event handlers rather than a `useEffect` so React
+          // 19's `set-state-in-effect` rule stays happy.
+          onToggleStatus={(s) => {
+            setFilters((prev) => {
+              const next = new Set(prev.statuses);
+              if (next.has(s)) next.delete(s);
+              else next.add(s);
+              return { ...prev, statuses: next };
+            });
+            setPage(0);
+          }}
+          onClearStatuses={() => {
+            setFilters((prev) => ({ ...prev, statuses: new Set() }));
+            setPage(0);
+          }}
+          onChangeWindow={(windowId) => {
+            setFilters((prev) => ({ ...prev, meal_window_id: windowId }));
+            setPage(0);
+          }}
+          onApplySearch={() => {
+            setAppliedSearch(draftSearch);
+            setPage(0);
+          }}
+          onReset={() => {
+            setFilters(DEFAULT_FILTER);
+            setDraftSearch("");
+            setAppliedSearch("");
+            setPage(0);
+          }}
         />
       ) : null}
 
@@ -364,7 +427,10 @@ export default function AdminBobaPaymentsPage() {
       {isSuper ? (
         <PaymentsTableCard
           query={paymentsQuery}
-          search={deferredSearch}
+          page={page}
+          pageSize={PAGE_SIZE}
+          onPrev={() => setPage((p) => Math.max(0, p - 1))}
+          onNext={() => setPage((p) => p + 1)}
           onConfirm={async (row) => {
             const ok = await confirm({
               title: `Confirm $${(row.expected_cents / 100).toFixed(2)} from ${row.hacker_name}?`,
@@ -522,85 +588,114 @@ type FilterBarProps = {
   windows: WindowsResponse;
   values: FilterValues;
   fallbackWindowId: string | undefined;
-  onChange: (next: FilterValues) => void;
+  draftSearch: string;
+  onDraftSearchChange: (next: string) => void;
+  onToggleStatus: (status: PaymentStatus) => void;
+  onClearStatuses: () => void;
+  onChangeWindow: (windowId: string | undefined) => void;
+  onApplySearch: () => void;
+  onReset: () => void;
 };
 
 function FilterBar({
   windows,
   values,
   fallbackWindowId,
-  onChange,
+  draftSearch,
+  onDraftSearchChange,
+  onToggleStatus,
+  onClearStatuses,
+  onChangeWindow,
+  onApplySearch,
+  onReset,
 }: FilterBarProps) {
   return (
-    <Card>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <FilterField label="Meal window" htmlFor="filter-meal-window">
-          <select
-            id="filter-meal-window"
-            value={values.meal_window_id ?? fallbackWindowId ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...values,
-                meal_window_id: e.target.value || undefined,
-              })
-            }
-            className={selectClasses}
-          >
-            {windows.windows.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.label}
-              </option>
-            ))}
-          </select>
-        </FilterField>
-
-        <FilterField label="Status" htmlFor="filter-status">
-          <select
-            id="filter-status"
-            value={values.status ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...values,
-                status:
-                  (e.target.value || undefined) as PaymentStatus | undefined,
-              })
-            }
-            className={selectClasses}
-          >
-            <option value="">All statuses</option>
-            {STATUS_VALUES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </FilterField>
-
-        <FilterField
-          label="Search (name, email, reference, notes)"
-          htmlFor="filter-search"
+    <Card className="flex flex-col gap-4">
+      <FilterField label="Meal window" htmlFor="filter-meal-window">
+        <select
+          id="filter-meal-window"
+          value={values.meal_window_id ?? fallbackWindowId ?? ""}
+          onChange={(e) => onChangeWindow(e.target.value || undefined)}
+          className={selectClasses}
         >
-          <input
-            id="filter-search"
-            type="search"
-            value={values.search}
-            placeholder="Type to filter the table…"
-            onChange={(e) => onChange({ ...values, search: e.target.value })}
-            className={inputClasses}
-          />
-        </FilterField>
+          {windows.windows.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.label}
+            </option>
+          ))}
+        </select>
+      </FilterField>
+
+      <div className="flex flex-col gap-2">
+        <span
+          id="payments-status-filter-label"
+          className="text-sm font-medium text-(--bearhacks-title)"
+        >
+          Filter by status
+        </span>
+        <div
+          role="group"
+          aria-labelledby="payments-status-filter-label"
+          className="flex flex-wrap gap-2"
+        >
+          {STATUS_VALUES.map((s) => {
+            const active = values.statuses.has(s);
+            return (
+              <Button
+                key={s}
+                type="button"
+                variant={active ? "primary" : "ghost"}
+                aria-pressed={active}
+                onClick={() => onToggleStatus(s)}
+              >
+                {STATUS_LABELS[s]}
+              </Button>
+            );
+          })}
+          {values.statuses.size > 0 ? (
+            <Button type="button" variant="ghost" onClick={onClearStatuses}>
+              Clear statuses
+            </Button>
+          ) : null}
+        </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+      <form
+        className="flex flex-col gap-3 sm:flex-row sm:items-end"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onApplySearch();
+        }}
+      >
+        <div className="min-w-0 flex-1">
+          <FilterField
+            label="Search (name, email, reference, notes, item details)"
+            htmlFor="filter-search"
+          >
+            <input
+              id="filter-search"
+              type="search"
+              value={draftSearch}
+              placeholder="Type to filter…"
+              onChange={(e) => onDraftSearchChange(e.target.value)}
+              className={inputClasses}
+              autoComplete="off"
+            />
+            <span className="text-xs text-(--bearhacks-muted)">
+              Filters live as you type — Enter or Apply skips the 250ms delay.
+            </span>
+          </FilterField>
+        </div>
+        <Button type="submit" variant="primary">
+          Apply
+        </Button>
+      </form>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-(--bearhacks-muted)">
-          Auto-refreshes every 30 seconds. Filters apply server-side; search
-          filters the displayed rows.
+          Auto-refreshes every 30 seconds. All filters apply server-side.
         </p>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => onChange({ ...DEFAULT_FILTER })}
-        >
+        <Button type="button" variant="ghost" onClick={onReset}>
           Reset
         </Button>
       </div>
@@ -673,7 +768,10 @@ function SummaryStat({
 
 type PaymentsTableCardProps = {
   query: ReturnType<typeof useAdminPaymentsQuery>;
-  search: string;
+  page: number;
+  pageSize: number;
+  onPrev: () => void;
+  onNext: () => void;
   onConfirm: (row: AdminPaymentRow) => Promise<void>;
   onRefund: (row: AdminPaymentRow) => Promise<void>;
   onUnconfirm: (row: AdminPaymentRow) => Promise<void>;
@@ -682,7 +780,10 @@ type PaymentsTableCardProps = {
 
 function PaymentsTableCard({
   query,
-  search,
+  page,
+  pageSize,
+  onPrev,
+  onNext,
   onConfirm,
   onRefund,
   onUnconfirm,
@@ -853,34 +954,22 @@ function PaymentsTableCard({
     [onConfirm, onRefund, onUnconfirm, onUnrefund],
   );
 
+  // Search + filtering are server-side now (pagination lives in the
+  // parent's `page` state and the backend envelope), so react-table is
+  // left with just sorting over the current page's rows.
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter: search },
+    state: { sorting },
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    globalFilterFn: (row, _columnId, filterValue: string) => {
-      const needle = filterValue.trim().toLowerCase();
-      if (!needle) return true;
-      const o = row.original;
-      const haystack = [
-        o.hacker_name,
-        o.hacker_email,
-        o.display_name,
-        o.reference,
-        o.notes,
-        o.user_id,
-        ...o.items.map((it) => it.detail),
-      ]
-        .filter((v): v is string => Boolean(v))
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(needle);
-    },
   });
+
+  const total = query.data?.total ?? 0;
+  const pageStart = total === 0 ? 0 : page * pageSize + 1;
+  const pageEnd = Math.min(total, page * pageSize + data.length);
 
   return (
     <Card className="p-0">
@@ -891,7 +980,9 @@ function PaymentsTableCard({
         <CardDescription>
           Per-hacker payment bundles for the focused window.{" "}
           {query.data
-            ? `${table.getFilteredRowModel().rows.length} of ${data.length} shown.`
+            ? total === 0
+              ? "0 total."
+              : `Showing ${pageStart}–${pageEnd} of ${total}.`
             : null}
         </CardDescription>
       </div>
@@ -1103,7 +1194,73 @@ function PaymentsTableCard({
           </ul>
         </>
       )}
+
+      {query.data ? (
+        <PaginationControls
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPrev={onPrev}
+          onNext={onNext}
+          isFetching={query.isFetching}
+        />
+      ) : null}
     </Card>
+  );
+}
+
+/**
+ * Server pagination footer for the payments table. Shape mirrors the one
+ * in the super-admin profile directory so the two consoles read as one
+ * product — "Page N of M · X total" plus Prev/Next buttons that stay
+ * enabled while React Query swaps pages via `keepPreviousData`.
+ */
+function PaginationControls({
+  page,
+  pageSize,
+  total,
+  onPrev,
+  onNext,
+  isFetching,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPrev: () => void;
+  onNext: () => void;
+  isFetching: boolean;
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const current = Math.min(page + 1, pageCount);
+  const atStart = page <= 0;
+  const atEnd = page >= pageCount - 1;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-(--bearhacks-border) px-4 py-3 text-sm text-(--bearhacks-muted)">
+      <span aria-live="polite">
+        Page {current} of {pageCount} · {total} total
+        {isFetching ? " · refreshing…" : ""}
+      </span>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onPrev}
+          disabled={atStart}
+          aria-label="Previous page"
+        >
+          Prev
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onNext}
+          disabled={atEnd}
+          aria-label="Next page"
+        >
+          Next
+        </Button>
+      </div>
+    </div>
   );
 }
 

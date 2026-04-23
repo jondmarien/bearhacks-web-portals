@@ -176,7 +176,14 @@ export type AdminPaymentRow = {
 
 export type PaymentsResponse = {
   meal_window_id: string | null;
-  status: AdminPaymentRow["status"] | null;
+  /** Echoed multi-select filter — empty array means "all statuses". */
+  status: AdminPaymentRow["status"][];
+  search: string | null;
+  /** Total matches across the filter (pre-pagination) — drives the pager. */
+  total: number;
+  limit: number;
+  offset: number;
+  /** Rows on the current page — already sliced by offset/limit on the server. */
   count: number;
   payments: AdminPaymentRow[];
   summary: {
@@ -184,6 +191,16 @@ export type PaymentsResponse = {
     total_received_cents: number;
     by_status: Record<AdminPaymentRow["status"], number>;
   };
+};
+
+export type AdminPaymentsQueryParams = {
+  meal_window_id?: string;
+  /** Multi-select — empty array / undefined means "any status". */
+  statuses?: readonly AdminPaymentRow["status"][];
+  /** Server-side substring search across name/email/ref/notes/items. */
+  search?: string;
+  limit: number;
+  offset: number;
 };
 
 export const adminBobaKeys = {
@@ -197,10 +214,21 @@ export const adminBobaKeys = {
     [...adminBobaKeys.all, "pickup", mealWindowId] as const,
   devWindowSetting: () =>
     [...adminBobaKeys.all, "settings", "dev-window"] as const,
-  payments: (params: {
-    meal_window_id?: string;
-    status?: AdminPaymentRow["status"];
-  }) => [...adminBobaKeys.all, "payments", params] as const,
+  payments: (params: AdminPaymentsQueryParams) =>
+    [
+      ...adminBobaKeys.all,
+      "payments",
+      {
+        meal_window_id: params.meal_window_id ?? null,
+        // Sort for key stability — React Query does a structural compare and
+        // we don't want ["unpaid","submitted"] vs ["submitted","unpaid"] to
+        // split the cache. Normalise the search too (undefined ≡ "").
+        statuses: params.statuses ? [...params.statuses].sort() : [],
+        search: (params.search ?? "").trim(),
+        limit: params.limit,
+        offset: params.offset,
+      },
+    ] as const,
 };
 
 export function useAdminWindowsQuery(
@@ -419,20 +447,29 @@ export function useBulkDeleteOrdersMutation(): UseMutationResult<
 // ----------------------------------------------------------------------------
 
 export function useAdminPaymentsQuery(
-  params: { meal_window_id?: string; status?: AdminPaymentRow["status"] },
+  params: AdminPaymentsQueryParams,
   enabled: boolean,
 ): UseQueryResult<PaymentsResponse> {
   const client = useApiClient();
-  const search = new URLSearchParams();
+  const query = new URLSearchParams();
   if (params.meal_window_id)
-    search.set("meal_window_id", params.meal_window_id);
-  if (params.status) search.set("status", params.status);
-  const qs = search.toString();
+    query.set("meal_window_id", params.meal_window_id);
+  // `status` repeats rather than comma-joins to match FastAPI's list query
+  // parsing (``status: list[str] = Query(...)``) and mirrors the profiles
+  // directory's ``?role=...&role=...`` convention for multi-filters.
+  if (params.statuses) {
+    for (const s of params.statuses) query.append("status", s);
+  }
+  const trimmedSearch = (params.search ?? "").trim();
+  if (trimmedSearch) query.set("search", trimmedSearch);
+  query.set("limit", String(params.limit));
+  query.set("offset", String(params.offset));
+  const qs = query.toString();
   return useQuery({
     queryKey: adminBobaKeys.payments(params),
     queryFn: () =>
       (client as ApiClient).fetchJson<PaymentsResponse>(
-        qs ? `/admin/boba/payments?${qs}` : "/admin/boba/payments",
+        `/admin/boba/payments?${qs}`,
       ),
     enabled: enabled && Boolean(client),
     placeholderData: keepPreviousData,
