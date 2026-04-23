@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputField, TextareaField } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { getOAuthDisplayName } from "@/lib/oauth-display-name";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
 
@@ -48,6 +49,7 @@ export default function ClaimQrPage() {
   useDocumentTitle("Claim QR");
   const client = useApiClient();
   const [draft, setDraft] = useState<ProfileDraft | null>(null);
+  const oauthDisplayName = getOAuthDisplayName(auth?.user);
 
   const claimStatusQuery = useQuery({
     queryKey: ["claim-status", qrId],
@@ -71,10 +73,11 @@ export default function ClaimQrPage() {
         return await client!.fetchJson<Profile>(`/profiles/${viewerId}`);
       } catch (error) {
         if (error instanceof ApiError && error.status === 404) {
+          const initialBody = oauthDisplayName ? { display_name: oauthDisplayName } : {};
           await client!.fetchJson<Profile>("/profiles/me", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({}),
+            body: JSON.stringify(initialBody),
           });
           return await client!.fetchJson<Profile>(`/profiles/${viewerId}`);
         }
@@ -87,7 +90,7 @@ export default function ClaimQrPage() {
   const claimMutation = useMutation({
     mutationFn: async () => {
       const form = draft ?? {
-        display_name: myProfileQuery.data?.display_name ?? "",
+        display_name: myProfileQuery.data?.display_name ?? oauthDisplayName,
         role: myProfileQuery.data?.role ?? "",
         bio: myProfileQuery.data?.bio ?? "",
         linkedin_url: myProfileQuery.data?.linkedin_url ?? "",
@@ -144,7 +147,7 @@ export default function ClaimQrPage() {
   }
 
   const profileDraft: ProfileDraft = draft ?? {
-    display_name: myProfileQuery.data?.display_name ?? "",
+    display_name: myProfileQuery.data?.display_name ?? oauthDisplayName,
     role: myProfileQuery.data?.role ?? "",
     bio: myProfileQuery.data?.bio ?? "",
     linkedin_url: myProfileQuery.data?.linkedin_url ?? "",

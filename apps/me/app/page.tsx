@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputField, TextareaField } from "@/components/ui/field";
 import { QrPreview } from "@/components/ui/qr-preview";
+import { getOAuthDisplayName } from "@/lib/oauth-display-name";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { MAX_DISPLAY_NAME_LENGTH } from "@/lib/profile-roles";
@@ -50,9 +51,13 @@ type ProfileDraft = {
   role: string;
 };
 
-function draftFromProfile(profile: MyProfile | undefined | null): ProfileDraft {
+function draftFromProfile(
+  profile: MyProfile | undefined | null,
+  fallbackDisplayName: string,
+): ProfileDraft {
+  const storedDisplayName = profile?.display_name?.trim() ?? "";
   return {
-    display_name: profile?.display_name ?? "",
+    display_name: storedDisplayName || fallbackDisplayName,
     bio: profile?.bio ?? "",
     linkedin_url: profile?.linkedin_url ?? "",
     github_url: profile?.github_url ?? "",
@@ -70,6 +75,7 @@ export default function HomePage() {
 
   const user = auth?.user ?? null;
   const userId = user?.id ?? null;
+  const oauthDisplayName = getOAuthDisplayName(user);
 
   useEffect(() => {
     if (!auth?.isAuthReady || !user) return;
@@ -93,10 +99,11 @@ export default function HomePage() {
         return await client!.fetchJson<MyProfile>(`/profiles/${userId}`);
       } catch (error) {
         if (error instanceof ApiError && error.status === 404) {
+          const initialBody = oauthDisplayName ? { display_name: oauthDisplayName } : {};
           await client!.fetchJson<MyProfile>("/profiles/me", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({}),
+            body: JSON.stringify(initialBody),
           });
           return await client!.fetchJson<MyProfile>(`/profiles/${userId}`);
         }
@@ -110,7 +117,7 @@ export default function HomePage() {
   const saveProfileMutation = useMutation({
     mutationFn: () => {
       const current = profileQuery.data;
-      const effective = profileDraft ?? draftFromProfile(current);
+      const effective = profileDraft ?? draftFromProfile(current, oauthDisplayName);
       const body: Record<string, string> = {};
       if (effective.display_name !== (current?.display_name ?? "")) {
         body.display_name = effective.display_name;
@@ -141,7 +148,7 @@ export default function HomePage() {
       if (userId) {
         router.push(`/contacts/${userId}`);
       }
-      setProfileDraft(draftFromProfile(data));
+      setProfileDraft(draftFromProfile(data, oauthDisplayName));
     },
     onError: (error) => {
       log.error("Profile update failed", { userId, error });
@@ -206,7 +213,7 @@ export default function HomePage() {
     );
   }
 
-  const draft: ProfileDraft = profileDraft ?? draftFromProfile(profileQuery.data);
+  const draft: ProfileDraft = profileDraft ?? draftFromProfile(profileQuery.data, oauthDisplayName);
   const qrId = profileQuery.data?.qr_id ?? null;
 
   return (
