@@ -75,9 +75,6 @@ export function BobaSuccessModal({
   onGoToPayment,
 }: Props) {
   const submit = useSubmitBobaPaymentMutation();
-  const [referencesByKey, setReferencesByKey] = useState<Record<string, string>>(
-    {},
-  );
   const [submittedKeys, setSubmittedKeys] = useState<Record<string, boolean>>(
     {},
   );
@@ -161,13 +158,11 @@ export function BobaSuccessModal({
   };
 
   const onSubmitRow = async (row: SubmittableRow) => {
-    const reference = (referencesByKey[row.key] ?? "").trim();
     setPendingKey(row.key);
     try {
       await submit.mutateAsync({
         kind: row.kind,
         order_id: row.orderId,
-        reference: reference || undefined,
       });
       setSubmittedKeys((prev) => ({ ...prev, [row.key]: true }));
       toast.success("Marked as sent — admins will confirm shortly.");
@@ -268,13 +263,6 @@ export function BobaSuccessModal({
                 <SuccessRow
                   key={row.key}
                   row={row}
-                  reference={referencesByKey[row.key] ?? ""}
-                  onReferenceChange={(value) =>
-                    setReferencesByKey((prev) => ({
-                      ...prev,
-                      [row.key]: value,
-                    }))
-                  }
                   submittedHere={Boolean(submittedKeys[row.key])}
                   pending={pendingKey === row.key && submit.isPending}
                   onSubmit={() => void onSubmitRow(row)}
@@ -321,15 +309,11 @@ export function BobaSuccessModal({
 
 function SuccessRow({
   row,
-  reference,
-  onReferenceChange,
   submittedHere,
   pending,
   onSubmit,
 }: {
   row: SubmittableRow;
-  reference: string;
-  onReferenceChange: (value: string) => void;
   submittedHere: boolean;
   pending: boolean;
   onSubmit: () => void;
@@ -343,7 +327,6 @@ function SuccessRow({
     !fullyPaid && (submittedHere || payment.status === "submitted");
   const canSubmit =
     !fullyPaid && !submittedHere && payment.status === "unpaid";
-  const inputId = `boba-success-ref-${row.key}`;
 
   return (
     <li className="flex flex-col gap-2 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-3 py-3 text-(--bearhacks-fg)">
@@ -353,27 +336,14 @@ function SuccessRow({
       </div>
 
       {canSubmit ? (
-        <div className="flex flex-col gap-2">
-          <label htmlFor={inputId} className="text-xs font-medium">
-            Reference (optional)
-          </label>
-          <input
-            id={inputId}
-            value={reference}
-            onChange={(e) => onReferenceChange(e.target.value)}
-            maxLength={120}
-            placeholder='e.g. "Sam — Sat dinner"'
-            className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-3 py-2 text-sm text-(--bearhacks-fg) placeholder:text-(--bearhacks-muted)/70 focus:border-(--bearhacks-focus-ring) focus:outline-none"
-          />
-          <Button
-            type="button"
-            variant="primary"
-            onClick={onSubmit}
-            disabled={pending}
-          >
-            {pending ? "Marking…" : "I sent the e-transfer"}
-          </Button>
-        </div>
+        <Button
+          type="button"
+          variant="primary"
+          onClick={onSubmit}
+          disabled={pending}
+        >
+          {pending ? "Marking…" : "I sent the e-transfer"}
+        </Button>
       ) : null}
 
       {showSubmittedAck ? (
