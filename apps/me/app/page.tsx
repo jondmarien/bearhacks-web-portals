@@ -6,7 +6,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
 import { BobaPaymentCard } from "@/components/boba-payment-card";
@@ -72,7 +72,13 @@ function draftFromProfile(
   };
 }
 
-export default function HomePage() {
+/**
+ * `useSearchParams()` (below) forces Next.js to bail out of static
+ * prerendering. The App Router requires such client components to sit
+ * under a `<Suspense>` boundary so the prerender fallback has somewhere
+ * to go. The default export wraps this inner component accordingly.
+ */
+function HomePageContent() {
   const auth = useMeAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -478,5 +484,19 @@ export default function HomePage() {
         )}
       </Card>
     </main>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-10">
+          <p className="text-sm text-(--bearhacks-muted)">Loading…</p>
+        </main>
+      }
+    >
+      <HomePageContent />
+    </Suspense>
   );
 }
