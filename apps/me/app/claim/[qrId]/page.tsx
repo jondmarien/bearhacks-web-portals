@@ -21,8 +21,8 @@ import {
 } from "@bearhacks/api-client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 type ClaimStatus = {
@@ -113,6 +113,7 @@ function describeClaimStatusError(error: unknown): string {
 
 export default function ClaimQrPage() {
   const params = useParams();
+  const router = useRouter();
   const qrId = typeof params.qrId === "string" ? params.qrId : "";
   const auth = useMeAuth();
   useDocumentTitle("Claim QR");
@@ -129,11 +130,16 @@ export default function ClaimQrPage() {
   const viewerId = auth?.user?.id ?? null;
   const claimOwnerId = claimStatusQuery.data?.claimed_by ?? null;
 
-  const ownerProfileQuery = useQuery({
-    queryKey: ["claim-owner-profile", claimOwnerId],
-    queryFn: () => client!.fetchJson<Profile>(`/profiles/${claimOwnerId}`),
-    enabled: Boolean(client && claimStatusQuery.data?.claimed && claimOwnerId),
-  });
+  // Scanning a claimed QR is a "show me this attendee" intent, not a "claim"
+  // intent — so as soon as the status query confirms the QR is claimed, send
+  // the visitor to the owner's contact page where they can view the profile
+  // and favourite them. `router.replace` keeps /claim/{qrId} out of history
+  // so the browser back button doesn't bounce them right back here.
+  useEffect(() => {
+    if (claimStatusQuery.data?.claimed && claimOwnerId) {
+      router.replace(`/contacts/${claimOwnerId}`);
+    }
+  }, [claimStatusQuery.data?.claimed, claimOwnerId, router]);
 
   const myProfileQuery = useQuery({
     queryKey: ["claim-my-profile", viewerId],
@@ -264,34 +270,9 @@ export default function ClaimQrPage() {
       )}
 
       {claimStatusQuery.data?.claimed ? (
-        <Card className="bg-(--bearhacks-cream) border-b-4 border-b-(--bearhacks-text-marketing)">
-          <CardHeader>
-            <CardTitle className="text-(--bearhacks-text-marketing)">
-              This QR is already claimed
-            </CardTitle>
-            {ownerProfileQuery.data ? (
-              <CardDescription className="text-(--bearhacks-text-marketing)/80">
-                Claimed by{" "}
-                <span className="font-semibold text-(--bearhacks-text-marketing)">
-                  {ownerProfileQuery.data.display_name ?? "an attendee"}
-                </span>
-                .
-              </CardDescription>
-            ) : (
-              <CardDescription className="text-(--bearhacks-text-marketing)/80">
-                Loading owner profile…
-              </CardDescription>
-            )}
-          </CardHeader>
-          {ownerProfileQuery.data ? (
-            <Link
-              href={`/contacts/${ownerProfileQuery.data.id}`}
-              className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-pill) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-6 py-3 text-sm font-semibold text-(--bearhacks-fg) no-underline shadow-(--bearhacks-shadow-card) hover:bg-(--bearhacks-cream)"
-            >
-              View profile →
-            </Link>
-          ) : null}
-        </Card>
+        <p className="text-sm text-(--bearhacks-muted)">
+          Opening profile…
+        </p>
       ) : null}
 
       {claimStatusQuery.data && !claimStatusQuery.data.claimed ? (
