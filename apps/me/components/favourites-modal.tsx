@@ -89,8 +89,27 @@ export function FavouritesModal({
           `inline-flex w-fit min-h-(--bearhacks-touch-min) cursor-pointer items-center gap-2 rounded-(--bearhacks-radius-pill) border border-(--bearhacks-border-strong) bg-(--bearhacks-surface) px-4 text-sm font-semibold text-(--bearhacks-fg) touch-manipulation [-webkit-tap-highlight-color:transparent] hover:bg-(--bearhacks-surface-alt) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--bearhacks-focus-ring) ${triggerClassName}`
         }
       >
-        <span aria-hidden="true" className="text-(--bearhacks-accent)">
-          ♥
+        <span
+          aria-hidden="true"
+          className="inline-flex text-(--bearhacks-accent)"
+        >
+          {/*
+            Inline SVG instead of the ♥ (U+2665) glyph: the Unicode
+            character renders as a flat triangle in some system fonts
+            (notably Windows default sans), which is why the trigger
+            looked like an arrow badge before. The SVG guarantees a
+            real heart shape on every platform. ``fill="currentColor"``
+            keeps it tied to the accent colour on the wrapper.
+          */}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="currentColor"
+          >
+            <path d="M12 21s-7.5-4.6-10-9.2C.4 8.2 2.4 4 6 4c2 0 3.5 1 4.5 2.3C11.5 5 13 4 15 4c3.6 0 5.6 4.2 4 7.8C19.5 16.4 12 21 12 21z" />
+          </svg>
         </span>
         <span>Favourites</span>
         {count > 0 ? (
