@@ -65,28 +65,63 @@ export function BobaPortalCard({
   const [prevHighlight, setPrevHighlight] = useState(highlightPayment);
   const [prevHasPaymentPanel, setPrevHasPaymentPanel] = useState(hasPaymentPanel);
 
+  // Latches a deferred "jump to Payment" when the ``/?payment=highlight``
+  // deep-link pulses ``highlightPayment=true`` *before* the payment
+  // query has resolved (slow network, fresh navigation, no cache). The
+  // parent fades ``highlightPayment`` back to false on a fixed 2s
+  // timer, so by the time ``hasPaymentPanel`` transitions true, the
+  // highlight flag has already gone. Without this latch the deep-link
+  // silently fails and the hacker lands on the Order tab. Initialised
+  // synchronously from props so the SSR / first-paint case is covered
+  // too. Cleared on any user-initiated tab change (see ``handleTabChange``)
+  // so a manual click during the wait wins over the deferred intent.
+  const [pendingPaymentSwitch, setPendingPaymentSwitch] = useState(
+    highlightPayment && !hasPaymentPanel,
+  );
+
   // Deep-link auto-switch: when the parent flips ``highlightPayment`` on
   // (the ``/?payment=highlight`` flow) and the payment panel is ready,
   // jump to it. We only react to the *transition* into the highlight
   // state — otherwise the user couldn't click back to Order while the
-  // parent is still holding the highlight flag true.
+  // parent is still holding the highlight flag true. If the payment
+  // panel isn't ready yet, latch the intent for the ``hasPaymentPanel``
+  // branch below to pick up once the data arrives.
   if (highlightPayment !== prevHighlight) {
     setPrevHighlight(highlightPayment);
-    if (highlightPayment && hasPaymentPanel) {
-      setPanel("payment");
+    if (highlightPayment) {
+      if (hasPaymentPanel) {
+        setPanel("payment");
+      } else {
+        setPendingPaymentSwitch(true);
+      }
     }
   }
 
-  // Guard against the payment panel disappearing mid-session (e.g. every
-  // order in the window was cancelled) — drop back to Order so the tab
-  // bar never sits on an empty panel. Gated on ``hasPaymentPanel``
-  // changing so user-initiated tab switches aren't clobbered.
+  // Two responsibilities keyed off ``hasPaymentPanel`` changing:
+  //   - If the panel disappears mid-session (e.g. every order in the
+  //     window was cancelled) while it's active, drop back to Order so
+  //     the tab bar never sits on an empty panel.
+  //   - If the panel *appears* and a deep-link switch is still pending
+  //     from an earlier render, honour it now. This is the late-arriving
+  //     data path that the fixed 2s highlight fade can't reach on its
+  //     own.
   if (hasPaymentPanel !== prevHasPaymentPanel) {
     setPrevHasPaymentPanel(hasPaymentPanel);
     if (!hasPaymentPanel && panel === "payment") {
       setPanel("order");
+    } else if (hasPaymentPanel && pendingPaymentSwitch) {
+      setPanel("payment");
+      setPendingPaymentSwitch(false);
     }
   }
+
+  // User-initiated tab change: applies the click and discards any
+  // pending deep-link switch so the late-data path can't overwrite a
+  // manual choice.
+  const handleTabChange = (next: Panel) => {
+    setPanel(next);
+    if (pendingPaymentSwitch) setPendingPaymentSwitch(false);
+  };
 
   // Small "action needed" dot on the Payment tab. Triggers when the
   // hacker still owes money: the bundle is unpaid, or the bundle was
@@ -115,7 +150,7 @@ export function BobaPortalCard({
       {hasPaymentPanel ? (
         <TabList
           panel={panel}
-          onChange={setPanel}
+          onChange={handleTabChange}
           paymentNeedsAttention={paymentNeedsAttention}
           orderTabId={orderTabId}
           orderPanelId={orderPanelId}
