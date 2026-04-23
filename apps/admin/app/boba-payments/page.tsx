@@ -105,31 +105,43 @@ const ACTION_BUTTON_UNDO =
   `${ACTION_BUTTON_BASE} bg-(--bearhacks-warning-bg)! text-(--bearhacks-warning-fg)! border-(--bearhacks-warning-border) hover:bg-(--bearhacks-warning-border)! disabled:hover:bg-(--bearhacks-warning-bg)!`;
 
 /**
- * Admin soft-gate for the per-row "Confirm" action.
+ * Admin soft-gate for the per-row "Confirm" and "Refund" actions.
  *
- * The Confirm button can only be clicked once the hacker has flipped
- * their payment row from ``unpaid`` → ``submitted`` on the portal (the
- * "I sent the e-transfer" / "Mark as sent" button in
- * ``boba-payment-card.tsx``). This stops admins from racing ahead of
- * the hacker and marking money as received before it actually is —
- * by the time the row reaches ``submitted`` the hacker has explicitly
- * told us the e-transfer is out the door, so "Confirm" means "verify
- * the money landed and close the loop" instead of "guess that it will".
+ * Both actions require the hacker to have flipped their payment row
+ * from ``unpaid`` → ``submitted`` on the portal (the "I sent the
+ * e-transfer" / "Mark as sent" button in ``boba-payment-card.tsx``)
+ * before an admin can act on it:
  *
- * Refund is intentionally not gated the same way: an admin must always
- * be able to cancel/refund an ``unpaid`` row (e.g. the hacker walked
- * off without paying), otherwise stale rows have no resolution path.
+ *   - ``Confirm`` without a submission is the admin racing ahead of
+ *     the hacker and marking money as received before the hacker
+ *     even claimed to have sent it.
+ *   - ``Refund`` without a submission is meaningless — there is no
+ *     money to return. "Refund" implies an e-transfer changed hands;
+ *     an ``unpaid`` row is just an open obligation, not a completed
+ *     payment, so the right tool there is cancelling the order, not
+ *     refunding a payment that was never made.
  *
- * This mirrors the ``PAIR_ACTION_STATUSES.confirm`` list below and the
- * ``onBatchConfirm`` filter so every surface that can confirm a
- * payment uses the same rule.
+ * The batch flows (``onBatchConfirm`` / ``onBatchRefund``) and the
+ * pair-detection map (``PAIR_ACTION_STATUSES``) both follow the same
+ * rule so every surface that can confirm or refund stays consistent.
+ *
+ * Refund additionally accepts ``confirmed`` — once money has landed
+ * and been confirmed, the admin can still return it if the e-transfer
+ * bounced or the order was cancelled later.
  */
 function canAdminConfirm(row: AdminPaymentRow): boolean {
   return row.status === "submitted";
 }
 
+function canAdminRefund(row: AdminPaymentRow): boolean {
+  return row.status === "submitted" || row.status === "confirmed";
+}
+
 const CONFIRM_DISABLED_REASON =
   "Waiting on hacker — they need to tap \u201CI sent the e-transfer\u201D on their portal before this row can be confirmed.";
+
+const REFUND_DISABLED_REASON =
+  "Waiting on hacker — there's no payment to refund until they tap \u201CI sent the e-transfer\u201D on their portal. Cancel the order instead if they're backing out.";
 
 // Shared checkbox styling for the select column + the mobile list's
 // per-card checkbox. Matches the form controls elsewhere in the admin
@@ -612,15 +624,20 @@ export default function AdminBobaPaymentsPage() {
   }
 
   async function onBatchRefund() {
+    // Batch refund mirrors the per-row gate in ``canAdminRefund`` — only
+    // rows where money has actually changed hands (``submitted`` or
+    // ``confirmed``) can be refunded. ``unpaid`` rows are skipped
+    // because there's nothing to return; cancelling the order is the
+    // correct action there.
     const eligible = selectedRows.filter(
-      (r) => r.status === "unpaid" || r.status === "submitted",
+      (r) => r.status === "submitted" || r.status === "confirmed",
     );
     if (eligible.length === 0) return;
     const total = eligible.reduce((sum, r) => sum + r.expected_cents, 0);
     const ok = await confirm({
       title: `Refund ${eligible.length === 1 ? "1 payment" : `${eligible.length} payments`} totaling $${(total / 100).toFixed(2)}?`,
       description:
-        "Marks each order refunded. Hackers can re-submit to pay again. Selected rows that aren't Unpaid or Submitted are skipped.",
+        "Marks each order refunded. Hackers can re-submit to pay again. Selected Unpaid rows are skipped (nothing to refund until the hacker marks it as sent) — cancel the order instead. Refunded rows are also skipped.",
       confirmLabel: "Refund all",
       tone: "danger",
     });
@@ -1369,6 +1386,7 @@ function PaymentsTableCard({
             );
           }
           const confirmable = canAdminConfirm(o);
+          const refundable = canAdminRefund(o);
           return (
             <div className="flex items-start justify-end gap-1.5 whitespace-nowrap">
               <Button
@@ -1386,6 +1404,9 @@ function PaymentsTableCard({
                 type="button"
                 variant="pill"
                 className={ACTION_BUTTON_REFUND}
+                disabled={!refundable}
+                title={refundable ? undefined : REFUND_DISABLED_REASON}
+                aria-disabled={!refundable}
                 onClick={() => void onRefund(o)}
               >
                 Refund
@@ -1694,6 +1715,11 @@ function PaymentsTableCard({
                   ) : (
                     (() => {
                       const confirmable = canAdminConfirm(o);
+                      const refundable = canAdminRefund(o);
+                      // In this branch ``o.status`` is ``unpaid`` or ``submitted``
+                      // (``confirmed`` / ``refunded`` are handled above), so the
+                      // two gates collapse to the same condition and a single
+                      // "waiting on hacker" hint covers both buttons.
                       return (
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                           <Button
@@ -1713,11 +1739,16 @@ function PaymentsTableCard({
                             type="button"
                             variant="pill"
                             className={`w-full sm:w-auto ${ACTION_BUTTON_REFUND}`}
+                            disabled={!refundable}
+                            title={
+                              refundable ? undefined : REFUND_DISABLED_REASON
+                            }
+                            aria-disabled={!refundable}
                             onClick={() => void onRefund(o)}
                           >
                             Refund
                           </Button>
-                          {!confirmable ? (
+                          {!confirmable || !refundable ? (
                             <p className="text-xs text-(--bearhacks-muted) sm:ml-1 sm:self-center">
                               Waiting on hacker to mark as sent.
                             </p>
