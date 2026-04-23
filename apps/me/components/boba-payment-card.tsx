@@ -393,21 +393,17 @@ export function BobaPaymentCard({
           </div>
 
           {/*
-            One-tap "mark everything outstanding as sent" — only appears
-            when there's more than one row to save, because a single
-            row already has its own per-row button below.
-
-            Copy tier:
-              - 2 rows: "Mark as sent · $X". A drink + momo placed in
-                the same batch is a single combined pickup for the
-                hacker, and the per-order total already sits on each
-                row, so "Mark all 2 as sent" reads as awkward
-                over-counting for what is functionally one order.
-              - 3+ rows: "Mark all N as sent · $X" — the count matters
-                because the hacker is confirming they sent one bigger
-                combined e-transfer covering multiple earlier orders.
+            One-tap "mark everything outstanding as sent" — gated on
+            the number of *outstanding groups* (= visible order cards),
+            not raw rows. A single batch (e.g. drink + momo placed in
+            one submission, "SAME ORDER") renders as a single card
+            with its own combined "I sent the e-transfer" button, so a
+            second bulk button above it is redundant and was causing
+            double-button confusion. With 2+ batches, the bulk button
+            genuinely saves taps because the hacker typically sends
+            one combined e-transfer covering every outstanding order.
           */}
-          {outstandingRows.length > 1 ? (
+          {outstandingGroups.length > 1 ? (
             <Button
               type="button"
               variant="primary"
@@ -416,12 +412,8 @@ export function BobaPaymentCard({
               onClick={() => void onSubmitAll(outstandingRows)}
             >
               {bulkPending
-                ? outstandingRows.length === 2
-                  ? "Marking…"
-                  : `Marking ${outstandingRows.length}…`
-                : outstandingRows.length === 2
-                  ? `Mark as sent · $${outstandingDollars}`
-                  : `Mark all ${outstandingRows.length} as sent · $${outstandingDollars}`}
+                ? `Marking ${outstandingGroups.length}…`
+                : `Mark all ${outstandingGroups.length} as sent · $${outstandingDollars}`}
             </Button>
           ) : null}
         </>
