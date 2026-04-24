@@ -67,6 +67,8 @@ export type AdminOrderRow = {
   display_name: string | null;
   hacker_name: string;
   hacker_email: string | null;
+  hacker_discord: string | null;
+  hacker_phone: string | null;
   /**
    * Current boba_payments.status for this order, joined server-side.
    *
@@ -196,6 +198,8 @@ export type AdminPaymentRow = {
   updated_at: string;
   hacker_name: string;
   hacker_email: string | null;
+  hacker_discord: string | null;
+  hacker_phone: string | null;
   display_name: string | null;
   /** Polymorphic FK — exactly one of these is set per XOR constraint. */
   boba_order_id: string | null;

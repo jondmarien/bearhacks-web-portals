@@ -1255,6 +1255,7 @@ function PaymentsTableCard({
         header: "Hacker",
         cell: (ctx) => {
           const o = ctx.row.original;
+          const contactParts = [o.hacker_discord, o.hacker_phone].filter(Boolean);
           return (
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-(--bearhacks-fg)">
@@ -1263,6 +1264,11 @@ function PaymentsTableCard({
               {o.hacker_email ? (
                 <span className="text-xs text-(--bearhacks-muted)">
                   {o.hacker_email}
+                </span>
+              ) : null}
+              {contactParts.length > 0 ? (
+                <span className="text-xs text-(--bearhacks-muted)">
+                  {contactParts.join(" · ")}
                 </span>
               ) : null}
             </div>
@@ -1640,6 +1646,11 @@ function PaymentsTableCard({
                         {o.hacker_email ? (
                           <span className="text-xs text-(--bearhacks-muted) wrap-break-word">
                             {o.hacker_email}
+                          </span>
+                        ) : null}
+                        {(o.hacker_discord ?? o.hacker_phone) ? (
+                          <span className="text-xs text-(--bearhacks-muted) wrap-break-word">
+                            {[o.hacker_discord, o.hacker_phone].filter(Boolean).join(" · ")}
                           </span>
                         ) : null}
                       </div>
