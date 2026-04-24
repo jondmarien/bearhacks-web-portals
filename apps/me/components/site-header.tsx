@@ -35,7 +35,7 @@ export function SiteHeader() {
       <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
         <Link
           href="/"
-          className="inline-flex shrink-0 items-center gap-2 text-(--bearhacks-on-primary) no-underline"
+          className="inline-flex shrink-0 items-center gap-2 rounded-(--bearhacks-radius-md) px-1 py-1 text-(--bearhacks-on-primary) no-underline cursor-pointer hover:opacity-80 active:opacity-70 transition-opacity"
           aria-label="BearHacks 2026 home"
         >
           <Image
@@ -46,7 +46,7 @@ export function SiteHeader() {
             priority
             style={{ width: "28px", height: "auto" }}
           />
-          <span className="hidden text-base font-semibold tracking-wide sm:inline">
+          <span className="text-base font-semibold tracking-wide">
             BearHacks 2026
           </span>
         </Link>
