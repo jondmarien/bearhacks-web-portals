@@ -41,13 +41,13 @@ const DRINK_ROWS: DrinkRow[] = [
     label: "Brown Sugar Milk Tea",
     vegan: "with-substitution",
     notes:
-      "Contains dairy by default. Vegan-friendly when ordered with oat or almond milk.",
+      "Contains dairy by default. Vegan-friendly when ordered with oat milk.",
   },
   {
     label: "Classic Milk Tea",
     vegan: "with-substitution",
     notes:
-      "Contains dairy by default. Vegan-friendly when ordered with oat or almond milk.",
+      "Contains dairy by default. Vegan-friendly when ordered with oat milk.",
   },
   {
     label: "Mango Green Tea",
@@ -68,7 +68,7 @@ const DRINK_ROWS: DrinkRow[] = [
     label: "Coffee Milk Tea",
     vegan: "with-substitution",
     notes:
-      "Contains dairy and caffeine. Vegan-friendly when ordered with oat or almond milk.",
+      "Contains dairy and caffeine. Vegan-friendly when ordered with oat milk.",
   },
 ];
 
@@ -91,7 +91,6 @@ const COMMON_ALLERGENS = [
   "Dairy (milk teas as ordered with regular milk)",
   "Wheat / gluten (Oreo topping)",
   "Soy (Oreo topping; some flavour syrups)",
-  "Tree nuts (almond milk substitution; cross-contact possible)",
 ];
 
 type Props = {
@@ -375,8 +374,8 @@ export function AllergenInfoModal({
                   <Section title="Cross-contact warning">
                     <p className="text-sm text-(--bearhacks-fg)">
                       All drinks are prepared on shared equipment. Trace amounts
-                      of dairy, soy, gluten, and tree nuts may be present even
-                      if not listed below.
+                      of dairy, soy, and gluten may be present even if not
+                      listed below.
                     </p>
                   </Section>
 
@@ -397,23 +396,26 @@ export function AllergenInfoModal({
                   </Section>
 
                   <Section title="Momos">
-                    <ul className="ml-5 list-disc text-sm text-(--bearhacks-fg)">
+                    <p className="text-sm text-(--bearhacks-fg)">
+                      All momos are wrapped in a{" "}
+                      <strong>flour-based wrapper</strong> and contain{" "}
+                      <strong>gluten</strong>.
+                    </p>
+                    <ul className="mt-2 ml-5 list-disc text-sm text-(--bearhacks-fg)">
                       <li>
-                        <strong>Chicken</strong> — contains wheat (gluten),
-                        possible egg.
+                        <strong>Chicken</strong> — <strong>Halal</strong>.
                       </li>
                       <li>
                         <strong>Vegetable (cabbage, carrot)</strong> — vegan.
-                        Contains wheat (gluten).
                       </li>
                       <li>
-                        <strong>Paneer (cottage cheese)</strong> — contains
-                        dairy + wheat (gluten).
+                        <strong>Paneer (cottage cheese)</strong> — contains{" "}
+                        <strong>dairy</strong>.
                       </li>
                       <li>
-                        Sauces: <strong>garlic mayo</strong> contains egg;{" "}
-                        <strong>tomato chutney</strong> + <strong>chilli paste</strong>{" "}
-                        are vegan.
+                        Sauces: <strong>garlic mayo</strong> contains{" "}
+                        <strong>egg</strong>; <strong>tomato chutney</strong> +{" "}
+                        <strong>chilli paste</strong> are vegan.
                       </li>
                     </ul>
                   </Section>
