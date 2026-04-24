@@ -50,26 +50,42 @@ export function QrPreview({ qrId, label, size = 256 }: QrPreviewProps) {
 
   if (!claimUrl) return null;
 
+  // Outer box grows with the decorative wooden frame; inner QR sits in the
+  // transparent center at ``inset-[15%]`` (matches the frame art's inner
+  // opening, leaving ~70% of width for the QR bitmap).
+  const outerSize = Math.round(size * 1.42);
+
   return (
     <div className="flex flex-col items-center gap-2">
       <div
-        className="rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-white p-3"
-        style={{ width: size + 24, height: size + 24 }}
+        className="relative"
+        style={{ width: outerSize, height: outerSize }}
       >
-        {imageUrl ? (
-          <Image
-            src={imageUrl}
-            alt="Networking QR code"
-            width={size}
-            height={size}
-            className="h-auto w-full"
-            unoptimized
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-xs text-(--bearhacks-muted)">
-            Rendering…
-          </div>
-        )}
+        <Image
+          src="/brand/wooden_frame.png"
+          alt=""
+          aria-hidden
+          fill
+          sizes={`${outerSize}px`}
+          className="pointer-events-none select-none object-contain"
+          unoptimized
+        />
+        <div className="absolute inset-[15%] flex items-center justify-center overflow-hidden rounded-sm bg-white p-2">
+          {imageUrl ? (
+            <Image
+              src={imageUrl}
+              alt="Networking QR code"
+              width={size}
+              height={size}
+              className="h-full w-full object-contain"
+              unoptimized
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-xs text-(--bearhacks-muted)">
+              Rendering…
+            </div>
+          )}
+        </div>
       </div>
       {label ? (
         <p className="text-center text-xs text-(--bearhacks-text-marketing)/70">

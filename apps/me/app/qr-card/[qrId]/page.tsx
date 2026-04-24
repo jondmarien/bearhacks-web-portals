@@ -114,16 +114,25 @@ export default function QrCardPage() {
           </div>
           {qrImageUrl ? (
             <div
-              className="relative flex w-full max-w-[320px] items-center justify-center bg-[url('/brand/wooden_frame.svg')] bg-contain bg-center bg-no-repeat p-10"
+              className="relative w-full max-w-[320px]"
               style={{ aspectRatio: "1 / 1" }}
             >
-              <div className="w-full overflow-hidden rounded-md bg-white p-2">
+              <Image
+                src="/brand/wooden_frame.png"
+                alt=""
+                aria-hidden
+                fill
+                sizes="320px"
+                className="pointer-events-none select-none object-contain"
+                priority
+              />
+              <div className="absolute inset-[15%] flex items-center justify-center overflow-hidden rounded-md bg-white p-2">
                 <Image
                   src={qrImageUrl}
                   alt="Your networking QR code"
                   width={280}
                   height={280}
-                  className="h-auto w-full"
+                  className="h-full w-full object-contain"
                   unoptimized
                 />
               </div>

@@ -1298,17 +1298,26 @@ export default function AdminQrPage() {
               </div>
               {showQrPreview ? (
                 <div className="mb-3 flex flex-col items-center gap-3 rounded-(--bearhacks-radius-md) border border-(--bearhacks-border) bg-(--bearhacks-surface-alt) p-3 sm:mb-4 sm:flex-row sm:items-start sm:p-4">
-                  <div className="flex h-36 w-36 shrink-0 items-center justify-center rounded-(--bearhacks-radius-sm) border border-(--bearhacks-border) bg-white p-2 sm:h-44 sm:w-44">
-                    {selectedQrImage ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={selectedQrImage}
-                        alt={`QR code for ${selectedQr.id ?? "selected QR"}`}
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <span className="text-xs text-(--bearhacks-muted)">Rendering…</span>
-                    )}
+                  <div className="relative h-36 w-36 shrink-0 sm:h-44 sm:w-44">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src="/brand/wooden_frame.png"
+                      alt=""
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
+                    />
+                    <div className="absolute inset-[15%] flex items-center justify-center overflow-hidden rounded-sm bg-white p-1">
+                      {selectedQrImage ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={selectedQrImage}
+                          alt={`QR code for ${selectedQr.id ?? "selected QR"}`}
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-[10px] text-(--bearhacks-muted)">Rendering…</span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex w-full min-w-0 flex-1 flex-col gap-2 text-sm sm:w-auto">
                     <div className="min-w-0">
