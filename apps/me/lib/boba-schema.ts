@@ -194,12 +194,27 @@ export function buildBobaOrderSchema(menu: {
       ),
   });
 
+  const drinkLooseSchema = z.object({
+    drink_id: z.string(),
+    topping_ids: z.array(z.string()),
+    sweetness: sweetnessSchema,
+    ice: iceSchema,
+    size: sizeSchema,
+    notes: z.string().max(BOBA_NOTES_MAX_LEN),
+  });
+
+  const momoLooseSchema = z.object({
+    filling: z.string(),
+    sauce: z.string(),
+    notes: z.string().max(BOBA_NOTES_MAX_LEN),
+  });
+
   return z
     .object({
       includeDrink: z.boolean(),
       includeMomo: z.boolean(),
-      drink: drinkSchema,
-      momo: momoSchema,
+      drink: drinkLooseSchema,
+      momo: momoLooseSchema,
       contact: contactSchema,
     })
     .superRefine((value, ctx) => {
@@ -210,8 +225,22 @@ export function buildBobaOrderSchema(menu: {
           message: "Pick a drink, momos, or both.",
         });
       }
-      // At-least-one contact field is required so the food team can
-      // reach the hacker. Mirrored on the backend as HTTP 422.
+      if (value.includeDrink) {
+        const result = drinkSchema.safeParse(value.drink);
+        if (!result.success) {
+          for (const issue of result.error.issues) {
+            ctx.addIssue({ ...issue, path: ["drink", ...issue.path] });
+          }
+        }
+      }
+      if (value.includeMomo) {
+        const result = momoSchema.safeParse(value.momo);
+        if (!result.success) {
+          for (const issue of result.error.issues) {
+            ctx.addIssue({ ...issue, path: ["momo", ...issue.path] });
+          }
+        }
+      }
       const discord = value.contact.discord_username.trim();
       const phone = value.contact.phone_number.trim();
       if (!discord && !phone) {
