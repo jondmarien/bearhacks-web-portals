@@ -300,8 +300,8 @@ export default function BobaOrderPage() {
         title="Boba & Momo ordering"
         subtitle={
           maxOrders > 1
-            ? `Up to ${maxOrders} drinks/momos per hacker for this window. Edit or cancel until the window closes.`
-            : "One drink and one momo order (5 momos) per hacker per meal window. Buy them separately or together. Edit or cancel until the window closes."
+            ? `These are extras on top of the main meal — not a replacement! Up to ${maxOrders} drinks/momos per hacker for this window. Edit or cancel until the window closes.`
+            : "These are extras on top of the main meal — not a replacement! One drink and one momo order (5 momos) per hacker per meal window. Edit or cancel until the window closes."
         }
         showBack
         backHref="/"
@@ -448,7 +448,7 @@ export default function BobaOrderPage() {
                 </CardTitle>
                 <CardDescription>
                   {canPlaceDrink && canPlaceMomo
-                    ? "Pick a drink, momos, or both. The food team will batch pickups in time for the meal window."
+                    ? "Pick a drink, momos, or both — these are add-ons on top of the regular meal, not a replacement for it."
                     : canPlaceDrink
                       ? "You've already placed momos — add a drink if you'd like."
                       : "You've already placed a drink — add a momo order (5 momos) if you'd like."}

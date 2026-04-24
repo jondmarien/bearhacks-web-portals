@@ -122,8 +122,8 @@ export function BobaStatusCard({
         <span className="bg-(--bearhacks-cream) px-1 rounded-sm">Boba &amp; Momo</span> ordering
       </CardTitle>
       <CardDescription>
-        Pre-order your drink/food during meal windows so the food team can
-        batch pickups.
+        Boba &amp; momos are extras on top of the main meal — not the meal
+        itself! Order during the window and pick them up separately.
       </CardDescription>
     </CardHeader>
   );
@@ -207,7 +207,7 @@ function StatusBody({
     case "signed-out":
       return (
         <p className="text-sm text-(--bearhacks-muted)">
-          Sign in to place a boba order during meal windows.
+          Sign in to order boba &amp; momos — extras on top of the main meal, available during each meal window.
         </p>
       );
 
