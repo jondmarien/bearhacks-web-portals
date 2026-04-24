@@ -115,7 +115,19 @@ export default function QrCardPage() {
       <main className="flex flex-1 flex-col items-center bg-(--bearhacks-cream) px-4 py-8">
         <div className="mx-auto flex w-full max-w-md flex-col gap-5">
           <PageHeader title="Unclaimed QR" showBack backHref="/" tone="marketing" />
-          <Card className="flex flex-col items-center gap-4 bg-white text-center">
+          <Card
+            className="flex flex-col items-center gap-4 bg-white text-center"
+            style={{
+              "--bearhacks-text-marketing": "#512b10",
+              "--bearhacks-fg": "#1a1a1a",
+              "--bearhacks-muted": "#525252",
+              "--bearhacks-accent": "#f0a422",
+              "--bearhacks-accent-soft": "#ffdc56",
+              "--bearhacks-primary": "#1d3264",
+              "--bearhacks-link": "#1d3264",
+              "--bearhacks-link-hover": "#3766d4",
+            } as React.CSSProperties}
+          >
             <Image
               src="/brand/icon_color.svg"
               alt=""
@@ -162,7 +174,22 @@ export default function QrCardPage() {
           backHref={isOwner ? "/" : undefined}
           tone="marketing"
         />
-        <Card className="flex flex-col items-center gap-4 bg-white text-center">
+        <Card
+          className="flex flex-col items-center gap-4 bg-white text-center"
+          style={{
+            "--bearhacks-text-marketing": "#512b10",
+            "--bearhacks-fg": "#1a1a1a",
+            "--bearhacks-muted": "#525252",
+            "--bearhacks-border": "#e5e5e5",
+            "--bearhacks-border-strong": "#8a94a8",
+            "--bearhacks-surface": "#ffffff",
+            "--bearhacks-cream": "#fff4cf",
+            "--bearhacks-link": "#1d3264",
+            "--bearhacks-link-hover": "#3766d4",
+            "--bearhacks-shadow-card":
+              "0 1px 2px rgba(29,50,100,0.06), 0 8px 24px rgba(29,50,100,0.08)",
+          } as React.CSSProperties}
+        >
           <Image
             src="/brand/icon_color.svg"
             alt=""
