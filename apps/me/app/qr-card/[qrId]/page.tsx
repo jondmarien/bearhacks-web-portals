@@ -1,19 +1,26 @@
 "use client";
 
-import { ApiError } from "@bearhacks/api-client";
 import { createLogger } from "@bearhacks/logger";
 import { useQuery } from "@tanstack/react-query";
 import Image from "next/image";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import QRCode from "qrcode";
 import { useEffect, useMemo, useState } from "react";
 import { useMeAuth } from "@/app/providers";
+import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
 
 const log = createLogger("me/qr-card");
+
+type ClaimStatus = {
+  id: string;
+  claimed: boolean;
+  claimed_by?: string | null;
+};
 
 type Profile = {
   id: string;
@@ -28,17 +35,26 @@ export default function QrCardPage() {
   const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
   const qrId = typeof params?.qrId === "string" ? params.qrId : "";
   const viewerId = auth?.user?.id ?? null;
-  useDocumentTitle("My QR card");
+  useDocumentTitle("QR card");
 
   const claimUrl = useMemo(() => {
     if (!qrId || typeof window === "undefined") return null;
     return `${window.location.origin}/claim/${qrId}`;
   }, [qrId]);
 
+  const claimStatusQuery = useQuery({
+    queryKey: ["qr-card-claim-status", qrId],
+    queryFn: () => client!.fetchJson<ClaimStatus>(`/claim/${qrId}`),
+    enabled: Boolean(client && qrId),
+  });
+
+  const ownerId = claimStatusQuery.data?.claimed_by ?? null;
+  const isClaimed = claimStatusQuery.data?.claimed === true;
+
   const profileQuery = useQuery({
-    queryKey: ["qr-card-owner", viewerId],
-    queryFn: () => client!.fetchJson<Profile>(`/profiles/${viewerId}`),
-    enabled: Boolean(client && viewerId),
+    queryKey: ["qr-card-owner-profile", ownerId],
+    queryFn: () => client!.fetchJson<Profile>(`/profiles/${ownerId}`),
+    enabled: Boolean(client && ownerId),
   });
 
   useEffect(() => {
@@ -77,22 +93,75 @@ export default function QrCardPage() {
   }
 
   const ownerName =
-    profileQuery.data?.display_name ?? auth?.user?.email ?? "BearHacks attendee";
+    profileQuery.data?.display_name ?? "BearHacks attendee";
   const ownerRole = profileQuery.data?.role ?? null;
-  const isOwnerError =
-    profileQuery.isError &&
-    !(profileQuery.error instanceof ApiError && profileQuery.error.status === 404);
-  if (isOwnerError) {
-    log.warn("Failed to load owner profile for QR card", {
-      qrId,
-      error: profileQuery.error,
-    });
+  const isOwner = Boolean(viewerId && viewerId === ownerId);
+
+  if (claimStatusQuery.isError) {
+    return (
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-8">
+        <PageHeader title="QR card" showBack backHref="/" />
+        <Card>
+          <CardDescription>
+            That QR code doesn&apos;t exist. Double-check the link and try again.
+          </CardDescription>
+        </Card>
+      </main>
+    );
+  }
+
+  if (!isClaimed) {
+    return (
+      <main className="flex flex-1 flex-col items-center bg-(--bearhacks-cream) px-4 py-8">
+        <div className="mx-auto flex w-full max-w-md flex-col gap-5">
+          <PageHeader title="Unclaimed QR" showBack backHref="/" tone="marketing" />
+          <Card className="flex flex-col items-center gap-4 bg-white text-center">
+            <Image
+              src="/brand/icon_color.svg"
+              alt=""
+              width={48}
+              height={48}
+              priority
+              style={{ width: "48px", height: "auto" }}
+            />
+            <CardHeader className="items-center text-center">
+              <CardTitle className="text-xl font-extrabold text-(--bearhacks-text-marketing)">
+                This QR hasn&apos;t been claimed yet
+              </CardTitle>
+              <CardDescription className="text-(--bearhacks-text-marketing)/80">
+                {auth?.user
+                  ? "Claim it to link it to your attendee profile."
+                  : "Sign in to claim this QR and link it to your profile."}
+              </CardDescription>
+            </CardHeader>
+
+            {auth?.user ? (
+              <Link
+                href={`/claim/${qrId}`}
+                className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-accent-soft)"
+              >
+                Claim this QR →
+              </Link>
+            ) : (
+              <div className="w-full">
+                <DashboardOAuthButtons />
+              </div>
+            )}
+          </Card>
+        </div>
+      </main>
+    );
   }
 
   return (
     <main className="flex flex-1 flex-col items-center bg-(--bearhacks-cream) px-4 py-8">
       <div className="mx-auto flex w-full max-w-md flex-col gap-5">
-        <PageHeader title="My QR card" showBack backHref="/" tone="marketing" />
+        <PageHeader
+          title={isOwner ? "My QR card" : "QR card"}
+          showBack
+          backHref={isOwner ? "/" : undefined}
+          tone="marketing"
+        />
         <Card className="flex flex-col items-center gap-4 bg-white text-center">
           <Image
             src="/brand/icon_color.svg"
@@ -129,7 +198,7 @@ export default function QrCardPage() {
               <div className="absolute inset-[15%] flex items-center justify-center overflow-hidden rounded-md bg-white p-2">
                 <Image
                   src={qrImageUrl}
-                  alt="Your networking QR code"
+                  alt="Networking QR code"
                   width={280}
                   height={280}
                   className="h-full w-full object-contain"
@@ -139,14 +208,24 @@ export default function QrCardPage() {
             </div>
           ) : (
             <p className="text-sm text-(--bearhacks-text-marketing)/70">
-              Generating your QR code…
+              Generating QR code…
             </p>
           )}
           <CardHeader className="mb-0 items-center text-center">
             <CardDescription className="text-(--bearhacks-text-marketing)/80">
-              Show this QR to other attendees to share your profile.
+              {isOwner
+                ? "Show this QR to other attendees to share your profile."
+                : "Scan this QR to view this attendee's profile."}
             </CardDescription>
           </CardHeader>
+          {ownerId ? (
+            <Link
+              href={`/contacts/${ownerId}`}
+              className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-pill) border border-(--bearhacks-border) bg-(--bearhacks-surface) px-6 py-3 text-sm font-semibold text-(--bearhacks-fg) no-underline shadow-(--bearhacks-shadow-card) hover:bg-(--bearhacks-cream)"
+            >
+              View profile →
+            </Link>
+          ) : null}
         </Card>
       </div>
     </main>

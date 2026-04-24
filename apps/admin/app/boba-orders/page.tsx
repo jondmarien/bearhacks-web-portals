@@ -90,6 +90,27 @@ const DEFAULT_FILTER: FilterValues = {
   search: "",
 };
 
+/**
+ * "Fulfill" soft-gate for the admin orders table.
+ *
+ * Fulfilling means "food has been handed over," so the food team should
+ * only be able to mark it once the hacker has paid AND an admin has
+ * confirmed the e-transfer on ``/admin/boba/boba-payments``. Mirrors
+ * ``canAdminConfirm`` on the payments page which gates one step
+ * earlier (on the hacker having tapped "I sent the e-transfer").
+ *
+ * Already-fulfilled rows stay toggleable so a misclick can be undone —
+ * the button reads "Unfulfill" in that state and flipping back to
+ * ``placed`` is always safe regardless of payment state.
+ */
+function canAdminFulfill(row: AdminOrderRow): boolean {
+  if (row.status === "fulfilled") return true;
+  return row.payment_status === "confirmed";
+}
+
+const FULFILL_DISABLED_REASON =
+  "Waiting on payment — confirm the hacker's e-transfer on the Boba & Momo payments page before fulfilling this order.";
+
 export default function AdminBobaOrdersPage() {
   const supabase = useSupabase();
   const client = useApiClient();
@@ -1509,10 +1530,14 @@ function OrdersTableCard({
             );
           }
           const isFulfilled = o.status === "fulfilled";
+          const fulfillable = canAdminFulfill(o);
           return (
             <Button
               type="button"
               variant={isFulfilled ? "ghost" : "pill"}
+              disabled={!fulfillable}
+              aria-disabled={!fulfillable}
+              title={fulfillable ? undefined : FULFILL_DISABLED_REASON}
               onClick={() =>
                 void onToggleStatus(o, isFulfilled ? "placed" : "fulfilled")
               }
@@ -1755,6 +1780,7 @@ function OrdersTableCard({
               const isFulfilled = o.status === "fulfilled";
               const isCancelled = o.status === "cancelled";
               const isMomo = o.kind === "momo";
+              const fulfillable = canAdminFulfill(o);
               return (
                 <li
                   key={row.id}
@@ -1848,11 +1874,14 @@ function OrdersTableCard({
                   </dl>
 
                   {!isCancelled && !isBulkMode ? (
-                    <div className="mt-3 flex">
+                    <div className="mt-3 flex flex-col gap-1">
                       <Button
                         type="button"
                         variant={isFulfilled ? "ghost" : "pill"}
                         className="w-full sm:w-auto"
+                        disabled={!fulfillable}
+                        aria-disabled={!fulfillable}
+                        title={fulfillable ? undefined : FULFILL_DISABLED_REASON}
                         onClick={() =>
                           void onToggleStatus(
                             o,
@@ -1862,6 +1891,11 @@ function OrdersTableCard({
                       >
                         {isFulfilled ? "Unfulfill" : "Fulfill"}
                       </Button>
+                      {!fulfillable ? (
+                        <p className="text-[11px] text-(--bearhacks-muted)">
+                          {FULFILL_DISABLED_REASON}
+                        </p>
+                      ) : null}
                     </div>
                   ) : null}
                 </li>

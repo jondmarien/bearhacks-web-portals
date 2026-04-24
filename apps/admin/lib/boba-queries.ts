@@ -67,6 +67,14 @@ export type AdminOrderRow = {
   display_name: string | null;
   hacker_name: string;
   hacker_email: string | null;
+  /**
+   * Current boba_payments.status for this order, joined server-side.
+   *
+   * Drives the admin "Fulfill" soft-gate: the food team can only mark an
+   * order picked up once the hacker has paid and an admin has confirmed
+   * the e-transfer. Matches the 4-state enum in ``core/boba/payments.py``.
+   */
+  payment_status: "unpaid" | "submitted" | "confirmed" | "refunded";
 
   // Drink-only fields. Present (and possibly empty) when ``kind === "drink"``.
   drink_id?: string;
