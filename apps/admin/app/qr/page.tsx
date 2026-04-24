@@ -69,6 +69,7 @@ export default function AdminQrPage() {
   const [user, setUser] = useState<User | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "claimed" | "unclaimed">("all");
   const [claimedBySearch, setClaimedBySearch] = useState("");
+  const [claimedByNameSearch, setClaimedByNameSearch] = useState("");
   const [generateCount, setGenerateCount] = useState("5");
   const [printCount, setPrintCount] = useState("5");
   const [printIdsInput, setPrintIdsInput] = useState("");
@@ -96,12 +97,13 @@ export default function AdminQrPage() {
   const isStaff = isStaffUser(user);
   const actor = user?.id ?? "anonymous";
 
-  const [prevFilters, setPrevFilters] = useState({ statusFilter, claimedBySearch });
+  const [prevFilters, setPrevFilters] = useState({ statusFilter, claimedBySearch, claimedByNameSearch });
   if (
     prevFilters.statusFilter !== statusFilter ||
-    prevFilters.claimedBySearch !== claimedBySearch
+    prevFilters.claimedBySearch !== claimedBySearch ||
+    prevFilters.claimedByNameSearch !== claimedByNameSearch
   ) {
-    setPrevFilters({ statusFilter, claimedBySearch });
+    setPrevFilters({ statusFilter, claimedBySearch, claimedByNameSearch });
     setSelectedRowIds(new Set());
     setIsBulkMode(false);
   }
@@ -148,11 +150,12 @@ export default function AdminQrPage() {
     const params = new URLSearchParams();
     if (statusFilter !== "all") params.set("status", statusFilter);
     if (claimedBySearch.trim()) params.set("claimed_by", claimedBySearch.trim());
+    if (claimedByNameSearch.trim()) params.set("claimed_by_name", claimedByNameSearch.trim());
     return `/admin/qr/search${params.size ? `?${params.toString()}` : ""}`;
-  }, [statusFilter, claimedBySearch]);
+  }, [statusFilter, claimedBySearch, claimedByNameSearch]);
 
   const qrQuery = useQuery({
-    queryKey: ["admin-qr-search", statusFilter, claimedBySearch],
+    queryKey: ["admin-qr-search", statusFilter, claimedBySearch, claimedByNameSearch],
     queryFn: () => client!.fetchJson<QrRow[]>(listPath),
     enabled: Boolean(client && isStaff),
   });
@@ -802,7 +805,7 @@ export default function AdminQrPage() {
                 </div>
               </div>
               <form
-                className="mt-4 grid gap-3 sm:grid-cols-3"
+                className="mt-4 grid gap-3 sm:grid-cols-4"
                 onSubmit={(event) => {
                   event.preventDefault();
                   log("info", {
@@ -812,6 +815,7 @@ export default function AdminQrPage() {
                     result: "submitted",
                     statusFilter,
                     claimedByProvided: Boolean(claimedBySearch.trim()),
+                    claimedByNameProvided: Boolean(claimedByNameSearch.trim()),
                   });
                   void qrQuery.refetch();
                 }}
@@ -838,11 +842,20 @@ export default function AdminQrPage() {
                 </div>
                 <div className="sm:col-span-2">
                   <InputField
-                    label="Claimed by (profile id, optional)"
+                    label="Hacker name"
+                    id="claimed-by-name"
+                    value={claimedByNameSearch}
+                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => setClaimedByNameSearch(event.target.value)}
+                    placeholder="Search by display name"
+                  />
+                </div>
+                <div>
+                  <InputField
+                    label="Profile id"
                     id="claimed-by"
                     value={claimedBySearch}
                     onChange={(event: React.ChangeEvent<HTMLInputElement>) => setClaimedBySearch(event.target.value)}
-                    placeholder="Filter specific claimer id"
+                    placeholder="Exact claimer UUID"
                   />
                 </div>
               </form>
