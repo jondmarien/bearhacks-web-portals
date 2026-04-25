@@ -166,42 +166,6 @@ export default function AdminHome() {
             </Card>
           </Link>
         ) : null}
-        {isSuperAdminUser(user) ? (
-          <Link href="/boba-orders" className="no-underline">
-            <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
-              <CardTitle className="min-h-[2lh]">
-                Boba &amp; Momo <span className="bg-(--bearhacks-cream) px-1 rounded-sm">orders</span>
-              </CardTitle>
-              <CardDescription className="mt-1">
-                Live order list, prep summary, pickup list, and CSV export per
-                meal window.
-              </CardDescription>
-              <div className="mt-auto pt-4">
-                <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
-                  Open boba &amp; momo orders →
-                </span>
-              </div>
-            </Card>
-          </Link>
-        ) : null}
-        {isSuperAdminUser(user) ? (
-          <Link href="/boba-payments" className="no-underline">
-            <Card className="flex h-full flex-col transition-shadow hover:shadow-lg">
-              <CardTitle className="min-h-[2lh]">
-                Boba &amp; Momo <span className="bg-(--bearhacks-cream) px-1 rounded-sm">payments</span>
-              </CardTitle>
-              <CardDescription className="mt-1">
-                E-transfer ledger per hacker × meal window. Confirm, refund,
-                or undo confirmations.
-              </CardDescription>
-              <div className="mt-auto pt-4">
-                <span className="flex min-h-(--bearhacks-touch-min) w-full items-center justify-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 py-3 text-sm font-semibold text-(--bearhacks-primary)">
-                  Open boba &amp; momo payments →
-                </span>
-              </div>
-            </Card>
-          </Link>
-        ) : null}
       </div>
     </main>
   );

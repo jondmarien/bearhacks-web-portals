@@ -5,24 +5,24 @@ import { createLogger } from "@bearhacks/logger";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useMeAuth } from "@/app/providers";
-import { BobaPortalCard } from "@/components/boba-portal-card";
 import { DashboardOAuthButtons } from "@/components/dashboard-oauth-buttons";
 import { FavouritesModal } from "@/components/favourites-modal";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputField, TextareaField } from "@/components/ui/field";
 import { QrPreview } from "@/components/ui/qr-preview";
-import { useBobaMenuQuery, useMyBobaOrderQuery } from "@/lib/boba-queries";
 import { getOAuthDisplayName } from "@/lib/oauth-display-name";
 import { useApiClient } from "@/lib/use-api-client";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { MAX_DISPLAY_NAME_LENGTH } from "@/lib/profile-roles";
 
 const log = createLogger("me/home");
+const BOBA_GOOGLE_FORM_URL =
+  "https://docs.google.com/forms/d/1ywopPfQ9yOv0DlpWdJOAhm3thu0Q3w7j3y3wn8QQGbg/edit";
 
 type MyProfile = {
   id: string;
@@ -68,16 +68,9 @@ function draftFromProfile(
   };
 }
 
-/**
- * `useSearchParams()` (below) forces Next.js to bail out of static
- * prerendering. The App Router requires such client components to sit
- * under a `<Suspense>` boundary so the prerender fallback has somewhere
- * to go. The default export wraps this inner component accordingly.
- */
 function HomePageContent() {
   const auth = useMeAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const client = useApiClient();
   const [profileDraft, setProfileDraft] = useState<ProfileDraft | null>(null);
   useDocumentTitle(auth?.user ? "Welcome back" : "Sign in");
@@ -100,38 +93,6 @@ function HomePageContent() {
     queryFn: () => client!.fetchJson<FavouriteProfile[]>("/social/favourites"),
     enabled: Boolean(client && userId),
   });
-
-  const menuQuery = useBobaMenuQuery();
-  const myOrderQuery = useMyBobaOrderQuery(userId);
-
-  // Deep-link highlight: /?payment=highlight scrolls the payment card into
-  // view and flashes a transient ring. Same pattern as the old
-  // `scrollAndHighlightPayment` on /boba; we then strip the query param so
-  // a browser refresh doesn't re-trigger it.
-  const paymentSectionRef = useRef<HTMLDivElement | null>(null);
-  const [paymentHighlighted, setPaymentHighlighted] = useState(false);
-  const paymentHighlightRequested = searchParams.get("payment") === "highlight";
-
-  useEffect(() => {
-    if (!paymentHighlightRequested) return;
-    const raf = window.requestAnimationFrame(() => {
-      paymentSectionRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-      setPaymentHighlighted(true);
-    });
-    const fadeTimer = window.setTimeout(
-      () => setPaymentHighlighted(false),
-      2000,
-    );
-    const clearTimer = window.setTimeout(() => router.replace("/"), 2000);
-    return () => {
-      window.cancelAnimationFrame(raf);
-      window.clearTimeout(fadeTimer);
-      window.clearTimeout(clearTimer);
-    };
-  }, [paymentHighlightRequested, router]);
 
   const profileQuery = useQuery({
     queryKey: ["me-profile", userId],
@@ -289,19 +250,27 @@ function HomePageContent() {
         </div>
       </div>
 
-      <div ref={paymentSectionRef} className="scroll-mt-6">
-        <BobaPortalCard
-          isAuthReady={Boolean(auth?.isAuthReady)}
-          userId={userId}
-          drinks={myOrderQuery.data?.drinks ?? []}
-          momos={myOrderQuery.data?.momos ?? []}
-          menu={menuQuery.data ?? null}
-          recipientName={menuQuery.data?.payment.etransfer_recipient_name ?? ""}
-          etransferEmail={menuQuery.data?.payment.etransfer_email ?? ""}
-          discountNote={menuQuery.data?.payment.discount_note ?? ""}
-          highlightPayment={paymentHighlighted}
-        />
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            Boba &amp; Momo <span className="bg-(--bearhacks-cream) px-1 rounded-sm">ordering</span>
+          </CardTitle>
+          <CardDescription>
+            We are not using the portal ordering window anymore. Please use
+            the Google Form for any Boba &amp; Momo orders.
+          </CardDescription>
+        </CardHeader>
+        <div>
+          <Link
+            href={BOBA_GOOGLE_FORM_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-(--bearhacks-touch-min) w-fit items-center rounded-(--bearhacks-radius-pill) bg-(--bearhacks-accent) px-6 text-sm font-semibold text-(--bearhacks-primary) no-underline hover:bg-(--bearhacks-accent-soft)"
+          >
+            Open Google Form →
+          </Link>
+        </div>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -429,15 +398,5 @@ function HomePageContent() {
 }
 
 export default function HomePage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-10">
-          <p className="text-sm text-(--bearhacks-muted)">Loading…</p>
-        </main>
-      }
-    >
-      <HomePageContent />
-    </Suspense>
-  );
+  return <HomePageContent />;
 }
