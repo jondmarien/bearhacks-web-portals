@@ -12,6 +12,7 @@ import { EmailClaimModal } from "@/components/email-claim-modal";
 import { AlertDialogProvider } from "@/components/ui/alert-dialog";
 import { ConfirmDialogProvider } from "@/components/ui/confirm-dialog";
 import {
+  checkPortalAccess,
   requestPortalClaimOtp,
   submitPortalClaimEmail,
   verifyPortalClaimOtp,
@@ -143,9 +144,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   const runPortalFlow = useCallback(async () => {
     if (!supabase || !user) return;
+
+    const access = await checkPortalAccess(supabase);
+    if (!access.allowed && access.reason === "not_accepted") {
+      queueMicrotask(() => setEmailClaimOpen(true));
+      return;
+    }
     queueMicrotask(() => setEmailClaimOpen(false));
-    // Lanyard check moved to in-person QR claim — anyone signed in can have a
-    // profile, so we no longer call `checkPortalAccess` to gate access here.
 
     const env = tryPublicEnv();
     if (!env.ok) return;
