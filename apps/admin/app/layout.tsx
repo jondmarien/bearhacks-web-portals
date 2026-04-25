@@ -1,6 +1,7 @@
 import { ThemeProvider } from "@bearhacks/ui/theme";
 import type { Metadata } from "next";
 import { Hanken_Grotesk } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { AdminGateBanner } from "@/components/admin-gate-banner";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -57,6 +58,7 @@ export default function RootLayout({
             <SiteFooter />
           </Providers>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
